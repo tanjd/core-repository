@@ -1,0 +1,8 @@
+version: "3.8"
+services:
+  core-repository-devcontainer:
+    image: mcr.microsoft.com/devcontainers/base:ubuntu
+    volumes:
+      - ..:/workspace:cached
+    command: sleep infinity
+    init: true

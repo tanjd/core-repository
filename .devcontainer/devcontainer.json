@@ -1,0 +1,35 @@
+{
+  "name": "core-repository-devcontainer",
+  "dockerComposeFile": "docker-compose.yml",
+  "workspaceFolder": "/workspace",
+  "service": "core-repository-devcontainer",
+  "features": {
+    "ghcr.io/devcontainers-contrib/features/nx-npm:1": {},
+    "ghcr.io/devcontainers-contrib/features/zsh-plugins:0": {
+      "plugins": "npm git zsh-autosuggestions zsh-syntax-highlighting sudo",
+      "omzPlugins": "https://github.com/zsh-users/zsh-autosuggestions https://github.com/zsh-users/zsh-syntax-highlighting.git",
+      "username": "vscode"
+    },
+    "ghcr.io/stuartleeks/dev-container-features/shell-history:0": {},
+    "ghcr.io/devcontainers-contrib/features/pre-commit:2": {
+      "version": "latest"
+    },
+    "ghcr.io/devcontainers/features/docker-in-docker:2": {},
+    "ghcr.io/devcontainers-contrib/features/poetry:2": {}
+  },
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "streetsidesoftware.code-spell-checker",
+        "shardulm94.trailing-spaces",
+        "esbenp.prettier-vscode",
+        "PKief.material-icon-theme",
+        "nrwl.angular-console",
+        "ms-python.python",
+        "ms-python.vscode-pylance",
+        "ms-python.isort",
+        "mgesbert.python-path"
+      ]
+    }
+  }
+}
