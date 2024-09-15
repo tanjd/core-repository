@@ -7,7 +7,7 @@
     "build": "nx build",
     "test": "nx affected --target=test",
     "serve": "nx serve",
-    "lint": "nx affected --target=test",
+    "lint": "nx affected --target=lint",
     "affected": "nx affected",
     "format": "nx format:write",
     "prepare": "husky"
