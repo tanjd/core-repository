@@ -5,21 +5,19 @@
   "scripts": {
     "nx": "nx",
     "build": "nx build",
-    "test": "nx test",
+    "test": "nx affected --target=test",
     "serve": "nx serve",
-    "lint": "nx lint",
+    "lint": "nx affected --target=test",
     "affected": "nx affected",
-    "format": "nx format:write"
+    "format": "nx format:write",
+    "prepare": "husky"
   },
   "private": true,
-  "workspaces": [
-    "apps/*",
-    "libs/*"
-  ],
   "devDependencies": {
     "@nx/js": "19.7.3",
     "@nx/workspace": "19.7.3",
     "@nxlv/python": "^19.0.2",
+    "husky": "^9.1.6",
     "nx": "^19.7.3"
   }
 }
