@@ -44,7 +44,7 @@ jobs:
           cacheFrom: ${{ env.IMAGE }}
           push: always
           runCmd: |
-            pnpm install --frozen-lockfile --legacy-peer-deps
+            pnpm install --frozen-lockfile
             npx nx format:write --verbose
             pre-commit run --all-files
             npx nx affected --base=${{ env.NX_BASE }} --head=${{ env.NX_HEAD }} -t lint test --verbose
