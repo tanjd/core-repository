@@ -1,9 +1,21 @@
 {
-  "name": "@org/source",
+  "name": "@tanjd/core-repository",
   "version": "0.0.0",
   "license": "MIT",
-  "scripts": {},
+  "scripts": {
+    "nx": "nx",
+    "build": "nx build",
+    "test": "nx test",
+    "serve": "nx serve",
+    "lint": "nx lint",
+    "affected": "nx affected",
+    "format": "nx format:write"
+  },
   "private": true,
+  "workspaces": [
+    "apps/*",
+    "libs/*"
+  ],
   "devDependencies": {
     "@nx/js": "19.7.3",
     "@nx/workspace": "19.7.3",

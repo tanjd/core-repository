@@ -1,0 +1,12 @@
+[flake8]
+exclude =
+	**/.git,
+	**/__pycache__,
+	**/build,
+	**/dist,
+	**/.tox,
+	**/venv,
+	**/.venv,
+	**/.pytest_cache
+	**/__init__.py
+max-line-length = 120

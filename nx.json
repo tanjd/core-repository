@@ -2,20 +2,19 @@
   "$schema": "./node_modules/nx/schemas/nx-schema.json",
   "defaultBase": "main",
   "namedInputs": {
-    "default": [
-      "{projectRoot}/**/*",
-      "sharedGlobals"
-    ],
-    "production": [
-      "default"
-    ],
-    "sharedGlobals": [
-      "{workspaceRoot}/.github/workflows/ci.yml"
-    ]
+    "default": ["{projectRoot}/**/*", "sharedGlobals"],
+    "production": ["default"],
+    "sharedGlobals": ["{workspaceRoot}/.github/workflows/ci.yml"]
   },
-  "plugins": [
-    "@nxlv/python"
-  ],
+  "plugins": ["@nxlv/python"],
+  "targetDefaults": {
+    "lint": {
+      "cache": true
+    },
+    "test": {
+      "cache": true
+    }
+  },
   "workspaceLayout": {
     "appsDir": "apps",
     "libsDir": "libs"
@@ -25,5 +24,6 @@
       "projectNameAndRootFormat": "derived"
     }
   },
-  "nxCloudId": "66e5a3c8896d3879263f6d33"
+  "nxCloudId": "66e5a3c8896d3879263f6d33",
+  "extends": "nx/presets/npm.json"
 }
