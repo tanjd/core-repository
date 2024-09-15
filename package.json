@@ -1,23 +1,24 @@
 {
-  "name": "@tanjd/core-repository",
-  "version": "0.0.0",
-  "license": "MIT",
-  "scripts": {
-    "nx": "nx",
-    "build": "nx build",
-    "test": "nx affected --target=test",
-    "serve": "nx serve",
-    "lint": "nx affected --target=lint",
-    "affected": "nx affected",
-    "format": "nx format:write",
-    "prepare": "husky"
-  },
-  "private": true,
   "devDependencies": {
     "@nx/js": "19.7.3",
     "@nx/workspace": "19.7.3",
     "@nxlv/python": "^19.0.2",
     "husky": "^9.1.6",
-    "nx": "^19.7.3"
-  }
+    "nx": "^19.7.3",
+    "prettier": "3.3.3"
+  },
+  "license": "MIT",
+  "name": "@tanjd/core-repository",
+  "private": true,
+  "scripts": {
+    "affected": "nx affected",
+    "build": "nx build",
+    "format": "nx format:write --verbose",
+    "lint": "nx affected --target=lint --fix --verbose",
+    "nx": "nx",
+    "prepare": "husky",
+    "serve": "nx serve",
+    "test": "nx affected --target=test --verbose"
+  },
+  "version": "0.0.0"
 }

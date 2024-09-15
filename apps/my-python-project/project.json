@@ -1,9 +1,45 @@
 {
-  "name": "my-python-project",
   "$schema": "../../node_modules/nx/schemas/project-schema.json",
+  "name": "my-python-project",
   "projectType": "application",
   "sourceRoot": "apps/my-python-project/my_python_project",
+  "tags": [],
   "targets": {
+    "add": {
+      "executor": "@nxlv/python:add",
+      "options": {}
+    },
+    "build": {
+      "executor": "@nxlv/python:build",
+      "options": {
+        "bundleLocalDependencies": true,
+        "lockedVersions": true,
+        "outputPath": "apps/my-python-project/dist",
+        "publish": false
+      },
+      "outputs": [
+        "{projectRoot}/dist"
+      ]
+    },
+    "install": {
+      "executor": "@nxlv/python:install",
+      "options": {
+        "args": "",
+        "cacheDir": ".cache/pypoetry",
+        "debug": false,
+        "silent": false,
+        "verbose": false
+      }
+    },
+    "lint": {
+      "executor": "@nxlv/python:flake8",
+      "options": {
+        "outputFile": "reports/apps/my-python-project/pylint.txt"
+      },
+      "outputs": [
+        "{workspaceRoot}/reports/apps/my-python-project/pylint.txt"
+      ]
+    },
     "lock": {
       "executor": "@nxlv/python:run-commands",
       "options": {
@@ -11,56 +47,24 @@
         "cwd": "apps/my-python-project"
       }
     },
-    "add": {
-      "executor": "@nxlv/python:add",
-      "options": {}
-    },
-    "update": {
-      "executor": "@nxlv/python:update",
-      "options": {}
-    },
     "remove": {
       "executor": "@nxlv/python:remove",
       "options": {}
     },
-    "build": {
-      "executor": "@nxlv/python:build",
-      "outputs": ["{projectRoot}/dist"],
-      "options": {
-        "outputPath": "apps/my-python-project/dist",
-        "publish": false,
-        "lockedVersions": true,
-        "bundleLocalDependencies": true
-      }
-    },
-    "install": {
-      "executor": "@nxlv/python:install",
-      "options": {
-        "silent": false,
-        "args": "",
-        "cacheDir": ".cache/pypoetry",
-        "verbose": false,
-        "debug": false
-      }
-    },
-    "lint": {
-      "executor": "@nxlv/python:flake8",
-      "outputs": ["{workspaceRoot}/reports/apps/my-python-project/pylint.txt"],
-      "options": {
-        "outputFile": "reports/apps/my-python-project/pylint.txt"
-      }
-    },
     "test": {
       "executor": "@nxlv/python:run-commands",
-      "outputs": [
-        "{workspaceRoot}/reports/apps/my-python-project/unittests",
-        "{workspaceRoot}/coverage/apps/my-python-project"
-      ],
       "options": {
         "command": "poetry run pytest tests/",
         "cwd": "apps/my-python-project"
-      }
+      },
+      "outputs": [
+        "{workspaceRoot}/reports/apps/my-python-project/unittests",
+        "{workspaceRoot}/coverage/apps/my-python-project"
+      ]
+    },
+    "update": {
+      "executor": "@nxlv/python:update",
+      "options": {}
     }
-  },
-  "tags": []
+  }
 }

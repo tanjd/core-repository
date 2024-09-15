@@ -1,9 +1,45 @@
 {
-  "name": "my-python-library",
   "$schema": "../../node_modules/nx/schemas/project-schema.json",
+  "name": "my-python-library",
   "projectType": "library",
   "sourceRoot": "libs/my-python-library/my_python_library",
+  "tags": [],
   "targets": {
+    "add": {
+      "executor": "@nxlv/python:add",
+      "options": {}
+    },
+    "build": {
+      "executor": "@nxlv/python:build",
+      "options": {
+        "bundleLocalDependencies": true,
+        "lockedVersions": true,
+        "outputPath": "libs/my-python-library/dist",
+        "publish": false
+      },
+      "outputs": [
+        "{projectRoot}/dist"
+      ]
+    },
+    "install": {
+      "executor": "@nxlv/python:install",
+      "options": {
+        "args": "",
+        "cacheDir": ".cache/pypoetry",
+        "debug": false,
+        "silent": false,
+        "verbose": false
+      }
+    },
+    "lint": {
+      "executor": "@nxlv/python:flake8",
+      "options": {
+        "outputFile": "reports/libs/my-python-library/pylint.txt"
+      },
+      "outputs": [
+        "{workspaceRoot}/reports/libs/my-python-library/pylint.txt"
+      ]
+    },
     "lock": {
       "executor": "@nxlv/python:run-commands",
       "options": {
@@ -11,60 +47,24 @@
         "cwd": "libs/my-python-library"
       }
     },
-    "add": {
-      "executor": "@nxlv/python:add",
-      "options": {}
-    },
-    "update": {
-      "executor": "@nxlv/python:update",
-      "options": {}
-    },
     "remove": {
       "executor": "@nxlv/python:remove",
       "options": {}
     },
-    "build": {
-      "executor": "@nxlv/python:build",
-      "outputs": [
-        "{projectRoot}/dist"
-      ],
-      "options": {
-        "outputPath": "libs/my-python-library/dist",
-        "publish": false,
-        "lockedVersions": true,
-        "bundleLocalDependencies": true
-      }
-    },
-    "install": {
-      "executor": "@nxlv/python:install",
-      "options": {
-        "silent": false,
-        "args": "",
-        "cacheDir": ".cache/pypoetry",
-        "verbose": false,
-        "debug": false
-      }
-    },
-    "lint": {
-      "executor": "@nxlv/python:flake8",
-      "outputs": [
-        "{workspaceRoot}/reports/libs/my-python-library/pylint.txt"
-      ],
-      "options": {
-        "outputFile": "reports/libs/my-python-library/pylint.txt"
-      }
-    },
     "test": {
       "executor": "@nxlv/python:run-commands",
-      "outputs": [
-        "{workspaceRoot}/reports/libs/my-python-library/unittests",
-        "{workspaceRoot}/coverage/libs/my-python-library"
-      ],
       "options": {
         "command": "poetry run pytest tests/",
         "cwd": "libs/my-python-library"
-      }
+      },
+      "outputs": [
+        "{workspaceRoot}/reports/libs/my-python-library/unittests",
+        "{workspaceRoot}/coverage/libs/my-python-library"
+      ]
+    },
+    "update": {
+      "executor": "@nxlv/python:update",
+      "options": {}
     }
-  },
-  "tags": []
+  }
 }
