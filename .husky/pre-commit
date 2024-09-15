@@ -1,0 +1,4 @@
+pnpm format
+pre-commit run --files $(git diff --name-only)
+pnpm lint
+pnpm test

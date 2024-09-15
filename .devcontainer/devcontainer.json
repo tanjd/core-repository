@@ -4,7 +4,6 @@
   "workspaceFolder": "/workspace",
   "service": "core-repository-devcontainer",
   "features": {
-    "ghcr.io/devcontainers-contrib/features/nx-npm:1": {},
     "ghcr.io/devcontainers-contrib/features/zsh-plugins:0": {
       "plugins": "npm git zsh-autosuggestions zsh-syntax-highlighting sudo",
       "omzPlugins": "https://github.com/zsh-users/zsh-autosuggestions https://github.com/zsh-users/zsh-syntax-highlighting.git",
@@ -14,8 +13,20 @@
     "ghcr.io/devcontainers-contrib/features/pre-commit:2": {
       "version": "latest"
     },
-    "ghcr.io/devcontainers/features/docker-in-docker:2": {},
-    "ghcr.io/devcontainers-contrib/features/poetry:2": {}
+    "ghcr.io/devcontainers/features/docker-in-docker:2": {
+      "installDockerBuildx": true,
+      "installDockerComposeSwitch": true,
+      "version": "latest",
+      "dockerDashComposeVersion": "latest"
+    },
+    "ghcr.io/devcontainers-contrib/features/poetry:2": {},
+    "ghcr.io/devcontainers/features/node:1": {
+      "nodeGypDependencies": true,
+      "installYarnUsingApt": true,
+      "version": "latest",
+      "pnpmVersion": "latest",
+      "nvmVersion": "latest"
+    }
   },
   "customizations": {
     "vscode": {

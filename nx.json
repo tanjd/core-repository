@@ -1,6 +1,12 @@
 {
   "$schema": "./node_modules/nx/schemas/nx-schema.json",
   "defaultBase": "main",
+  "extends": "nx/presets/npm.json",
+  "generators": {
+    "@nxlv/python:poetry-project": {
+      "projectNameAndRootFormat": "derived"
+    }
+  },
   "namedInputs": {
     "default": [
       "{projectRoot}/**/*",
@@ -13,17 +19,20 @@
       "{workspaceRoot}/.github/workflows/ci.yml"
     ]
   },
+  "nxCloudId": "66e5a3c8896d3879263f6d33",
   "plugins": [
     "@nxlv/python"
   ],
+  "targetDefaults": {
+    "lint": {
+      "cache": true
+    },
+    "test": {
+      "cache": true
+    }
+  },
   "workspaceLayout": {
     "appsDir": "apps",
     "libsDir": "libs"
-  },
-  "generators": {
-    "@nxlv/python:poetry-project": {
-      "projectNameAndRootFormat": "derived"
-    }
-  },
-  "nxCloudId": "66e5a3c8896d3879263f6d33"
+  }
 }
