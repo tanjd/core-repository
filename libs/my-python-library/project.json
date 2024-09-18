@@ -32,13 +32,11 @@
       }
     },
     "lint": {
-      "executor": "@nxlv/python:flake8",
+      "executor": "@nxlv/python:ruff-check",
+      "outputs": [],
       "options": {
-        "outputFile": "reports/libs/my-python-library/pylint.txt"
-      },
-      "outputs": [
-        "{workspaceRoot}/reports/libs/my-python-library/pylint.txt"
-      ]
+        "lintFilePatterns": ["my_python_library", "tests"]
+      }
     },
     "lock": {
       "executor": "@nxlv/python:run-commands",

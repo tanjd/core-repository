@@ -23,18 +23,51 @@ readme = "README.md"
   [tool.poetry.dependencies]
   python = ">=3.9,<3.11"
 
+
     [tool.poetry.dependencies.my-python-library]
     path = "../../libs/my-python-library"
     develop = true
 
 [tool.poetry.group.dev.dependencies]
-autopep8 = "2.0.2"
-flake8 = "6.0.0"
-pytest = "7.3.1"
-pytest-sugar = "0.9.7"
-pytest-cov = "4.1.0"
-pytest-html = "3.2.0"
+  autopep8 = "2.0.2"
+  ruff = "^0.6.5"
+  pytest = "7.3.1"
+  pytest-sugar = "0.9.7"
+  pytest-cov = "4.1.0"
+  pytest-html = "3.2.0"
 
 [build-system]
 requires = [ "poetry-core" ]
 build-backend = "poetry.core.masonry.api"
+
+[tool.ruff]
+exclude = [
+  ".ruff_cache",
+  ".svn",
+  ".tox",
+  ".venv",
+  "dist",
+]
+
+line-length = 88
+indent-width = 4
+
+[tool.ruff.lint]
+select = [
+  # pycodestyle
+  "E",
+  # Pyflakes
+  "F",
+  # pyupgrade
+  "UP",
+  # flake8-bugbear
+  "B",
+  # flake8-simplify
+  "SIM",
+  # isort
+  "I",
+]
+ignore = []
+
+fixable = ["ALL"]
+unfixable = []

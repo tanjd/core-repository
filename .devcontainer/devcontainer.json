@@ -39,7 +39,8 @@
         "ms-python.python",
         "ms-python.vscode-pylance",
         "ms-python.isort",
-        "mgesbert.python-path"
+        "mgesbert.python-path",
+        "charliermarsh.ruff"
       ]
     }
   }
