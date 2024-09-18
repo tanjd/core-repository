@@ -33,10 +33,13 @@
     },
     "lint": {
       "executor": "@nxlv/python:ruff-check",
-      "outputs": [],
       "options": {
-        "lintFilePatterns": ["my_python_library", "tests"]
-      }
+        "lintFilePatterns": [
+          "my_python_library",
+          "tests"
+        ]
+      },
+      "outputs": []
     },
     "lock": {
       "executor": "@nxlv/python:run-commands",
