@@ -11,9 +11,11 @@ Briefly describe the changes and the reason behind them.
 
 ## Approach
 
-**(Required)** _Technical details about the implementation. Confluence links if applicable. Please feel free to include a screenshot/recording if it makes explaining easier_
+Describe your approach or solution for this change.
 
-## How to test
+## How to Test
+
+Provide instructions on how to test the changes.
 
 ## Additional Notes
 
