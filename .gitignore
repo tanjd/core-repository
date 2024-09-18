@@ -64,3 +64,23 @@ coverage.xml
 
 # Pnpm
 .pnpm-store
+
+# Ruff configuration files
+.ruff/ # Exclude ruff's temporary or cache files if any
+
+# Ruff cache files
+.ruff_cache/
+
+# Coverage reports
+.coverage
+.coverage.*
+nosetests.xml
+coverage.xml
+*.cover
+
+# Other temporary files
+*.log
+*.tmp
+*.swp
+*.swo
+*.swn
