@@ -44,7 +44,8 @@
         "ms-python.vscode-pylance",
         "ms-python.isort",
         "mgesbert.python-path",
-        "charliermarsh.ruff"
+        "charliermarsh.ruff",
+        "ms-vsliveshare.vsliveshare"
       ]
     }
   }
