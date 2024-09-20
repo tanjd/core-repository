@@ -35,18 +35,45 @@
   "customizations": {
     "vscode": {
       "extensions": [
-        "streetsidesoftware.code-spell-checker",
-        "shardulm94.trailing-spaces",
+        "charliermarsh.ruff",
         "esbenp.prettier-vscode",
-        "PKief.material-icon-theme",
-        "nrwl.angular-console",
+        "mgesbert.python-path",
+        "ms-python.isort",
         "ms-python.python",
         "ms-python.vscode-pylance",
-        "ms-python.isort",
-        "mgesbert.python-path",
-        "charliermarsh.ruff",
-        "ms-vsliveshare.vsliveshare"
-      ]
+        "ms-vsliveshare.vsliveshare",
+        "nrwl.angular-console",
+        "PKief.material-icon-theme",
+        "shardulm94.trailing-spaces",
+        "streetsidesoftware.code-spell-checker",
+        "tamasfe.even-better-toml"
+      ],
+      "settings": {
+        "[json]": {
+          "editor.defaultFormatter": "vscode.json-language-features",
+          "files.insertFinalNewline": true
+        },
+        "[jsonc]": {
+          "editor.defaultFormatter": "vscode.json-language-features",
+          "files.insertFinalNewline": true
+        },
+        "[python]": {
+          "editor.rulers": [
+            88
+          ],
+          "editor.formatOnSave": true,
+          "editor.codeActionsOnSave": {
+            "source.organizeImports": "explicit"
+          },
+          "editor.defaultFormatter": "charliermarsh.ruff",
+          "editor.formatOnType": true
+        },
+        "[toml]": {
+          "editor.defaultFormatter": "tamasfe.even-better-toml"
+        },
+        "editor.defaultFormatter": "esbenp.prettier-vscode",
+        "ruff.fixAll": true
+      }
     }
   }
 }

@@ -1,5 +1,0 @@
-{
-  "python.analysis.extraPaths": [
-    "./libs/my-python-library"
-  ]
-}

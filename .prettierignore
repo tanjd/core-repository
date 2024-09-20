@@ -3,3 +3,8 @@
 
 # Ignore codeowner
 .github/CODEOWNERS
+
+**/.git
+**/.svn
+**/.hg
+**/node_modules
