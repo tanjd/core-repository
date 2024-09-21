@@ -11,13 +11,9 @@
   "name": "@tanjd/core-repository",
   "private": true,
   "scripts": {
-    "affected": "nx affected",
-    "build": "nx build",
     "format": "nx format:write --verbose",
     "lint": "nx affected --target=lint --fix --verbose",
-    "nx": "nx",
     "prepare": "husky",
-    "serve": "nx serve",
     "test": "nx affected --target=test --verbose"
   },
   "version": "0.0.0"
