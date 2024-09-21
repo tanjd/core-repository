@@ -43,9 +43,6 @@
         "ms-python.vscode-pylance",
         "ms-vsliveshare.vsliveshare",
         "nrwl.angular-console",
-        "PKief.material-icon-theme",
-        "shardulm94.trailing-spaces",
-        "streetsidesoftware.code-spell-checker",
         "tamasfe.even-better-toml"
       ],
       "settings": {

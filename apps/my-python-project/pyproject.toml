@@ -22,11 +22,12 @@ include = "my_python_project"
 
 [tool.poetry.dependencies]
 python = ">=3.9,<3.11"
+my-python-library = { path = "../../libs/my-python-library", develop = true }
 
 
-[tool.poetry.dependencies.my-python-library]
-path = "../../libs/my-python-library"
-develop = true
+# [tool.poetry.dependencies.my-python-library]
+# path = "../../libs/my-python-library"
+# develop = true
 
 [tool.poetry.group.dev.dependencies]
 autopep8 = "2.0.2"

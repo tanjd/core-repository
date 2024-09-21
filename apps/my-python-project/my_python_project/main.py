@@ -1,8 +1,8 @@
-from my_python_library import hello
+import my_python_library
 
 
 def main():
-    print(hello("world"))
+    print(my_python_library.hello("world"))
 
 
 if __name__ == "__main__":
