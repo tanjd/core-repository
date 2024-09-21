@@ -1,0 +1,9 @@
+{
+  "executors": {
+    "serve": {
+      "description": "serve executor",
+      "implementation": "./src/executors/serve/executor",
+      "schema": "./src/executors/serve/schema.json"
+    }
+  }
+}

@@ -1,0 +1,55 @@
+{
+  "$schema": "../../node_modules/nx/schemas/project-schema.json",
+  "name": "nx-poetry-cli",
+  "projectType": "library",
+  "sourceRoot": "tools/nx-poetry-cli/src",
+  "tags": [],
+  "targets": {
+    "build": {
+      "executor": "@nx/js:tsc",
+      "options": {
+        "assets": [
+          "tools/nx-poetry-cli/*.md",
+          {
+            "glob": "**/!(*.ts)",
+            "input": "./tools/nx-poetry-cli/src",
+            "output": "./src"
+          },
+          {
+            "glob": "**/*.d.ts",
+            "input": "./tools/nx-poetry-cli/src",
+            "output": "./src"
+          },
+          {
+            "glob": "generators.json",
+            "input": "./tools/nx-poetry-cli",
+            "output": "."
+          },
+          {
+            "glob": "executors.json",
+            "input": "./tools/nx-poetry-cli",
+            "output": "."
+          }
+        ],
+        "main": "tools/nx-poetry-cli/src/index.ts",
+        "outputPath": "dist/tools/nx-poetry-cli",
+        "tsConfig": "tools/nx-poetry-cli/tsconfig.lib.json"
+      },
+      "outputs": [
+        "{options.outputPath}"
+      ]
+    },
+    "lint": {
+      "executor": "@nx/eslint:lint"
+    },
+    "test": {
+      "executor": "@nx/jest:jest",
+      "options": {
+        "jestConfig": "tools/nx-poetry-cli/jest.config.ts"
+      },
+      "outputs": [
+        "{workspaceRoot}/coverage/{projectRoot}"
+      ]
+    }
+  }
+}

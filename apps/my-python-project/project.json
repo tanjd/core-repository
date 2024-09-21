@@ -21,6 +21,12 @@
         "{projectRoot}/dist"
       ]
     },
+    "echo": {
+      "executor": "@tanjd/nx-poetry-cli:serve",
+      "options": {
+        "textToEcho": "test"
+      }
+    },
     "install": {
       "executor": "@nxlv/python:install",
       "options": {

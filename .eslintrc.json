@@ -1,0 +1,96 @@
+{
+  "extends": [
+    "prettier"
+  ],
+  "ignorePatterns": [
+    "**/*"
+  ],
+  "overrides": [
+    {
+      "files": [
+        "*.ts",
+        "*.tsx",
+        "*.js",
+        "*.jsx"
+      ],
+      "rules": {
+        "@nx/enforce-module-boundaries": [
+          "error",
+          {
+            "allow": [],
+            "depConstraints": [
+              {
+                "onlyDependOnLibsWithTags": [
+                  "*"
+                ],
+                "sourceTag": "*"
+              }
+            ],
+            "enforceBuildableLibDependency": true
+          }
+        ]
+      }
+    },
+    {
+      "extends": [
+        "plugin:@nx/typescript"
+      ],
+      "files": [
+        "*.ts",
+        "*.tsx"
+      ],
+      "rules": {
+        "@typescript-eslint/no-extra-semi": "error"
+      }
+    },
+    {
+      "extends": [
+        "plugin:@nx/javascript"
+      ],
+      "files": [
+        "*.js",
+        "*.jsx"
+      ],
+      "rules": {
+        "@typescript-eslint/no-extra-semi": "error"
+      }
+    },
+    {
+      "env": {
+        "jest": true
+      },
+      "files": [
+        "*.spec.ts",
+        "*.spec.tsx",
+        "*.spec.js",
+        "*.spec.jsx"
+      ],
+      "rules": {
+        "@typescript-eslint/no-extra-semi": "error"
+      }
+    }
+  ],
+  "parser": "@typescript-eslint/parser",
+  "parserOptions": {
+    "ecmaVersion": "latest",
+    "project": "./tsconfig.base.json",
+    "sourceType": "module"
+  },
+  "plugins": [
+    "@nx",
+    "@typescript-eslint",
+    "prettier",
+    "simple-import-sort",
+    "import"
+  ],
+  "root": true,
+  "rules": {
+    "import/no-extraneous-dependencies": "off",
+    "import/no-named-as-default": "off",
+    "prettier/prettier": [
+      "error"
+    ],
+    "simple-import-sort/exports": "error",
+    "simple-import-sort/imports": "error"
+  }
+}

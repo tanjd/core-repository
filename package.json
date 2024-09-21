@@ -1,17 +1,43 @@
 {
+  "dependencies": {
+    "tslib": "^2.3.0"
+  },
   "devDependencies": {
+    "@nx/devkit": "19.7.3",
+    "@nx/eslint": "19.7.3",
+    "@nx/eslint-plugin": "19.7.3",
+    "@nx/jest": "19.7.3",
     "@nx/js": "19.7.3",
+    "@nx/plugin": "19.7.3",
     "@nx/workspace": "19.7.3",
     "@nxlv/python": "^19.0.2",
+    "@swc-node/register": "~1.9.1",
+    "@swc/cli": "~0.3.12",
+    "@swc/core": "~1.5.7",
+    "@swc/helpers": "~0.5.11",
+    "@types/jest": "^29.5.12",
+    "@types/node": "18.16.9",
+    "@typescript-eslint/eslint-plugin": "^7.16.0",
+    "@typescript-eslint/parser": "^7.16.0",
+    "eslint": "~8.57.0",
+    "eslint-config-prettier": "^9.1.0",
+    "eslint-plugin-import": "^2.30.0",
+    "eslint-plugin-prettier": "^5.2.1",
+    "eslint-plugin-simple-import-sort": "^12.1.1",
     "husky": "^9.1.6",
+    "jest": "^29.7.0",
+    "jest-environment-jsdom": "^29.7.0",
     "nx": "^19.7.3",
-    "prettier": "3.3.3"
+    "prettier": "3.3.3",
+    "ts-jest": "^29.1.0",
+    "ts-node": "10.9.1",
+    "typescript": "~5.5.2"
   },
   "license": "MIT",
   "name": "@tanjd/core-repository",
   "private": true,
   "scripts": {
-    "format": "nx format:write --verbose",
+    "format": "prettier . --write",
     "lint": "nx affected --target=lint --fix --verbose",
     "prepare": "husky",
     "test": "nx affected --target=test --verbose"

@@ -1,4 +1,7 @@
 {
+  "eslint.validate": [
+    "json"
+  ],
   "python.analysis.extraPaths": [
     "/workspace/libs/my-python-library"
   ],

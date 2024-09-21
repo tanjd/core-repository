@@ -1,0 +1,14 @@
+{
+  "$schema": "https://json-schema.org/schema",
+  "description": "",
+  "properties": {
+    "textToEcho": {
+      "description": "Text To Echo",
+      "type": "string"
+    }
+  },
+  "required": [],
+  "title": "Serve executor",
+  "type": "object",
+  "version": 2
+}
