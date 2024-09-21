@@ -1,5 +1,7 @@
 {
   "extends": [
+    "eslint:recommended",
+    "plugin:@typescript-eslint/recommended",
     "prettier"
   ],
   "ignorePatterns": [
@@ -79,7 +81,6 @@
   "plugins": [
     "@nx",
     "@typescript-eslint",
-    "prettier",
     "simple-import-sort",
     "import"
   ],
@@ -87,9 +88,6 @@
   "rules": {
     "import/no-extraneous-dependencies": "off",
     "import/no-named-as-default": "off",
-    "prettier/prettier": [
-      "error"
-    ],
     "simple-import-sort/exports": "error",
     "simple-import-sort/imports": "error"
   }

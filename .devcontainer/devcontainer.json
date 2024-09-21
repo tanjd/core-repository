@@ -43,7 +43,8 @@
         "ms-python.vscode-pylance",
         "ms-vsliveshare.vsliveshare",
         "nrwl.angular-console",
-        "tamasfe.even-better-toml"
+        "tamasfe.even-better-toml",
+        "teticio.python-envy"
       ],
       "settings": {
         "[json]": {

@@ -1,6 +1,6 @@
 {
-  "eslint.validate": [
-    "json"
+  "cSpell.words": [
+    "capsys"
   ],
   "python.analysis.extraPaths": [
     "/workspace/libs/my-python-library"

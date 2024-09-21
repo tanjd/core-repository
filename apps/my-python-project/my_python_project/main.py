@@ -1,7 +1,7 @@
 import my_python_library
 
 
-def main():
+def main() -> None:
     print(my_python_library.hello("world"))
 
 

@@ -46,6 +46,6 @@ jobs:
           push: always
           runCmd: |
             pnpm install --frozen-lockfile
-            npx nx format:write --verbose
+            pnpm format
             pre-commit run --all-files
             npx nx affected --base=${{ env.NX_BASE }} --head=${{ env.NX_HEAD }} -t lint test --verbose
