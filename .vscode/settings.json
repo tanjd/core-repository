@@ -1,4 +1,8 @@
 {
+  "cSpell.words": [
+    "errcheck",
+    "gocognit"
+  ],
   "python.analysis.extraPaths": [
     "/workspace/libs/my-python-library"
   ],

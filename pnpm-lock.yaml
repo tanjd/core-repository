@@ -7,6 +7,9 @@ settings:
 importers:
   .:
     devDependencies:
+      "@nx-go/nx-go":
+        specifier: ^3.3.0
+        version: 3.3.0(nx@19.7.3)
       "@nx/js":
         specifier: 19.7.3
         version: 19.7.3(@babel/traverse@7.25.6)(@types/node@22.5.5)(nx@19.7.3)(typescript@5.6.2)
@@ -1114,6 +1117,12 @@ packages:
     resolution:
       {
         integrity: sha512-2ffUbLzBYGQte6zQ6dDLefgU9X812Uh7v61yTV7z4zfYbUtjwInkWqlkTvRuK08DRhD5vWo9xyUDp7acAdZaxw==,
+      }
+
+  "@nx-go/nx-go@3.3.0":
+    resolution:
+      {
+        integrity: sha512-IaOrLIafPRyEzogYXLv3nwP5U+6s39cTMzAGZqAKYq0tKNwJ7ZXeg8k7YU4Z6tt3UhEPyvM1DtskBzMgc3UxzA==,
       }
 
   "@nx/devkit@19.7.3":
@@ -3747,6 +3756,13 @@ snapshots:
       - "@swc-node/register"
       - "@swc/core"
       - debug
+
+  "@nx-go/nx-go@3.3.0(nx@19.7.3)":
+    dependencies:
+      "@nx/devkit": 19.7.3(nx@19.7.3)
+      tslib: 2.7.0
+    transitivePeerDependencies:
+      - nx
 
   "@nx/devkit@19.7.3(nx@19.7.3)":
     dependencies:

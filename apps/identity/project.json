@@ -1,0 +1,37 @@
+{
+  "$schema": "../../node_modules/nx/schemas/project-schema.json",
+  "name": "identity",
+  "projectType": "application",
+  "sourceRoot": "apps/identity",
+  "tags": [],
+  "targets": {
+    "build": {
+      "executor": "@nx-go/nx-go:build",
+      "options": {
+        "main": "{projectRoot}/main.go"
+      }
+    },
+    "golangci-lint": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "golangci-lint run -v --fix",
+        "cwd": "{projectRoot}"
+      }
+    },
+    "lint": {
+      "executor": "@nx-go/nx-go:lint"
+    },
+    "serve": {
+      "executor": "@nx-go/nx-go:serve",
+      "options": {
+        "main": "{projectRoot}/main.go"
+      }
+    },
+    "test": {
+      "executor": "@nx-go/nx-go:test"
+    },
+    "tidy": {
+      "executor": "@nx-go/nx-go:tidy"
+    }
+  }
+}
