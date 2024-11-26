@@ -3,6 +3,9 @@
   "defaultBase": "main",
   "extends": "nx/presets/npm.json",
   "generators": {
+    "@nx-go/nx-go": {
+      "projectNameAndRootFormat": "derived"
+    },
     "@nxlv/python:poetry-project": {
       "projectNameAndRootFormat": "derived"
     }
@@ -21,12 +24,20 @@
   },
   "neverConnectToCloud": true,
   "nxCloudId": "66e5a3c8896d3879263f6d33",
+  "parallel": 8,
   "plugins": [
-    "@nxlv/python"
+    "@nxlv/python",
+    "@nx-go/nx-go"
   ],
   "targetDefaults": {
-    "lint": {
+    "golangci-lint": {
       "cache": true
+    },
+    "lint": {
+      "cache": true,
+      "dependsOn": [
+        "golangci-lint"
+      ]
     },
     "test": {
       "cache": true

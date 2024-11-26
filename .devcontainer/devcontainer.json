@@ -26,6 +26,9 @@
       "version": "latest",
       "pnpmVersion": "latest",
       "nvmVersion": "latest"
+    },
+    "ghcr.io/devcontainers/features/go:1": {
+      "version": "1.23"
     }
   },
   "postCreateCommand": {
@@ -43,7 +46,8 @@
         "ms-python.vscode-pylance",
         "ms-vsliveshare.vsliveshare",
         "nrwl.angular-console",
-        "tamasfe.even-better-toml"
+        "tamasfe.even-better-toml",
+        "golang.go"
       ],
       "settings": {
         "[json]": {

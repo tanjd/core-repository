@@ -1,0 +1,42 @@
+errcheck:
+  # Report errors in type assertions like: `a := b.(MyStruct)`.
+  # Default: false
+  check-type-assertions: true
+exhaustive:
+  # Program elements to check for exhaustiveness.
+  # Default: [ switch ]
+  check:
+    - switch
+    - map
+gocognit:
+  # Minimal code complexity to report.
+  # Default: 30 (recommended 10-20)
+  min-complexity: 15
+
+linters:
+  enable:
+    - asciicheck
+    - bodyclose
+    - errcheck
+    - errname
+    - exhaustive
+    - gofmt
+    - gocognit
+    - goimports
+    - gosimple
+    - govet
+    - importas
+    - ineffassign
+    - rowserrcheck
+    - sqlclosecheck
+    - staticcheck
+    - testifylint
+    - unparam
+    - unused
+    - wastedassign
+    - whitespace
+    - zerologlint
+
+run:
+  allow-parallel-runners: true
+  timeout: 3m
