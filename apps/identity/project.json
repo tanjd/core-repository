@@ -24,7 +24,7 @@
     "serve": {
       "executor": "@nx-go/nx-go:serve",
       "options": {
-        "main": "{projectRoot}/main.go"
+        "main": "{projectRoot}/cmd/main.go"
       }
     },
     "test": {
