@@ -1,7 +1,13 @@
 {
   "cSpell.words": [
+    "cbor",
+    "danielgtaylor",
     "errcheck",
-    "gocognit"
+    "gocognit",
+    "huma",
+    "humachi",
+    "humacli",
+    "humatest"
   ],
   "python.analysis.extraPaths": [
     "/workspace/libs/my-python-library"
