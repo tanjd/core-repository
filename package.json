@@ -3,9 +3,9 @@
     "@nx-go/nx-go": "^3.3.0",
     "@nx/js": "19.7.3",
     "@nx/workspace": "19.7.3",
-    "@nxlv/python": "^19.0.2",
-    "husky": "^9.1.6",
-    "nx": "^19.7.3",
+    "@nxlv/python": "^19.2.1",
+    "husky": "^9.1.7",
+    "nx": "^19.8.13",
     "prettier": "3.3.3"
   },
   "license": "MIT",
