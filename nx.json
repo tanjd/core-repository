@@ -36,10 +36,14 @@
     "lint": {
       "cache": true,
       "dependsOn": [
-        "golangci-lint"
+        "golangci-lint",
+        "tidy"
       ]
     },
     "test": {
+      "cache": true
+    },
+    "tidy": {
       "cache": true
     }
   },

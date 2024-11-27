@@ -38,14 +38,14 @@ jobs:
         uses: devcontainers/ci@v0.3
         env:
           IMAGE: ghcr.io/tanjd/core-repository
-          NX_BASE: ${{ steps.set-shas.outputs.head }}
-          NX_HEAD: ${{ steps.set-shas.outputs.base }}
+          NX_BASE: ${{ steps.set-shas.outputs.base }}
+          NX_HEAD: ${{ steps.set-shas.outputs.head }}
         with:
           imageName: ${{ env.IMAGE }}
           cacheFrom: ${{ env.IMAGE }}
           push: always
           runCmd: |
             pnpm install --frozen-lockfile
-            npx nx format:write --verbose
+            pnpm format
             pre-commit run --all-files
             npx nx affected --base=${{ env.NX_BASE }} --head=${{ env.NX_HEAD }} -t lint test --verbose
