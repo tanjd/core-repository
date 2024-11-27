@@ -37,11 +37,15 @@
       "cache": true,
       "dependsOn": [
         "golangci-lint",
-        "tidy"
+        "tidy",
+        "install"
       ]
     },
     "test": {
-      "cache": true
+      "cache": true,
+      "dependsOn": [
+        "install"
+      ]
     },
     "tidy": {
       "cache": true
