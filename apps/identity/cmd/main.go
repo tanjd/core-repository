@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"time"
 
 	"github.com/danielgtaylor/huma/v2"
 	"github.com/danielgtaylor/huma/v2/adapters/humachi"
@@ -14,56 +15,103 @@ import (
 	_ "github.com/danielgtaylor/huma/v2/formats/cbor"
 )
 
-// Options for the CLI.
+type User struct {
+	ID       string `json:"id" doc:"Unique identifier for the user"`
+	Username string `json:"username" maxLength:"30" doc:"Username for the user"`
+	Email    string `json:"email" format:"email" doc:"Email address of the user"`
+}
+
+// UsersDB simulates a simple in-memory data store.
+var UsersDB = map[string]User{}
+
 type Options struct {
 	Port int `help:"Port to listen on" short:"p" default:"8888"`
 }
 
-// GreetingOutput represents the greeting operation response.
-type GreetingOutput struct {
+type CreateUserRequest struct {
 	Body struct {
-		Message string `json:"message" example:"Hello, world!" doc:"Greeting message"`
+		Username string `json:"username" required:"true" maxLength:"30" doc:"Username for the user"`
+		Email    string `json:"email" required:"true" format:"email" doc:"Email address of the user"`
 	}
 }
 
-// ReviewInput represents the review operation request.
-type ReviewInput struct {
+type CreateUserResponse struct {
+	Body User `json:"body" doc:"The created user"`
+}
+
+var startTime = time.Now()
+
+type GetUserResponse struct {
+	Body User `json:"body" doc:"The requested user"`
+}
+
+type HealthCheckResponse struct {
 	Body struct {
-		Author  string `json:"author" maxLength:"10" doc:"Author of the review"`
-		Rating  int    `json:"rating" minimum:"1" maximum:"5" doc:"Rating from 1 to 5"`
-		Message string `json:"message,omitempty" maxLength:"100" doc:"Review message"`
+		Status string `json:"status" doc:"Status of the service"`
+		Uptime string `json:"uptime" doc:"Time the service has been running"`
 	}
 }
 
 func addRoutes(api huma.API) {
-	// Register GET /greeting/{name}
 	huma.Register(api, huma.Operation{
-		OperationID: "get-greeting",
+		OperationID: "health-check",
 		Method:      http.MethodGet,
-		Path:        "/greeting/{name}",
-		Summary:     "Get a greeting",
-		Description: "Get a greeting for a person by name.",
-		Tags:        []string{"Greetings"},
-	}, func(ctx context.Context, input *struct {
-		Name string `path:"name" maxLength:"30" example:"world" doc:"Name to greet"`
-	}) (*GreetingOutput, error) {
-		resp := &GreetingOutput{}
-		resp.Body.Message = fmt.Sprintf("Hello, %s!", input.Name)
+		Path:        "/health",
+		Summary:     "Health check",
+		Tags:        []string{"Health"},
+	}, func(ctx context.Context, request *struct{}) (*HealthCheckResponse, error) {
+		uptime := time.Since(startTime).String()
+
+		resp := &HealthCheckResponse{}
+		resp.Body.Status = "OK"
+		resp.Body.Uptime = uptime
+
 		return resp, nil
 	})
 
-	// Register POST /reviews
-	// huma.Register(api, huma.Operation{
-	// 	OperationID:   "post-review",
-	// 	Method:        http.MethodPost,
-	// 	Path:          "/reviews",
-	// 	Summary:       "Post a review",
-	// 	Tags:          []string{"Reviews"},
-	// 	DefaultStatus: http.StatusCreated,
-	// }, func(ctx context.Context, i *ReviewInput) (*struct{}, error) {
-	// 	// TODO: save review in data store.
-	// 	return nil, nil
-	// })
+	huma.Register(api, huma.Operation{
+		OperationID:   "create-user",
+		Method:        http.MethodPost,
+		Path:          "/users",
+		Summary:       "Create a new user",
+		Tags:          []string{"Users"},
+		DefaultStatus: http.StatusCreated,
+	}, func(ctx context.Context, input *CreateUserRequest) (*CreateUserResponse, error) {
+		userID := fmt.Sprintf("user-%d", len(UsersDB)+1)
+
+		user := User{
+			ID:       userID,
+			Username: input.Body.Username,
+			Email:    input.Body.Email,
+		}
+		UsersDB[userID] = user
+
+		resp := &CreateUserResponse{}
+		resp.Body.ID = user.ID
+		resp.Body.Email = user.Email
+		resp.Body.Username = user.Username
+
+		return resp, nil
+	})
+
+	huma.Register(api, huma.Operation{
+		OperationID: "get-user",
+		Method:      http.MethodGet,
+		Path:        "/users/{id}",
+		Summary:     "Get a user by ID",
+		Tags:        []string{"Users"},
+	}, func(ctx context.Context, input *struct {
+		ID string `path:"id" doc:"ID of the user to retrieve"`
+	}) (*GetUserResponse, error) {
+		user, exists := UsersDB[input.ID]
+		if !exists {
+			return nil, huma.NewError(http.StatusNotFound, "User not found")
+		}
+
+		return &GetUserResponse{
+			Body: user,
+		}, nil
+	})
 }
 
 func main() {

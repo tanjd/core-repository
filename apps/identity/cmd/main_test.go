@@ -1,19 +1,20 @@
 package main
 
 import (
-	"strings"
 	"testing"
 
 	"github.com/danielgtaylor/huma/v2/humatest"
+	"github.com/stretchr/testify/assert"
 )
 
-func TestGetGreeting(t *testing.T) {
+func TestHealthCheckEndpoint(t *testing.T) {
 	_, api := humatest.New(t)
 
 	addRoutes(api)
+	t.Run("Get health check endpoint ", func(t *testing.T) {
+		resp := api.Get("/health")
 
-	resp := api.Get("/greeting/world")
-	if !strings.Contains(resp.Body.String(), "Hello, world!") {
-		t.Fatalf("Unexpected response: %s", resp.Body.String())
-	}
+		assert.Equal(t, 200, resp.Result().StatusCode)
+		assert.Contains(t, resp.Body.String(), `"status":"OK"`)
+	})
 }
