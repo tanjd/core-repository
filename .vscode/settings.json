@@ -7,7 +7,9 @@
     "huma",
     "humachi",
     "humacli",
-    "humatest"
+    "humatest",
+    "koanf",
+    "pkgerrors"
   ],
   "python.analysis.extraPaths": [
     "/workspace/libs/my-python-library"
