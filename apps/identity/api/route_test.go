@@ -7,16 +7,12 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/tanjd/core-repository/apps/identity/api"
 	"github.com/tanjd/core-repository/apps/identity/handler"
-	"github.com/tanjd/core-repository/apps/identity/repo"
 )
 
 func TestHealthCheckEndpoint(t *testing.T) {
 	_, a := humatest.New(t)
 
-	r := repo.NewInMemoryRepo()
-	userHandler := handler.NewUserHandler(r)
-
-	routes := api.NewRouter(userHandler, a)
+	routes := api.NewRouter(handler.UserHandler{}, &handler.AuthenticationHandler{}, a)
 	routes.AddHealthCheckRoutes()
 
 	t.Run("Get health check endpoint ", func(t *testing.T) {

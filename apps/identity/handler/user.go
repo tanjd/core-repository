@@ -9,23 +9,23 @@ import (
 	"github.com/tanjd/core-repository/apps/identity/model"
 )
 
-type UserRepo interface {
-	CreateUser(username, email string) (*model.User, error)
+type UserService interface {
+	CreateUser(username, email, password string) (*model.User, error)
 	GetUser(id uuid.UUID) (*model.User, error)
 }
 
 type UserHandler struct {
-	Repo UserRepo
+	UserService
 }
 
-func NewUserHandler(r UserRepo) *UserHandler {
+func NewUserHandler(s UserService) *UserHandler {
 	return &UserHandler{
-		Repo: r,
+		UserService: s,
 	}
 }
 
-func (h UserHandler) CreateUserHandler(ctx context.Context, request *model.CreateUserRequest) (*model.CreateUserResponse, error) {
-	user, err := h.Repo.CreateUser(request.Body.Username, request.Body.Email)
+func (h UserHandler) CreateUser(ctx context.Context, request *model.CreateUserRequest) (*model.CreateUserResponse, error) {
+	user, err := h.UserService.CreateUser(request.Body.Username, request.Body.Email, request.Body.Password)
 	if err != nil {
 		return nil, err
 	}
@@ -35,14 +35,12 @@ func (h UserHandler) CreateUserHandler(ctx context.Context, request *model.Creat
 	return resp, nil
 }
 
-func (h UserHandler) GetUserHandler(ctx context.Context, request *struct {
-	ID string `path:"id" doc:"ID of the user to retrieve"`
-}) (*model.GetUserResponse, error) {
+func (h UserHandler) GetUser(ctx context.Context, request *model.GetUserRequest) (*model.GetUserResponse, error) {
 	userID, err := uuid.Parse(request.ID)
 	if err != nil {
 		return nil, huma.NewError(http.StatusBadRequest, "Invalid user ID format")
 	}
-	user, err := h.Repo.GetUser(userID)
+	user, err := h.UserService.GetUser(userID)
 	if err != nil {
 		return nil, err
 	}
