@@ -11,6 +11,7 @@ require (
 	github.com/knadh/koanf/v2 v2.1.2
 	github.com/rs/zerolog v1.33.0
 	github.com/stretchr/testify v1.9.0
+	golang.org/x/crypto v0.28.0
 )
 
 require (

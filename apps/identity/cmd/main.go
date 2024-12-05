@@ -16,6 +16,7 @@ import (
 	"github.com/tanjd/core-repository/apps/identity/config"
 	"github.com/tanjd/core-repository/apps/identity/handler"
 	"github.com/tanjd/core-repository/apps/identity/repo"
+	"github.com/tanjd/core-repository/apps/identity/service"
 
 	_ "github.com/danielgtaylor/huma/v2/formats/cbor"
 )
@@ -26,15 +27,23 @@ type Options struct {
 
 func main() {
 	cli := humacli.New(func(hooks humacli.Hooks, options *Options) {
-
 		r := repo.NewInMemoryRepo()
-		userHandler := handler.NewUserHandler(r)
+		userService := service.NewUserService(r)
+		userHandler := handler.NewUserHandler(userService)
+
+		emailService := &service.SimulatedEmailSender{}
+		authenticationRepo := repo.NewInMemoryRepo()
+
+		authenticationService := service.NewAuthenticationService(r, emailService, authenticationRepo)
+		authenticationHandler := handler.NewAuthenticationHandler(authenticationService)
+
 		router := chi.NewMux()
 		router.Use(middleware.Logger)
 
-		routes := api.NewRouter(userHandler, humachi.New(router, huma.DefaultConfig("Identity", "1.0.0")))
+		routes := api.NewRouter(userHandler, authenticationHandler, humachi.New(router, huma.DefaultConfig("Identity", "1.0.0")))
 		routes.AddHealthCheckRoutes()
 		routes.AddUserRoutes()
+		routes.AddAuthRoutes()
 
 		config := config.LoadConfig()
 		configureLogger(config)
