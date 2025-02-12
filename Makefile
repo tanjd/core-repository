@@ -9,3 +9,7 @@ help:
 .PHONY: setup
 setup: ## setup repo
 	pnpm install --frozen-lockfile
+
+upgrade-nx: ## upgrade monorepo
+	npx nx migrate latest
+	npx nx migrate --run-migrations

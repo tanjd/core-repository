@@ -23,6 +23,7 @@ type UserHandler interface {
 type AuthenticationHandler interface {
 	RegisterUser(context.Context, *model.RegisterUserRequest) (*model.RegisterUserResponse, error)
 	LoginUser(context.Context, *model.LoginUserRequest) (*model.LoginUserResponse, error)
+	VerifyEmail(context.Context, *model.VerifyEmailRequest) (*model.VerifyEmailResponse, error)
 }
 
 func NewRouter(userHandler UserHandler, authenticationHandler AuthenticationHandler, api huma.API) *Router {
@@ -66,6 +67,15 @@ func (r *Router) AddAuthRoutes() {
 		Tags:          []string{"Authentication"},
 		DefaultStatus: http.StatusOK,
 	}, r.AuthenticationHandler.LoginUser)
+
+	huma.Register(r.api, huma.Operation{
+		OperationID:   "verify",
+		Method:        http.MethodGet,
+		Path:          "/verify/{token}",
+		Summary:       "Verify user with token",
+		Tags:          []string{"Authentication"},
+		DefaultStatus: http.StatusOK,
+	}, r.AuthenticationHandler.VerifyEmail)
 }
 
 func (r *Router) AddHealthCheckRoutes() {

@@ -39,7 +39,6 @@
     "vscode": {
       "extensions": [
         "charliermarsh.ruff",
-        "esbenp.prettier-vscode",
         "mgesbert.python-path",
         "ms-python.isort",
         "ms-python.python",
