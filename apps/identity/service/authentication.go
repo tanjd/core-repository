@@ -5,12 +5,14 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/rs/zerolog/log"
 	"github.com/tanjd/core-repository/apps/identity/model"
+	"github.com/tanjd/core-repository/apps/identity/repo"
 	"golang.org/x/crypto/bcrypt"
 )
 
 type EmailSender interface {
-	SendEmailVerification(to, token string) error
+	SendEmailVerification(email, token string) error
 }
 
 type AuthenticationService struct {
@@ -20,7 +22,9 @@ type AuthenticationService struct {
 }
 
 type AuthenticationRepo interface {
-	SaveVerificationToken(userId uuid.UUID, token uuid.UUID, expiration time.Time) error
+	StoreVerificationToken(userId uuid.UUID, token string, expiration time.Time) error
+	RetrieveVerificationToken(token string) (*repo.EmailVerificationData, error)
+	DeleteVerificationToken(token string) error
 }
 
 func NewAuthenticationService(userRepo UserRepo, emailSender EmailSender, authenticationRepo AuthenticationRepo) *AuthenticationService {
@@ -56,14 +60,14 @@ func (s *AuthenticationService) RegisterUser(username, email, password string) (
 		return nil, errors.New("Failed to create user")
 	}
 
-	verificationToken := uuid.New()
+	verificationToken := uuid.New().String()
 
 	expiration := time.Now().Add(24 * time.Hour) // Token valid for 24 hours
-	if err := s.AuthenticationRepo.SaveVerificationToken(userId, verificationToken, expiration); err != nil {
+	if err := s.AuthenticationRepo.StoreVerificationToken(userId, verificationToken, expiration); err != nil {
 		return nil, errors.New("failed to save verification token")
 	}
 
-	if err := s.EmailSender.SendEmailVerification(email, verificationToken.String()); err != nil {
+	if err := s.EmailSender.SendEmailVerification(email, verificationToken); err != nil {
 		return nil, errors.New("failed to send verification email")
 	}
 
@@ -71,5 +75,29 @@ func (s *AuthenticationService) RegisterUser(username, email, password string) (
 }
 
 func (s *AuthenticationService) VerifyEmail(token string) error {
+	emailVerificationData, err := s.AuthenticationRepo.RetrieveVerificationToken(token)
+	if err != nil {
+		return err
+	}
+	userId := emailVerificationData.UserID
+
+	updatedUser, err := s.UserRepo.UpdateUser(&model.UserUpdate{
+		ID:         &userId,
+		IsVerified: boolPtr(true),
+	})
+	if err != nil {
+		return err
+	}
+
+	err = s.AuthenticationRepo.DeleteVerificationToken(token)
+	if err != nil {
+		return err
+	}
+
+	log.Info().
+		Interface("updatedUser", updatedUser).
+		Msg("VerifyEmail")
 	return nil
 }
+
+func boolPtr(b bool) *bool { return &b }
