@@ -10,6 +10,14 @@ type User struct {
 	IsVerified bool      `json:"is_verified" doc:"Indicates if the user's email is verified"`
 }
 
+type UserUpdate struct {
+	ID         *uuid.UUID `json:"id" doc:"Unique identifier for the user"`
+	Username   *string    `json:"username" doc:"Username for the user"`
+	Email      *string    `json:"email" doc:"Email address of the user"`
+	Password   *string    `json:"-" doc:"Hashed password"`
+	IsVerified *bool      `json:"is_verified" doc:"Indicates if the user's email is verified"`
+}
+
 type CreateUserRequest struct {
 	Body struct {
 		Username string `json:"username" required:"true" maxLength:"30" doc:"Username for the user. Must be unique and up to 30 characters long."`

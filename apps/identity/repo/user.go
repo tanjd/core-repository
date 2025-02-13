@@ -1,6 +1,8 @@
 package repo
 
 import (
+	"errors"
+	"reflect"
 	"time"
 
 	"github.com/google/uuid"
@@ -28,7 +30,7 @@ func NewInMemoryRepo() *InMemoryRepo {
 func (r *InMemoryRepo) CreateUser(user *model.User) (*model.User, error) {
 	r.users[user.ID] = *user
 
-	log.Info().
+	log.Debug().
 		Interface("users", r.users).
 		Msg("Create User")
 	return user, nil
@@ -49,6 +51,40 @@ func (r *InMemoryRepo) GetUserByEmail(email string) (*model.User, error) {
 		}
 	}
 	return nil, ErrUserNotFound
+}
+
+func (r *InMemoryRepo) UpdateUser(updateData *model.UserUpdate) (*model.User, error) {
+	if updateData == nil || updateData.ID == nil {
+		return nil, errors.New("updateData or updateData.ID cannot be nil")
+	}
+
+	existingUser, err := r.GetUser(*updateData.ID)
+	if err != nil {
+		return nil, err
+	}
+
+	existingStruct := reflect.ValueOf(existingUser).Elem()
+	updateStruct := reflect.ValueOf(updateData).Elem() // FIX: Dereference pointer
+
+	for i := 0; i < updateStruct.NumField(); i++ {
+		field := updateStruct.Type().Field(i)
+		updateValue := updateStruct.Field(i)
+
+		if updateValue.Kind() == reflect.Ptr && !updateValue.IsNil() {
+			targetField := existingStruct.FieldByName(field.Name)
+			if targetField.CanSet() { // Prevent panic on unexported fields
+				targetField.Set(updateValue.Elem())
+			}
+		}
+	}
+
+	r.users[*updateData.ID] = *existingUser
+
+	log.Debug().
+		Interface("users", r.users).
+		Msg("Update User")
+
+	return existingUser, nil
 }
 
 func (r *InMemoryRepo) GetUserByUsername(username string) (*model.User, error) {

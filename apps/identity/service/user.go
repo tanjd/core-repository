@@ -13,6 +13,7 @@ type UserRepo interface {
 	GetUser(id uuid.UUID) (*model.User, error)
 	GetUserByEmail(email string) (*model.User, error)
 	GetUserByUsername(username string) (*model.User, error)
+	UpdateUser(updateData *model.UserUpdate) (*model.User, error)
 }
 
 type UserService struct {

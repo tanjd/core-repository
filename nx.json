@@ -11,41 +11,25 @@
     }
   },
   "namedInputs": {
-    "default": [
-      "{projectRoot}/**/*",
-      "sharedGlobals"
-    ],
-    "production": [
-      "default"
-    ],
-    "sharedGlobals": [
-      "{workspaceRoot}/.github/workflows/ci.yml"
-    ]
+    "default": ["{projectRoot}/**/*", "sharedGlobals"],
+    "production": ["default"],
+    "sharedGlobals": ["{workspaceRoot}/.github/workflows/ci.yml"]
   },
   "neverConnectToCloud": true,
   "nxCloudId": "66e5a3c8896d3879263f6d33",
   "parallel": 8,
-  "plugins": [
-    "@nxlv/python",
-    "@nx-go/nx-go"
-  ],
+  "plugins": ["@nxlv/python", "@nx-go/nx-go"],
   "targetDefaults": {
     "golangci-lint": {
       "cache": true
     },
     "lint": {
       "cache": true,
-      "dependsOn": [
-        "golangci-lint",
-        "tidy",
-        "install"
-      ]
+      "dependsOn": ["golangci-lint", "tidy", "install"]
     },
     "test": {
       "cache": true,
-      "dependsOn": [
-        "install"
-      ]
+      "dependsOn": ["install"]
     },
     "tidy": {
       "cache": true
@@ -54,5 +38,6 @@
   "workspaceLayout": {
     "appsDir": "apps",
     "libsDir": "libs"
-  }
+  },
+  "useLegacyCache": true
 }
