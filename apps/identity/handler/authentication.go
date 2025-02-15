@@ -2,11 +2,13 @@ package handler
 
 import (
 	"context"
+	"errors"
 	"net/http"
 
 	"github.com/danielgtaylor/huma/v2"
 	"github.com/google/uuid"
 	"github.com/tanjd/core-repository/apps/identity/model"
+	"github.com/tanjd/core-repository/apps/identity/service"
 )
 
 type AuthenticationService interface {
@@ -46,20 +48,17 @@ func (h *AuthenticationHandler) RegisterUser(ctx context.Context, request *model
 }
 
 func (h *AuthenticationHandler) VerifyEmail(ctx context.Context, request *model.VerifyEmailRequest) (*model.VerifyEmailResponse, error) {
-	// Validate the token with the repository
 	err := h.AuthenticationService.VerifyEmail(request.Token)
 	if err != nil {
-		// if errors.Is(err, ErrInvalidToken) {
-		// 	return huma.NewError(http.StatusBadRequest, "Invalid verification token.")
-		// }
-		// if errors.Is(err, ErrTokenExpired) {
-		// 	return huma.NewError(http.StatusBadRequest, "The verification token has expired. Please request a new one.")
-		// }
-		// return huma.NewError(http.StatusInternalServerError, "An unexpected error occurred.")
+		if errors.Is(err, service.ErrInvalidToken) {
+			return nil, huma.NewError(http.StatusBadRequest, "Invalid verification token.")
+		}
+		if errors.Is(err, service.ErrTokenExpired) {
+			return nil, huma.NewError(http.StatusBadRequest, "The verification token has expired. Please request a new one.")
+		}
 		return nil, huma.NewError(http.StatusInternalServerError, "An unexpected error occurred.")
 	}
 
-	// Respond with success
 	return &model.VerifyEmailResponse{
 		Body: struct {
 			Message string `json:"message" doc:"A message indicating the result of the email verification process."`

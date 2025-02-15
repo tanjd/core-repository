@@ -36,7 +36,7 @@ func NewAuthenticationService(userRepo UserRepo, emailSender EmailSender, authen
 }
 
 func (s *AuthenticationService) RegisterUser(username, email, password string) (*model.User, error) {
-	// validate if email, username and password is valid
+	// @TODO: validate if email, username and password is valid
 
 	if err := checkUserExists(email, username, s.UserRepo); err != nil {
 		return nil, err
@@ -77,12 +77,18 @@ func (s *AuthenticationService) RegisterUser(username, email, password string) (
 func (s *AuthenticationService) VerifyEmail(token string) error {
 	emailVerificationData, err := s.AuthenticationRepo.RetrieveVerificationToken(token)
 	if err != nil {
+		if errors.Is(err, repo.ErrVerificationTokenNotFound) {
+			return ErrInvalidToken
+		}
 		return err
 	}
-	userId := emailVerificationData.UserID
+
+	if isExpired(emailVerificationData.Expiration) {
+		return ErrTokenExpired
+	}
 
 	updatedUser, err := s.UserRepo.UpdateUser(&model.UserUpdate{
-		ID:         &userId,
+		ID:         &emailVerificationData.UserID,
 		IsVerified: boolPtr(true),
 	})
 	if err != nil {
@@ -101,3 +107,7 @@ func (s *AuthenticationService) VerifyEmail(token string) error {
 }
 
 func boolPtr(b bool) *bool { return &b }
+
+func isExpired(expiryTime time.Time) bool {
+	return time.Now().After(expiryTime)
+}
