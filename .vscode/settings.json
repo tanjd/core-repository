@@ -11,6 +11,7 @@
     "koanf",
     "pkgerrors"
   ],
+  "nxConsole.generateAiAgentRules": true,
   "python.analysis.extraPaths": [
     "/workspace/libs/my-python-library"
   ],
