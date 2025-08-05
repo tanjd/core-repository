@@ -42,8 +42,8 @@ func LoadConfig() Config {
 	}
 
 	if err := k.Load(env.Provider(envVarPrefix, ".", func(s string) string {
-		return strings.Replace(strings.ToLower(
-			strings.TrimPrefix(s, envVarPrefix)), "__", ".", -1)
+		return strings.ReplaceAll(strings.ToLower(
+			strings.TrimPrefix(s, envVarPrefix)), "__", ".")
 	}), nil); err != nil {
 		log.Fatal().Err(err).Msg("Error loading environment variables")
 	}
