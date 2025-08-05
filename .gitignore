@@ -87,3 +87,6 @@ coverage.xml
 
 .cursor/rules/nx-rules.mdc
 .github/instructions/nx.instructions.md
+
+# Google Takeout data
+/Takeout
