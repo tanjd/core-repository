@@ -6,6 +6,12 @@
     "@nx-go/nx-go": {
       "projectNameAndRootFormat": "derived"
     },
+    "@nx/next": {
+      "application": {
+        "linter": "eslint",
+        "style": "tailwind"
+      }
+    },
     "@nxlv/python:poetry-project": {
       "projectNameAndRootFormat": "derived"
     }
@@ -16,7 +22,14 @@
       "sharedGlobals"
     ],
     "production": [
-      "default"
+      "default",
+      "!{projectRoot}/.eslintrc.json",
+      "!{projectRoot}/eslint.config.mjs",
+      "!{projectRoot}/**/?(*.)+(spec|test).[jt]s?(x)?(.snap)",
+      "!{projectRoot}/tsconfig.spec.json",
+      "!{projectRoot}/jest.config.[jt]s",
+      "!{projectRoot}/src/test-setup.[jt]s",
+      "!{projectRoot}/test-setup.[jt]s"
     ],
     "sharedGlobals": [
       "{workspaceRoot}/.github/workflows/ci.yml"
@@ -27,9 +40,58 @@
   "parallel": 8,
   "plugins": [
     "@nxlv/python",
-    "@nx-go/nx-go"
+    "@nx-go/nx-go",
+    {
+      "options": {
+        "buildDepsTargetName": "build-deps",
+        "buildTargetName": "build",
+        "devTargetName": "dev",
+        "serveStaticTargetName": "serve-static",
+        "startTargetName": "start",
+        "watchDepsTargetName": "watch-deps"
+      },
+      "plugin": "@nx/next/plugin"
+    },
+    {
+      "options": {
+        "targetName": "e2e"
+      },
+      "plugin": "@nx/playwright/plugin"
+    },
+    {
+      "options": {
+        "targetName": "lint"
+      },
+      "plugin": "@nx/eslint/plugin"
+    },
+    {
+      "options": {
+        "targetName": "test"
+      },
+      "plugin": "@nx/jest/plugin"
+    }
   ],
+  "pluginsConfig": {
+    "@nx/js": {
+      "analyzeSourceFiles": true
+    }
+  },
   "targetDefaults": {
+    "@nx/js:swc": {
+      "cache": true,
+      "dependsOn": [
+        "^build"
+      ],
+      "inputs": [
+        "production",
+        "^production"
+      ]
+    },
+    "e2e-ci--**/*": {
+      "dependsOn": [
+        "^build"
+      ]
+    },
     "golangci-lint": {
       "cache": true
     },
