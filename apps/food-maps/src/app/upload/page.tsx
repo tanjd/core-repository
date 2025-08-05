@@ -1,17 +1,17 @@
 import { StorageManager, parseCsvContent } from "@tanjd/food-maps-data";
-import { join } from "path";
-import { readdir, readFile } from "fs/promises";
-import { cityToCountry } from "../../scripts/city-country-map";
+import path from "node:path";
+import { readdir, readFile } from "node:fs/promises";
+import { cityToCountry } from "../../../scripts/city-country-map";
 
 async function processFiles() {
   try {
-    const masterPath = join(process.cwd(), "../../data/master.json");
+    const masterPath = path.join(process.cwd(), "../../data/master.json");
     console.log("Loading master file from:", masterPath);
 
     const storage = new StorageManager(masterPath);
     await storage.load();
 
-    const csvDir = join(process.cwd(), "../../data/food-maps");
+    const csvDir = path.join(process.cwd(), "../../data/food-maps");
     console.log("Reading CSV files from:", csvDir);
 
     const files = await readdir(csvDir);
@@ -25,7 +25,7 @@ async function processFiles() {
     for (const file of files) {
       if (!file.endsWith(".csv")) continue;
 
-      const content = await readFile(join(csvDir, file), "utf-8");
+      const content = await readFile(path.join(csvDir, file), "utf-8");
       const city = file.replace(/\s*\(Food\)\.csv$/, "");
       const country = cityToCountry[city] || "Unknown";
 
@@ -36,7 +36,11 @@ async function processFiles() {
         totalUpdated += result.updated;
         errors.push(...result.errors);
       } catch (error) {
-        errors.push(`Error processing ${file}: ${error.message}`);
+        if (error instanceof Error) {
+          errors.push(`Error processing ${file}: ${error.message}`);
+        } else {
+          errors.push(`Error processing ${file}: ${String(error)}`);
+        }
       }
     }
 
@@ -46,7 +50,11 @@ async function processFiles() {
     return {
       totalAdded: 0,
       totalUpdated: 0,
-      errors: [`Failed to process files: ${error.message}`],
+      errors: [
+        `Failed to process files: ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+      ],
     };
   }
 }
