@@ -1,4 +1,3 @@
-import nextPlugin from '@next/eslint-plugin-next';
 import { FlatCompat } from '@eslint/eslintrc';
 import js from '@eslint/js';
 import path from 'path';
@@ -15,11 +14,6 @@ export default [
   ...compat.extends('next/core-web-vitals'),
   {
     files: ['**/*.ts', '**/*.tsx', '**/*.js', '**/*.jsx'],
-    plugins: {
-      '@next/next': nextPlugin,
-    },
-    rules: {
-      '@next/next/no-html-link-for-pages': 'off',
-    },
+    rules: {},
   },
 ];

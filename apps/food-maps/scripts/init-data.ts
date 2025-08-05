@@ -44,8 +44,14 @@ async function initializeData() {
       console.log(`- Skipped: ${result.skipped}`);
       console.log();
     } catch (error) {
+      const errMsg =
+        error instanceof Error
+          ? error.message
+          : typeof error === "string"
+          ? error
+          : JSON.stringify(error);
       console.error(`Error processing ${file}:`, error);
-      errors.push(`Error processing ${file}: ${error.message}`);
+      errors.push(`Error processing ${file}: ${errMsg}`);
     }
   }
 
