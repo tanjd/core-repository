@@ -1,5 +1,6 @@
 import { StorageManager } from "@tanjd/food-maps-data";
 import { join } from "path";
+import Link from "next/link";
 
 async function getLocations() {
   try {
@@ -58,7 +59,7 @@ export default async function HomePage() {
 
               <div className="space-y-2">
                 {group.cities.map((city) => (
-                  <a
+                  <Link
                     key={city.name}
                     href={`/locations/${encodeURIComponent(group.country)}/${encodeURIComponent(city.name)}`}
                     className="block p-3 bg-gray-50 rounded hover:bg-gray-100 transition-colors"
@@ -67,7 +68,7 @@ export default async function HomePage() {
                     <span className="text-gray-500 ml-2">
                       ({city.locations.length} spots)
                     </span>
-                  </a>
+                  </Link>
                 ))}
               </div>
             </div>

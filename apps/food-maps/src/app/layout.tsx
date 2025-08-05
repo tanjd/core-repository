@@ -15,7 +15,10 @@ export default function RootLayout({
       <body className="min-h-screen bg-gray-50">
         <nav className="bg-white shadow-sm">
           <div className="container mx-auto px-4 py-4">
-            <a href="/" className="text-xl font-semibold text-gray-900">
+            <a
+              href="/"
+              className="text-xl font-semibold text-gray-900 hover:text-gray-700 transition-colors"
+            >
               Food Maps
             </a>
           </div>
