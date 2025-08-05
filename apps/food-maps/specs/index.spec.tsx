@@ -1,10 +1,22 @@
-import React from "react";
 import { render } from "@testing-library/react";
-import Page from "../src/app/page";
+import HomePage from "../src/app/page";
 
-describe("Page", () => {
-  it("should render successfully", () => {
-    const { baseElement } = render(<Page />);
+jest.mock("@tanjd/food-maps-data", () => ({
+  StorageManager: jest.fn().mockImplementation(() => ({
+    load: jest.fn(),
+    getLocationsByCountry: jest.fn().mockReturnValue([
+      {
+        country: "Test Country",
+        cities: [{ name: "Test City", locations: [] }],
+        totalLocations: 0,
+      },
+    ]),
+  })),
+}));
+
+describe("HomePage", () => {
+  it("should render successfully", async () => {
+    const { baseElement } = render(await HomePage());
     expect(baseElement).toBeTruthy();
   });
 });

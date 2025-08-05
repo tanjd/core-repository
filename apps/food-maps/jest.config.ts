@@ -1,13 +1,24 @@
 /* eslint-disable */
 export default {
-  displayName: 'food-maps',
-  preset: '../../jest.preset.js',
+  displayName: "food-maps",
+  preset: "../../jest.preset.js",
   transform: {
-    '^(?!.*\\.(js|jsx|ts|tsx|css|json)$)': '@nx/react/plugins/jest',
-    '^.+\\.[tj]sx?$': ['@swc/jest'],
+    "^.+\\.[tj]sx?$": [
+      "@swc/jest",
+      {
+        jsc: {
+          transform: {
+            react: {
+              runtime: "automatic",
+            },
+          },
+          target: "es2022",
+        },
+      },
+    ],
   },
-  moduleFileExtensions: ['ts', 'tsx', 'js', 'jsx'],
-  coverageDirectory: '../../coverage/apps/food-maps',
-  setupFilesAfterEnv: ['<rootDir>/src/test-setup.ts'],
-  testEnvironment: 'jest-environment-jsdom',
+  moduleFileExtensions: ["ts", "tsx", "js", "jsx"],
+  coverageDirectory: "../../coverage/apps/food-maps",
+  setupFilesAfterEnv: ["<rootDir>/src/test-setup.ts"],
+  testEnvironment: "jest-environment-jsdom",
 };
