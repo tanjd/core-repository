@@ -44,7 +44,7 @@ func (s *AuthenticationService) RegisterUser(username, email, password string) (
 
 	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
 	if err != nil {
-		return nil, errors.New("Failed to hash password")
+		return nil, errors.New("failed to hash password")
 	}
 
 	userId := uuid.New()
@@ -56,18 +56,18 @@ func (s *AuthenticationService) RegisterUser(username, email, password string) (
 		Password:   string(hashedPassword),
 		IsVerified: false,
 	}
-	if _, err := s.UserRepo.CreateUser(user); err != nil {
-		return nil, errors.New("Failed to create user")
+	if _, err := s.CreateUser(user); err != nil {
+		return nil, errors.New("failed to create user")
 	}
 
 	verificationToken := uuid.New().String()
 
 	expiration := time.Now().Add(24 * time.Hour) // Token valid for 24 hours
-	if err := s.AuthenticationRepo.StoreVerificationToken(userId, verificationToken, expiration); err != nil {
+	if err := s.StoreVerificationToken(userId, verificationToken, expiration); err != nil {
 		return nil, errors.New("failed to save verification token")
 	}
 
-	if err := s.EmailSender.SendEmailVerification(email, verificationToken); err != nil {
+	if err := s.SendEmailVerification(email, verificationToken); err != nil {
 		return nil, errors.New("failed to send verification email")
 	}
 
@@ -75,7 +75,7 @@ func (s *AuthenticationService) RegisterUser(username, email, password string) (
 }
 
 func (s *AuthenticationService) VerifyEmail(token string) error {
-	emailVerificationData, err := s.AuthenticationRepo.RetrieveVerificationToken(token)
+	emailVerificationData, err := s.RetrieveVerificationToken(token)
 	if err != nil {
 		if errors.Is(err, repo.ErrVerificationTokenNotFound) {
 			return ErrInvalidToken
@@ -87,7 +87,7 @@ func (s *AuthenticationService) VerifyEmail(token string) error {
 		return ErrTokenExpired
 	}
 
-	updatedUser, err := s.UserRepo.UpdateUser(&model.UserUpdate{
+	updatedUser, err := s.UpdateUser(&model.UserUpdate{
 		ID:         &emailVerificationData.UserID,
 		IsVerified: boolPtr(true),
 	})
@@ -95,7 +95,7 @@ func (s *AuthenticationService) VerifyEmail(token string) error {
 		return err
 	}
 
-	err = s.AuthenticationRepo.DeleteVerificationToken(token)
+	err = s.DeleteVerificationToken(token)
 	if err != nil {
 		return err
 	}

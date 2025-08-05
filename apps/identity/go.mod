@@ -1,17 +1,19 @@
 module github.com/tanjd/core-repository/apps/identity
 
-go 1.23
+go 1.23.0
+
+toolchain go1.23.10
 
 require (
 	github.com/danielgtaylor/huma/v2 v2.26.0
-	github.com/go-chi/chi/v5 v5.1.0
+	github.com/go-chi/chi/v5 v5.2.2
 	github.com/google/uuid v1.6.0
 	github.com/knadh/koanf/providers/env v1.0.0
 	github.com/knadh/koanf/providers/structs v0.1.0
 	github.com/knadh/koanf/v2 v2.1.2
-	github.com/rs/zerolog v1.33.0
+	github.com/rs/zerolog v1.34.0
 	github.com/stretchr/testify v1.9.0
-	golang.org/x/crypto v0.28.0
+	golang.org/x/crypto v0.40.0
 )
 
 require (
@@ -31,6 +33,6 @@ require (
 	github.com/spf13/cobra v1.8.1 // indirect
 	github.com/spf13/pflag v1.0.5 // indirect
 	github.com/x448/float16 v0.8.4 // indirect
-	golang.org/x/sys v0.26.0 // indirect
+	golang.org/x/sys v0.34.0 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 )

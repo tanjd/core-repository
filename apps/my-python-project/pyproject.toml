@@ -21,7 +21,7 @@ readme = "README.md"
 include = "my_python_project"
 
 [tool.poetry.dependencies]
-python = ">=3.9,<3.11"
+python = ">=3.9,<3.13"
 my-python-library = { path = "../../libs/my-python-library", develop = true }
 
 
@@ -30,12 +30,12 @@ my-python-library = { path = "../../libs/my-python-library", develop = true }
 # develop = true
 
 [tool.poetry.group.dev.dependencies]
-autopep8 = "2.0.2"
-ruff = "^0.6.5"
-pytest = "7.3.1"
-pytest-sugar = "0.9.7"
+autopep8 = "2.0.4"
+ruff = "^0.3.4"
+pytest = "8.1.1"
+pytest-sugar = "1.0.0"
 pytest-cov = "4.1.0"
-pytest-html = "3.2.0"
+pytest-html = "4.1.1"
 
 [build-system]
 requires = ["poetry-core"]

@@ -2,6 +2,6 @@ package repo
 
 import "errors"
 
-var ErrUserNotFound = errors.New("User not found")
+var ErrUserNotFound = errors.New("user not found")
 
-var ErrVerificationTokenNotFound = errors.New("Verification token not found")
+var ErrVerificationTokenNotFound = errors.New("verification token not found")

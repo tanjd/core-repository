@@ -32,7 +32,7 @@ func (s *UserService) CreateUser(username, email, password string) (*model.User,
 	}
 	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
 	if err != nil {
-		return nil, errors.New("Failed to hash password")
+		return nil, errors.New("failed to hash password")
 	}
 	user := &model.User{
 		ID:         uuid.New(),
@@ -42,7 +42,7 @@ func (s *UserService) CreateUser(username, email, password string) (*model.User,
 		IsVerified: true,
 	}
 	if _, err := s.UserRepo.CreateUser(user); err != nil {
-		return nil, errors.New("Failed to create user")
+		return nil, errors.New("failed to create user")
 	}
 	return user, nil
 }
