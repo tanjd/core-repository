@@ -2,6 +2,7 @@
   "devDependencies": {
     "@nx-go/nx-go": "^3.3.1",
     "@nx/js": "20.4.2",
+    "@nx/next": "^21.3.11",
     "@nx/workspace": "20.4.2",
     "@nxlv/python": "^19.2.1",
     "husky": "^9.1.7",
