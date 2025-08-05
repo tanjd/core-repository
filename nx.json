@@ -6,18 +6,21 @@
     "@nx-go/nx-go": {
       "projectNameAndRootFormat": "derived"
     },
-    "@nxlv/python:poetry-project": {
-      "projectNameAndRootFormat": "derived"
-    },
     "@nx/next": {
       "application": {
-        "style": "tailwind",
-        "linter": "eslint"
+        "linter": "eslint",
+        "style": "tailwind"
       }
+    },
+    "@nxlv/python:poetry-project": {
+      "projectNameAndRootFormat": "derived"
     }
   },
   "namedInputs": {
-    "default": ["{projectRoot}/**/*", "sharedGlobals"],
+    "default": [
+      "{projectRoot}/**/*",
+      "sharedGlobals"
+    ],
     "production": [
       "default",
       "!{projectRoot}/.eslintrc.json",
@@ -28,7 +31,9 @@
       "!{projectRoot}/src/test-setup.[jt]s",
       "!{projectRoot}/test-setup.[jt]s"
     ],
-    "sharedGlobals": ["{workspaceRoot}/.github/workflows/ci.yml"]
+    "sharedGlobals": [
+      "{workspaceRoot}/.github/workflows/ci.yml"
+    ]
   },
   "neverConnectToCloud": true,
   "nxCloudId": "66e5a3c8896d3879263f6d33",
@@ -37,52 +42,75 @@
     "@nxlv/python",
     "@nx-go/nx-go",
     {
-      "plugin": "@nx/next/plugin",
       "options": {
-        "startTargetName": "start",
+        "buildDepsTargetName": "build-deps",
         "buildTargetName": "build",
         "devTargetName": "dev",
         "serveStaticTargetName": "serve-static",
-        "buildDepsTargetName": "build-deps",
+        "startTargetName": "start",
         "watchDepsTargetName": "watch-deps"
-      }
+      },
+      "plugin": "@nx/next/plugin"
     },
     {
-      "plugin": "@nx/playwright/plugin",
       "options": {
         "targetName": "e2e"
-      }
+      },
+      "plugin": "@nx/playwright/plugin"
     },
     {
-      "plugin": "@nx/eslint/plugin",
       "options": {
         "targetName": "lint"
-      }
+      },
+      "plugin": "@nx/eslint/plugin"
     },
     {
-      "plugin": "@nx/jest/plugin",
       "options": {
         "targetName": "test"
-      }
+      },
+      "plugin": "@nx/jest/plugin"
     }
   ],
+  "pluginsConfig": {
+    "@nx/js": {
+      "analyzeSourceFiles": true
+    }
+  },
   "targetDefaults": {
+    "@nx/js:swc": {
+      "cache": true,
+      "dependsOn": [
+        "^build"
+      ],
+      "inputs": [
+        "production",
+        "^production"
+      ]
+    },
+    "e2e-ci--**/*": {
+      "dependsOn": [
+        "^build"
+      ]
+    },
     "golangci-lint": {
       "cache": true
     },
     "lint": {
       "cache": true,
-      "dependsOn": ["golangci-lint", "tidy", "install"]
+      "dependsOn": [
+        "golangci-lint",
+        "tidy",
+        "install"
+      ]
     },
     "test": {
       "cache": true,
-      "dependsOn": ["install"]
+      "dependsOn": [
+        "install"
+      ]
     },
     "tidy": {
       "cache": true
-    },
-    "e2e-ci--**/*": {
-      "dependsOn": ["^build"]
     }
   },
   "workspaceLayout": {

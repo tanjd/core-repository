@@ -12,7 +12,11 @@
     ],
     "module": "esnext",
     "moduleResolution": "node",
-    "paths": {},
+    "paths": {
+      "@tanjd/food-maps-data": [
+        "libs/food-maps-data/src/index.ts"
+      ]
+    },
     "rootDir": ".",
     "skipDefaultLibCheck": true,
     "skipLibCheck": true,
