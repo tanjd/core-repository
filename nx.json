@@ -8,26 +8,63 @@
     },
     "@nxlv/python:poetry-project": {
       "projectNameAndRootFormat": "derived"
+    },
+    "@nx/next": {
+      "application": {
+        "style": "tailwind",
+        "linter": "eslint"
+      }
     }
   },
   "namedInputs": {
-    "default": [
-      "{projectRoot}/**/*",
-      "sharedGlobals"
-    ],
+    "default": ["{projectRoot}/**/*", "sharedGlobals"],
     "production": [
-      "default"
+      "default",
+      "!{projectRoot}/.eslintrc.json",
+      "!{projectRoot}/eslint.config.mjs",
+      "!{projectRoot}/**/?(*.)+(spec|test).[jt]s?(x)?(.snap)",
+      "!{projectRoot}/tsconfig.spec.json",
+      "!{projectRoot}/jest.config.[jt]s",
+      "!{projectRoot}/src/test-setup.[jt]s",
+      "!{projectRoot}/test-setup.[jt]s"
     ],
-    "sharedGlobals": [
-      "{workspaceRoot}/.github/workflows/ci.yml"
-    ]
+    "sharedGlobals": ["{workspaceRoot}/.github/workflows/ci.yml"]
   },
   "neverConnectToCloud": true,
   "nxCloudId": "66e5a3c8896d3879263f6d33",
   "parallel": 8,
   "plugins": [
     "@nxlv/python",
-    "@nx-go/nx-go"
+    "@nx-go/nx-go",
+    {
+      "plugin": "@nx/next/plugin",
+      "options": {
+        "startTargetName": "start",
+        "buildTargetName": "build",
+        "devTargetName": "dev",
+        "serveStaticTargetName": "serve-static",
+        "buildDepsTargetName": "build-deps",
+        "watchDepsTargetName": "watch-deps"
+      }
+    },
+    {
+      "plugin": "@nx/playwright/plugin",
+      "options": {
+        "targetName": "e2e"
+      }
+    },
+    {
+      "plugin": "@nx/eslint/plugin",
+      "options": {
+        "targetName": "lint"
+      }
+    },
+    {
+      "plugin": "@nx/jest/plugin",
+      "options": {
+        "targetName": "test"
+      }
+    }
   ],
   "targetDefaults": {
     "golangci-lint": {
@@ -35,20 +72,17 @@
     },
     "lint": {
       "cache": true,
-      "dependsOn": [
-        "golangci-lint",
-        "tidy",
-        "install"
-      ]
+      "dependsOn": ["golangci-lint", "tidy", "install"]
     },
     "test": {
       "cache": true,
-      "dependsOn": [
-        "install"
-      ]
+      "dependsOn": ["install"]
     },
     "tidy": {
       "cache": true
+    },
+    "e2e-ci--**/*": {
+      "dependsOn": ["^build"]
     }
   },
   "workspaceLayout": {
