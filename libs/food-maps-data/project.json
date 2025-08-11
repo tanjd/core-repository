@@ -1,0 +1,29 @@
+{
+  "name": "food-maps-data",
+  "$schema": "../../node_modules/nx/schemas/project-schema.json",
+  "sourceRoot": "libs/food-maps-data/src",
+  "projectType": "library",
+  "targets": {
+    "build": {
+      "executor": "@nx/js:tsc",
+      "outputs": [
+        "{options.outputPath}"
+      ],
+      "options": {
+        "outputPath": "dist/libs/food-maps-data",
+        "main": "libs/food-maps-data/src/index.ts",
+        "tsConfig": "libs/food-maps-data/tsconfig.json",
+        "assets": [
+          "libs/food-maps-data/*.md"
+        ]
+      }
+    },
+    "lint": {
+      "executor": "@nx/eslint:lint",
+      "outputs": [
+        "{options.outputPath}"
+      ]
+    }
+  },
+  "tags": []
+}

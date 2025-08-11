@@ -90,3 +90,7 @@ coverage.xml
 
 # Google Takeout data
 /Takeout
+
+# Next.js
+.next
+out
