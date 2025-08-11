@@ -17,5 +17,9 @@
   ],
   "python.autoComplete.extraPaths": [
     "/workspace/libs/my-python-library"
+  ],
+  "python.languageServer": "None",
+  "cursorpyright.analysis.extraPaths": [
+    "/workspace/libs/my-python-library"
   ]
 }
