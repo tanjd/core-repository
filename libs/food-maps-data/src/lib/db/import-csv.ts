@@ -2,7 +2,7 @@ import { readdir, readFile } from "fs/promises";
 import { join } from "path";
 import { StorageManager } from "./storage";
 import { parseCsvContent } from "../csv-parser";
-import { cityToCountry } from "../../../../../apps/food-maps/scripts/city-country-map";
+import { cityToCountry } from "../data/city-country-map";
 
 async function importCsvFiles() {
   const csvDir = join(process.cwd(), "data/food-maps");
