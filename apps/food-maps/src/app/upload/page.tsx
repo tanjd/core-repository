@@ -26,7 +26,11 @@ async function processFiles() {
       if (!file.endsWith(".csv")) continue;
 
       const content = await readFile(path.join(csvDir, file), "utf-8");
-      const city = file.replace(/\s*\(Food\)\.csv$/, "");
+      // Handle both formats: "City (Food).csv" and "city-food.csv"
+      const city = file
+        .replace(/\s*\(Food\)\.csv$/, "") // Old format
+        .replace(/-food\.csv$/, "") // New format
+        .replace(/-/g, " "); // Convert dashes to spaces
       const country = cityToCountry[city] || "Unknown";
 
       try {

@@ -1,6 +1,6 @@
 import { StorageManager } from "./storage";
 import { FoodLocation } from "./types";
-import { writeFile, unlink } from "fs/promises";
+import { unlink } from "fs/promises";
 import { join } from "path";
 import { tmpdir } from "os";
 
@@ -27,7 +27,7 @@ describe("StorageManager", () => {
   afterEach(async () => {
     try {
       await unlink(testFilePath);
-    } catch (error) {
+    } catch {
       // Ignore if file doesn't exist
     }
   });
@@ -37,7 +37,7 @@ describe("StorageManager", () => {
 
     // Create new instance to test loading
     const newManager = new StorageManager(testFilePath);
-    await newManager.load();
+    await newManager.init();
 
     const locations = newManager.getLocationsByCity("Japan", "Tokyo");
     expect(locations).toHaveLength(1);
@@ -81,7 +81,7 @@ describe("StorageManager", () => {
   });
 
   it("should handle empty storage file", async () => {
-    await storageManager.load(); // No file exists yet
+    await storageManager.init(); // No file exists yet
     const locations = storageManager.getLocationsByCountry();
     expect(locations).toHaveLength(0);
   });

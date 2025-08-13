@@ -20,7 +20,7 @@ The app will be available at http://localhost:3000.
 
 ## Data Structure
 
-The app uses a master JSON file to store all locations. This file is automatically created when you first import data.
+The app uses a SQLite database to store all locations, providing better data integrity and relationships between locations, cities, countries, and tags. The database file is automatically created when you first import data.
 
 ### Location Data Model
 
@@ -41,10 +41,17 @@ interface FoodLocation {
 
 ### CSV File Requirements
 
-1. Files must be named in the format: `City Name (Food).csv`
+1. Files must be named in one of these formats:
 
-   - Example: `Tokyo (Food).csv`, `London (Food).csv`
-   - The city name must match one of the supported cities in `scripts/city-country-map.ts`
+   - Google Takeout format: `city-name-food.csv`
+   - Legacy format: `City Name (Food).csv`
+
+   Examples:
+
+   - `tokyo-food.csv`, `london-food.csv` (preferred)
+   - `Tokyo (Food).csv`, `London (Food).csv` (legacy)
+
+   The city name (with dashes converted to spaces) must match one of the supported cities in `scripts/city-country-map.ts`
 
 2. CSV Structure:
 
@@ -61,13 +68,15 @@ interface FoodLocation {
 
 ### Import Process
 
-1. Place your CSV files in the `/data/food-maps/` directory
-2. Visit `/upload` in the app to process the files
-3. The app will:
+1. Export your Google Maps lists using Google Takeout
+2. Place the exported CSV files in the `/workspace/Takeout/saved/` directory
+3. Run the import script or visit `/upload` in the app
+4. The app will:
+   - Copy new or modified files to `/data/food-maps/`
    - Parse each CSV file
    - Extract city/country information from filenames
    - Generate unique IDs to prevent duplicates
-   - Merge new locations with existing ones
+   - Store locations in SQLite with proper relationships
    - Show import results including any errors
 
 ### Handling Import Errors
@@ -125,7 +134,9 @@ To add support for a new city:
      "New City": "Country Name",
    };
    ```
-3. Ensure your CSV filename matches the city name exactly
+3. Ensure your CSV filename matches the city name exactly:
+   - For Google Takeout format: `city-name-food.csv` (use dashes for spaces)
+   - For legacy format: `City Name (Food).csv`
 
 ## Development
 
