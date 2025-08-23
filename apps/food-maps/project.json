@@ -44,7 +44,19 @@
         "buildTarget": "food-maps:build",
         "dev": true,
         "port": 3000
-      }
+      },
+      "parallelism": true
+    },
+    "dev-fullstack": {
+      "executor": "nx:run-commands",
+      "options": {
+        "commands": [
+          "npx nx serve food-maps-backend &",
+          "sleep 3",
+          "npx nx dev food-maps"
+        ]
+      },
+      "configurations": {}
     }
   }
 }
