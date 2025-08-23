@@ -1,0 +1,36 @@
+{
+  "ignorePatterns": [
+    "**/*"
+  ],
+  "overrides": [
+    {
+      "files": [
+        "*.ts",
+        "*.tsx",
+        "*.js",
+        "*.jsx"
+      ],
+      "rules": {
+        "@nx/enforce-module-boundaries": [
+          "error",
+          {
+            "allow": [],
+            "depConstraints": [
+              {
+                "onlyDependOnLibsWithTags": [
+                  "*"
+                ],
+                "sourceTag": "*"
+              }
+            ],
+            "enforceBuildableLibDependency": true
+          }
+        ]
+      }
+    }
+  ],
+  "plugins": [
+    "@nx"
+  ],
+  "root": true
+}

@@ -1,7 +1,7 @@
 import initSqlJs from "sql.js";
 import { readFileSync, writeFileSync } from "fs";
 import { join } from "path";
-import { FoodLocation, CsvUploadResult, LocationGroup } from "./types";
+import { FoodLocation, CsvUploadResult, LocationGroup } from "../types";
 
 export class StorageManager {
   private db: initSqlJs.Database | null = null;
@@ -22,7 +22,7 @@ export class StorageManager {
       // Create new database if file doesn't exist
       this.db = new SQL.Database();
       // Initialize schema
-      const schema = readFileSync(join(__dirname, "db/schema.sql"), "utf-8");
+      const schema = readFileSync(join(__dirname, "schema.sql"), "utf-8");
       this.db.run(schema);
     }
   }

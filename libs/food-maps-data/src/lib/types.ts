@@ -1,5 +1,5 @@
 export interface FoodLocation {
-  id: string; // Generated from name + url
+  id: string;
   name: string;
   description: string;
   googleMapsUrl: string;
@@ -10,17 +10,19 @@ export interface FoodLocation {
 }
 
 export interface CsvUploadResult {
-  added: number; // New locations added
-  updated: number; // Existing locations updated
-  skipped: number; // Duplicates skipped
-  errors: string[]; // Any parsing errors
+  added: number;
+  updated: number;
+  skipped: number;
+  errors: string[];
+}
+
+export interface CityInfo {
+  name: string;
+  locationCount: number;
 }
 
 export interface LocationGroup {
   country: string;
-  cities: {
-    name: string;
-    locations: FoodLocation[];
-  }[];
+  cities: CityInfo[];
   totalLocations: number;
 }

@@ -6,6 +6,11 @@
   "main": "./src/index.js",
   "types": "./src/index.d.ts",
   "dependencies": {
-    "@swc/helpers": "~0.5.11"
+    "csv-parse": "^6.1.0",
+    "tslib": "^2.3.0"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "^7.6.13",
+    "@types/sql.js": "^1.4.9"
   }
 }
