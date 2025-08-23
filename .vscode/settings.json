@@ -1,5 +1,6 @@
 {
   "cSpell.words": [
+    "capsys",
     "cbor",
     "danielgtaylor",
     "errcheck",
@@ -11,6 +12,9 @@
     "koanf",
     "pkgerrors"
   ],
+  "cursorpyright.analysis.extraPaths": [
+    "/workspace/libs/my-python-library"
+  ],
   "nxConsole.generateAiAgentRules": true,
   "python.analysis.extraPaths": [
     "/workspace/libs/my-python-library"
@@ -18,8 +22,5 @@
   "python.autoComplete.extraPaths": [
     "/workspace/libs/my-python-library"
   ],
-  "python.languageServer": "None",
-  "cursorpyright.analysis.extraPaths": [
-    "/workspace/libs/my-python-library"
-  ]
+  "python.languageServer": "None"
 }
