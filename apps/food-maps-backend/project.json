@@ -16,7 +16,8 @@
       "options": {
         "command": "golangci-lint run -v --fix",
         "cwd": "{projectRoot}"
-      }
+      },
+      "parallelism": false
     },
     "lint": {
       "executor": "@nx-go/nx-go:lint"

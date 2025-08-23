@@ -38,5 +38,5 @@ linters:
     - zerologlint
 
 run:
-  allow-parallel-runners: true
-  timeout: 3m
+  allow-parallel-runners: false
+  timeout: 5m

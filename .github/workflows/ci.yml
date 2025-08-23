@@ -38,6 +38,7 @@ jobs:
         uses: devcontainers/ci@v0.3
         env:
           IMAGE: ghcr.io/tanjd/core-repository
+          cacheFrom: ghcr.io/tanjd/core-repository
           NX_BASE: ${{ steps.set-shas.outputs.base }}
           NX_HEAD: ${{ steps.set-shas.outputs.head }}
         with:
