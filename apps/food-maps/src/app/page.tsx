@@ -1,16 +1,18 @@
-import { StorageManager } from "@tanjd/food-maps-data";
-import { join } from "path";
+import { ApiClient } from "@tanjd/food-maps-data";
 import Link from "next/link";
 
 async function getLocations() {
   try {
-    const filePath = join(process.cwd(), "../../data/master.json");
-    console.log("Loading data from:", filePath);
+    const apiClient = new ApiClient();
 
-    const storage = new StorageManager(filePath);
-    await storage.load();
+    // Check if backend is available
+    const isHealthy = await apiClient.healthCheck();
+    if (!isHealthy) {
+      console.warn("Backend is not available, returning empty data");
+      return [];
+    }
 
-    const groups = storage.getLocationsByCountry();
+    const groups = await apiClient.getLocationsByCountry();
     console.log("Loaded groups:", groups);
 
     return groups;
@@ -66,7 +68,7 @@ export default async function HomePage() {
                   >
                     <span className="font-medium">{city.name}</span>
                     <span className="text-gray-500 ml-2">
-                      ({city.locations.length} spots)
+                      ({city.locationCount} spots)
                     </span>
                   </Link>
                 ))}

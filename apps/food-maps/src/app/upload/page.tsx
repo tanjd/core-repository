@@ -1,15 +1,17 @@
-import { StorageManager, parseCsvContent } from "@tanjd/food-maps-data";
+import { ApiClient, parseCsvContent } from "@tanjd/food-maps-data";
 import path from "node:path";
 import { readdir, readFile } from "node:fs/promises";
 import { cityToCountry } from "../../../scripts/city-country-map";
 
 async function processFiles() {
   try {
-    const masterPath = path.join(process.cwd(), "../../data/master.json");
-    console.log("Loading master file from:", masterPath);
+    const apiClient = new ApiClient();
 
-    const storage = new StorageManager(masterPath);
-    await storage.load();
+    // Check if backend is available
+    const isHealthy = await apiClient.healthCheck();
+    if (!isHealthy) {
+      throw new Error("Backend is not available");
+    }
 
     const csvDir = path.join(process.cwd(), "../../data/food-maps");
     console.log("Reading CSV files from:", csvDir);
@@ -35,7 +37,7 @@ async function processFiles() {
 
       try {
         const locations = parseCsvContent(content, city, country);
-        const result = await storage.addLocations(locations);
+        const result = await apiClient.addLocations(locations);
         totalAdded += result.added;
         totalUpdated += result.updated;
         errors.push(...result.errors);

@@ -1,5 +1,4 @@
-import { StorageManager } from "@tanjd/food-maps-data";
-import { join } from "path";
+import { ApiClient } from "@tanjd/food-maps-data";
 import Link from "next/link";
 
 interface PageProps {
@@ -11,13 +10,16 @@ interface PageProps {
 
 async function getLocations(country: string, city: string) {
   try {
-    const filePath = join(process.cwd(), "../../data/master.json");
-    console.log("Loading data from:", filePath);
+    const apiClient = new ApiClient();
 
-    const storage = new StorageManager(filePath);
-    await storage.load();
+    // Check if backend is available
+    const isHealthy = await apiClient.healthCheck();
+    if (!isHealthy) {
+      console.warn("Backend is not available, returning empty data");
+      return [];
+    }
 
-    return storage.getLocationsByCity(
+    return await apiClient.getLocationsByCity(
       decodeURIComponent(country),
       decodeURIComponent(city),
     );

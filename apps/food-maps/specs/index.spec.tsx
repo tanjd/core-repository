@@ -1,13 +1,19 @@
-import { render } from "@testing-library/react";
+import { render, screen } from "@testing-library/react";
 import HomePage from "../src/app/page";
 
+// Mock ApiClient
 jest.mock("@tanjd/food-maps-data", () => ({
-  StorageManager: jest.fn().mockImplementation(() => ({
-    load: jest.fn(),
-    getLocationsByCountry: jest.fn().mockReturnValue([
+  ApiClient: jest.fn().mockImplementation(() => ({
+    healthCheck: jest.fn().mockResolvedValue(true),
+    getLocationsByCountry: jest.fn().mockResolvedValue([
       {
         country: "Test Country",
-        cities: [{ name: "Test City", locations: [] }],
+        cities: [
+          {
+            name: "Test City",
+            locationCount: 0,
+          },
+        ],
         totalLocations: 0,
       },
     ]),
