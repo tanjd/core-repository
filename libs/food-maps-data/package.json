@@ -1,16 +1,17 @@
 {
-  "name": "@tanjd/food-maps-data",
-  "version": "0.0.1",
-  "private": true,
-  "type": "commonjs",
-  "main": "./src/index.js",
-  "types": "./src/index.d.ts",
   "dependencies": {
     "csv-parse": "^6.1.0",
+    "sql.js": "^1.13.0",
     "tslib": "^2.3.0"
   },
   "devDependencies": {
     "@types/better-sqlite3": "^7.6.13",
     "@types/sql.js": "^1.4.9"
-  }
+  },
+  "main": "./src/index.js",
+  "name": "@tanjd/food-maps-data",
+  "private": true,
+  "type": "commonjs",
+  "types": "./src/index.d.ts",
+  "version": "0.0.1"
 }
