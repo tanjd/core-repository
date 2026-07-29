@@ -10,37 +10,45 @@
       "username": "vscode"
     },
     "ghcr.io/stuartleeks/dev-container-features/shell-history:0": {},
+    "ghcr.io/anthropics/devcontainer-features/claude-code:1.0": {},
     "ghcr.io/devcontainers-extra/features/pre-commit:2": {
-      "version": "latest"
+      "version": "4.6.1"
     },
     "ghcr.io/devcontainers/features/docker-in-docker:2": {
       "installDockerBuildx": true,
       "installDockerComposeSwitch": true,
-      "version": "latest",
-      "dockerDashComposeVersion": "latest"
+      "version": "29.6.2",
+      "dockerDashComposeVersion": "v2"
     },
-    "ghcr.io/devcontainers-extra/features/poetry:2": {},
+    "ghcr.io/devcontainers/features/python:1": {
+      "version": "3.13"
+    },
+    "ghcr.io/va-h/devcontainers-features/uv:1": {
+      "version": "0.12.0",
+      "shellautocompletion": true
+    },
     "ghcr.io/devcontainers/features/node:1": {
       "nodeGypDependencies": true,
       "installYarnUsingApt": true,
-      "version": "latest",
-      "pnpmVersion": "latest",
-      "nvmVersion": "latest"
+      "version": "24",
+      "pnpmVersion": "10.34.5",
+      "nvmVersion": "0.40.6"
     },
     "ghcr.io/devcontainers/features/go:1": {
-      "version": "1.23"
+      "version": "1.26.5",
+      "golangciLintVersion": "2.12.2"
+    },
+    "ghcr.io/devcontainers/features/github-cli:1": {
+      "version": "2.96.0"
     }
   },
-  "postCreateCommand": {
-    "pyenv": "curl https://pyenv.run | bash && echo 'export PYENV_ROOT=\"$HOME/.pyenv\"' >> ~/.zshrc && echo '[[ -d $PYENV_ROOT/bin ]] && export PATH=\"$PYENV_ROOT/bin:$PATH\"' >> ~/.zshrc && echo 'eval \"$(pyenv init -)\"' >> ~/.zshrc",
-    "pnpm": "make setup"
-  },
+  "postCreateCommand": "make setup",
   "customizations": {
     "vscode": {
       "extensions": [
         "charliermarsh.ruff",
+        "esbenp.prettier-vscode",
         "mgesbert.python-path",
-        "ms-python.isort",
         "ms-python.python",
         "ms-python.vscode-pylance",
         "ms-vsliveshare.vsliveshare",

@@ -94,3 +94,8 @@ coverage.xml
 # Next.js
 .next
 out
+
+.claude
+
+# Draft specs (spec-driven planning docs) - not yet ready to commit
+docs/specs/

@@ -1,0 +1,12 @@
+**/node_modules
+**/coverage
+**/.venv
+**/__pycache__
+**/.pytest_cache
+**/.ruff_cache
+**/dist
+**/.nx
+.git
+.devcontainer
+.vscode
+.cursor

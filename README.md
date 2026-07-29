@@ -7,8 +7,8 @@ A modern monorepo built with Nx, supporting Python, Go, and Next.js projects. Th
 - **Build System**: [Nx](https://nx.dev/) (v20.4.2)
 - **Package Manager**: [pnpm](https://pnpm.io/)
 - **Languages & Frameworks**:
-  - Python (with Poetry)
-  - Go (v1.23)
+  - Python (with uv)
+  - Go (v1.26)
   - Next.js
   - React
 - **Development Environment**: DevContainers
@@ -19,10 +19,11 @@ A modern monorepo built with Nx, supporting Python, Go, and Next.js projects. Th
 ```
 .
 ├── apps/                  # Application projects
-│   ├── identity/         # Go service
-│   └── my-python-project/# Python application
+│   ├── food-maps/        # Next.js app
+│   ├── food-maps-backend/# Go service
+│   └── food-maps-e2e/    # E2E tests
 ├── libs/                 # Shared libraries
-│   └── my-python-library/# Python library
+│   └── food-maps-data/   # Shared TS library
 └── ...
 ```
 
@@ -84,10 +85,10 @@ make upgrade-nx
 
 ### Adding New Projects
 
-#### Python Project
+#### Python Project (Telegram Bot)
 
 ```bash
-pnpm nx g @nxlv/python:poetry-project my-new-python-project
+make new-bot NAME=my-new-bot
 ```
 
 #### Go Project
@@ -108,16 +109,16 @@ Use Nx to run any target (build, test, lint, etc.) for a specific project:
 
 ```bash
 pnpm nx <target> <project>
-# Example: pnpm nx test my-python-project
+# Example: pnpm nx test food-maps-backend
 ```
 
 ## 🛠 DevContainer Features
 
 The development container includes:
 
-- 🐍 Python environment with Poetry and pyenv
+- 🐍 Python environment with uv
 - 🟦 Node.js with pnpm
-- 🔷 Go 1.23
+- 🔷 Go 1.26
 - 🐳 Docker-in-Docker support
 - 🔧 Pre-configured VS Code extensions
 - 🔍 Code formatting and linting tools
@@ -147,5 +148,5 @@ The DevContainer comes with pre-configured settings for:
 
 - [Nx Documentation](https://nx.dev/getting-started/intro)
 - [DevContainers Documentation](https://code.visualstudio.com/docs/remote/containers)
-- [Poetry Documentation](https://python-poetry.org/docs/)
+- [uv Documentation](https://docs.astral.sh/uv/)
 - [Go Documentation](https://golang.org/doc/)

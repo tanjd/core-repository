@@ -1,0 +1,49 @@
+version: "2"
+run:
+  allow-parallel-runners: false
+  timeout: 5m
+linters:
+  enable:
+    - asciicheck
+    - bodyclose
+    - errname
+    - exhaustive
+    - gocognit
+    - importas
+    - rowserrcheck
+    - sqlclosecheck
+    - testifylint
+    - unparam
+    - wastedassign
+    - whitespace
+    - zerologlint
+  settings:
+    errcheck:
+      check-type-assertions: true
+    exhaustive:
+      check:
+        - switch
+        - map
+    gocognit:
+      min-complexity: 15
+  exclusions:
+    generated: lax
+    presets:
+      - comments
+      - common-false-positives
+      - legacy
+      - std-error-handling
+    paths:
+      - third_party$
+      - builtin$
+      - examples$
+formatters:
+  enable:
+    - gofmt
+    - goimports
+  exclusions:
+    generated: lax
+    paths:
+      - third_party$
+      - builtin$
+      - examples$

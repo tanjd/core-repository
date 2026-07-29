@@ -33,100 +33,108 @@ type Options struct {
 
 func main() {
 	cli := humacli.New(func(hooks humacli.Hooks, options *Options) {
-		// Configure logging
-		level, err := zerolog.ParseLevel(options.LogLevel)
-		if err != nil {
+		if err := configureLogging(options); err != nil {
 			log.Fatal().Err(err).Msg("Invalid log level")
 		}
-		zerolog.SetGlobalLevel(level)
 
-		if options.LogFormat == "console" {
-			log.Logger = log.Output(zerolog.ConsoleWriter{Out: os.Stderr})
-		}
-
-		// Initialize database
-		if err := sqlite.InitializeDatabase(options.DBPath); err != nil {
-			log.Fatal().Err(err).Msg("Failed to initialize database")
-		}
-
-		// Connect to database
-		db, err := sqlite.NewSQLiteDB(options.DBPath)
+		db, err := setupDatabase(options.DBPath)
 		if err != nil {
-			log.Fatal().Err(err).Msg("Failed to connect to database")
+			log.Fatal().Err(err).Msg("Failed to set up database")
 		}
 
-		// Initialize services
-		locationService := service.NewLocationService(db)
+		srv := buildServer(db, options)
 
-		// Initialize handlers
-		locationHandler := handler.NewLocationHandler(locationService)
-
-		// Create router with middleware
-		router := chi.NewMux()
-		router.Use(middleware.Logger)
-		router.Use(middleware.Recoverer)
-
-		// Create API with Chi adapter
-		humaAPI := humachi.New(router, huma.DefaultConfig("Food Maps API", "1.0.0"))
-
-		// Initialize and add routes
-		routes := api.NewRouter(locationHandler, humaAPI)
-		routes.AddLocationRoutes()
-
-		// Create server
-		srv := &http.Server{
-			Addr:    fmt.Sprintf(":%d", options.Port),
-			Handler: router,
-		}
-
-		// Channel to signal server shutdown
-		shutdown := make(chan struct{})
-
-		hooks.OnStart(func() {
-			log.Info().
-				Str("db_path", options.DBPath).
-				Int("port", options.Port).
-				Str("log_level", options.LogLevel).
-				Str("log_format", options.LogFormat).
-				Msg("Starting server...")
-
-			// Start server in a goroutine
-			go func() {
-				if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-					log.Fatal().Err(err).Msg("Server failed")
-				}
-			}()
-
-			// Wait for interrupt signal
-			quit := make(chan os.Signal, 1)
-			signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
-			<-quit
-
-			log.Info().Msg("Shutting down server...")
-
-			// Create shutdown context with timeout
-			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-			defer cancel()
-
-			// Shutdown server
-			if err := srv.Shutdown(ctx); err != nil {
-				log.Error().Err(err).Msg("Server forced to shutdown")
-			}
-
-			// Close database connection
-			if err := db.Close(); err != nil {
-				log.Error().Err(err).Msg("Failed to close database")
-			}
-
-			close(shutdown)
-		})
-
-		hooks.OnStop(func() {
-			// Wait for server to shutdown
-			<-shutdown
-			log.Info().Msg("Server stopped")
-		})
+		registerLifecycleHooks(hooks, srv, db, options)
 	})
 
 	cli.Run()
+}
+
+func configureLogging(options *Options) error {
+	level, err := zerolog.ParseLevel(options.LogLevel)
+	if err != nil {
+		return err
+	}
+	zerolog.SetGlobalLevel(level)
+
+	if options.LogFormat == "console" {
+		log.Logger = log.Output(zerolog.ConsoleWriter{Out: os.Stderr})
+	}
+
+	return nil
+}
+
+func setupDatabase(dbPath string) (*sqlite.SQLiteDB, error) {
+	if err := sqlite.InitializeDatabase(dbPath); err != nil {
+		return nil, err
+	}
+
+	return sqlite.NewSQLiteDB(dbPath)
+}
+
+func buildServer(db *sqlite.SQLiteDB, options *Options) *http.Server {
+	locationService := service.NewLocationService(db)
+	locationHandler := handler.NewLocationHandler(locationService)
+
+	router := chi.NewMux()
+	router.Use(middleware.Logger)
+	router.Use(middleware.Recoverer)
+
+	humaAPI := humachi.New(router, huma.DefaultConfig("Food Maps API", "1.0.0"))
+	routes := api.NewRouter(locationHandler, humaAPI)
+	routes.AddLocationRoutes()
+
+	return &http.Server{
+		Addr:    fmt.Sprintf(":%d", options.Port),
+		Handler: router,
+	}
+}
+
+func registerLifecycleHooks(hooks humacli.Hooks, srv *http.Server, db *sqlite.SQLiteDB, options *Options) {
+	shutdown := make(chan struct{})
+
+	hooks.OnStart(func() {
+		log.Info().
+			Str("db_path", options.DBPath).
+			Int("port", options.Port).
+			Str("log_level", options.LogLevel).
+			Str("log_format", options.LogFormat).
+			Msg("Starting server...")
+
+		go func() {
+			if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+				log.Fatal().Err(err).Msg("Server failed")
+			}
+		}()
+
+		waitForShutdownSignal()
+
+		log.Info().Msg("Shutting down server...")
+		shutdownServer(srv, db)
+		close(shutdown)
+	})
+
+	hooks.OnStop(func() {
+		<-shutdown
+		log.Info().Msg("Server stopped")
+	})
+}
+
+func waitForShutdownSignal() {
+	quit := make(chan os.Signal, 1)
+	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
+	<-quit
+}
+
+func shutdownServer(srv *http.Server, db *sqlite.SQLiteDB) {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	if err := srv.Shutdown(ctx); err != nil {
+		log.Error().Err(err).Msg("Server forced to shutdown")
+	}
+
+	if err := db.Close(); err != nil {
+		log.Error().Err(err).Msg("Failed to close database")
+	}
 }

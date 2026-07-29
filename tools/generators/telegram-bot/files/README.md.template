@@ -1,0 +1,28 @@
+# <%= name %>
+
+<%= description %>
+
+## Development
+
+```bash
+# Run tests
+pnpm nx test <%= name %>
+
+# Lint
+pnpm nx lint <%= name %>
+
+# Run the bot locally (reads .env in this directory)
+pnpm nx serve <%= name %>
+
+# Build a Docker image
+pnpm nx docker-build <%= name %>
+```
+
+Copy `.env.example` to `.env` and fill in `BOT_TOKEN` (or `BOT_TOKEN_DEV` for
+local development) before running.
+
+## Deployment
+
+Pushing to `main` with changes affecting this app triggers
+`.github/workflows/release.yml`, which builds this app's `Dockerfile` and
+pushes it to `ghcr.io/tanjd/<%= name %>`.

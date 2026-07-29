@@ -1,4 +1,9 @@
-pnpm format
-pre-commit run --files $(git diff --name-only)
-pnpm lint
-pnpm test
+pnpm exec lint-staged
+
+STAGED_FILES=$(git diff --cached --name-only --diff-filter=ACM)
+if [ -n "$STAGED_FILES" ]; then
+  pre-commit run --files $STAGED_FILES
+  git add -- $STAGED_FILES
+fi
+
+pnpm nx affected -t lint test

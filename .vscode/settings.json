@@ -12,15 +12,9 @@
     "koanf",
     "pkgerrors"
   ],
-  "cursorpyright.analysis.extraPaths": [
-    "/workspace/libs/my-python-library"
-  ],
+  "cursorpyright.analysis.extraPaths": [],
   "nxConsole.generateAiAgentRules": true,
-  "python.analysis.extraPaths": [
-    "/workspace/libs/my-python-library"
-  ],
-  "python.autoComplete.extraPaths": [
-    "/workspace/libs/my-python-library"
-  ],
+  "python.analysis.extraPaths": [],
+  "python.autoComplete.extraPaths": [],
   "python.languageServer": "None"
 }

@@ -1,7 +1,10 @@
-import { ApiClient, parseCsvContent } from "@tanjd/food-maps-data";
+import {
+  ApiClient,
+  cityToCountry,
+  parseCsvContent,
+} from "@tanjd/food-maps-data";
 import path from "node:path";
 import { readdir, readFile } from "node:fs/promises";
-import { cityToCountry } from "../../../scripts/city-country-map";
 
 async function processFiles() {
   try {
