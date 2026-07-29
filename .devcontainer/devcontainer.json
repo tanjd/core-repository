@@ -37,6 +37,9 @@
     },
     "ghcr.io/devcontainers/features/go:1": {
       "version": "1.26.5"
+    },
+    "ghcr.io/devcontainers/features/github-cli:1": {
+      "version": "2.96.0"
     }
   },
   "postCreateCommand": "make setup",
