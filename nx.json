@@ -33,7 +33,7 @@
     ]
   },
   "neverConnectToCloud": true,
-  "parallel": 8,
+  "parallel": 4,
   "plugins": [
     "@nx-go/nx-go",
     {
@@ -107,6 +107,9 @@
     "tidy": {
       "cache": true
     }
+  },
+  "tui": {
+    "autoExit": true
   },
   "workspaceLayout": {
     "appsDir": "apps",

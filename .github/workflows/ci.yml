@@ -22,12 +22,20 @@ jobs:
     timeout-minutes: 15
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
 
+      - name: Cache Nx computation cache
+        uses: actions/cache@v6
+        with:
+          path: .nx/cache
+          key: nx-${{ runner.os }}-${{ github.sha }}
+          restore-keys: |
+            nx-${{ runner.os }}-
+
       - name: Login to GitHub Container Registry
-        uses: docker/login-action@v3
+        uses: docker/login-action@v4
         with:
           registry: ghcr.io
           username: ${{ github.repository_owner }}
@@ -35,7 +43,7 @@ jobs:
 
       - name: Set SHAs
         id: set-shas
-        uses: nrwl/nx-set-shas@v4
+        uses: nrwl/nx-set-shas@v5
 
       - name: Run pre-commit and nx targets
         uses: devcontainers/ci@v0.3
@@ -53,3 +61,29 @@ jobs:
             pnpm format
             pre-commit run --all-files
             npx nx affected --base=${{ env.NX_BASE }} --head=${{ env.NX_HEAD }} -t lint test --verbose
+
+  detect-dockerized:
+    uses: ./.github/workflows/detect-dockerized-apps.yml
+
+  docker-build-check:
+    needs: detect-dockerized
+    if: needs.detect-dockerized.outputs.apps != '[]'
+    timeout-minutes: 15
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        app: ${{ fromJson(needs.detect-dockerized.outputs.apps) }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: docker/setup-buildx-action@v4
+
+      - name: Build ${{ matrix.app }} (no push)
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          file: apps/${{ matrix.app }}/Dockerfile
+          push: false
+          cache-from: type=gha,scope=${{ matrix.app }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.app }}
