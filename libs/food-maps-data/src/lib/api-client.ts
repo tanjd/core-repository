@@ -1,29 +1,4 @@
-export interface FoodLocation {
-  id: string;
-  name: string;
-  description: string;
-  googleMapsUrl: string;
-  city: string;
-  country: string;
-  lastUpdated: Date;
-  tags: string[];
-}
-
-export interface LocationGroup {
-  country: string;
-  cities: Array<{
-    name: string;
-    locationCount: number;
-  }>;
-  totalLocations: number;
-}
-
-export interface CsvUploadResult {
-  added: number;
-  updated: number;
-  skipped: number;
-  errors: string[];
-}
+import { CsvUploadResult, FoodLocation, LocationGroup } from "./types";
 
 export class ApiClient {
   private baseUrl: string;

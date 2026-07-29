@@ -158,7 +158,7 @@ export class StorageManager {
 
       // Save changes to file
       const data = this.db.export();
-      writeFileSync(this.dbPath, Buffer.from(data));
+      writeFileSync(this.dbPath, data);
     } catch (error) {
       this.db.run("ROLLBACK");
       result.errors.push(
@@ -269,7 +269,7 @@ export class StorageManager {
   close(): void {
     if (this.db) {
       const data = this.db.export();
-      writeFileSync(this.dbPath, Buffer.from(data));
+      writeFileSync(this.dbPath, data);
       this.db.close();
       this.db = null;
     }
