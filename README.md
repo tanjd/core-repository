@@ -8,7 +8,7 @@ A modern monorepo built with Nx, supporting Python, Go, and Next.js projects. Th
 - **Package Manager**: [pnpm](https://pnpm.io/)
 - **Languages & Frameworks**:
   - Python (with Poetry)
-  - Go (v1.23)
+  - Go (v1.26)
   - Next.js
   - React
 - **Development Environment**: DevContainers
@@ -19,10 +19,11 @@ A modern monorepo built with Nx, supporting Python, Go, and Next.js projects. Th
 ```
 .
 ├── apps/                  # Application projects
-│   ├── identity/         # Go service
-│   └── my-python-project/# Python application
+│   ├── food-maps/        # Next.js app
+│   ├── food-maps-backend/# Go service
+│   └── food-maps-e2e/    # E2E tests
 ├── libs/                 # Shared libraries
-│   └── my-python-library/# Python library
+│   └── food-maps-data/   # Shared TS library
 └── ...
 ```
 
@@ -108,16 +109,16 @@ Use Nx to run any target (build, test, lint, etc.) for a specific project:
 
 ```bash
 pnpm nx <target> <project>
-# Example: pnpm nx test my-python-project
+# Example: pnpm nx test food-maps-backend
 ```
 
 ## 🛠 DevContainer Features
 
 The development container includes:
 
-- 🐍 Python environment with Poetry and pyenv
+- 🐍 Python environment with Poetry
 - 🟦 Node.js with pnpm
-- 🔷 Go 1.23
+- 🔷 Go 1.26
 - 🐳 Docker-in-Docker support
 - 🔧 Pre-configured VS Code extensions
 - 🔍 Code formatting and linting tools
