@@ -81,6 +81,29 @@ double-running the same work with no cache to offset it
   `nx.json` → `targetDefaults.lint.dependsOn`), so a plain `nx affected -t lint`
   genuinely gates on it, not just `go vet`/`go fmt`.
 
+## Python (uv + ruff)
+
+No Python app exists in the repo yet — apps are created on demand via
+`make new-bot` (see "Scaffolding" below), which is where these conventions
+currently live.
+
+- **uv**, not Poetry — matches the real standalone bot repos and eases their
+  eventual migration into this monorepo (see "Scaffolding" below for detail).
+- **Ruff** for lint + format. Shared rules live in a root-level `ruff.toml`;
+  each generated app's `pyproject.toml` inherits them via
+  `[tool.ruff] extend = "../../ruff.toml"` and can add per-app overrides
+  below the `extend` line — ruff merges rather than replaces. Current shared
+  rules: `target-version = "py313"`, `line-length = 100`,
+  `select = ["E", "F", "I", "N", "W", "UP"]`, `quote-style = "double"`.
+- Lint target (`uv run ruff check . && uv run ruff format --check .`) and
+  test target (`uv run pytest`) are cached `nx:run-commands` targets — same
+  non-plugin approach as Go, since there's no official Nx Python plugin
+  (`@nxlv/python` was removed; see "Scaffolding" below).
+- The three standalone bot repos (`index-watch`, `table-talks`,
+  `otobr-buddy`) keep their own independent, near-identical ruff config —
+  the shared `ruff.toml` here only covers apps scaffolded in this repo, and
+  isn't wired up to them unless/until they're migrated in.
+
 ## Scaffolding a new Telegram bot
 
 ```bash
@@ -146,3 +169,6 @@ reuse the `GITHUB_TOKEN` auth already set up in `ci.yml` — not a hard lock-in.
   one at a time, starting with the simplest, only after the generator +
   deploy pattern above have been proven with a throwaway app (they have real
   users/schedules — don't touch them as a drive-by change).
+- Root `ruff.toml` only covers apps scaffolded by the `telegram-bot`
+  generator; standalone bot repos keep their own independent config until
+  migrated.

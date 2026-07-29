@@ -7,7 +7,7 @@ A modern monorepo built with Nx, supporting Python, Go, and Next.js projects. Th
 - **Build System**: [Nx](https://nx.dev/) (v20.4.2)
 - **Package Manager**: [pnpm](https://pnpm.io/)
 - **Languages & Frameworks**:
-  - Python (with Poetry)
+  - Python (with uv)
   - Go (v1.26)
   - Next.js
   - React
@@ -85,10 +85,10 @@ make upgrade-nx
 
 ### Adding New Projects
 
-#### Python Project
+#### Python Project (Telegram Bot)
 
 ```bash
-pnpm nx g @nxlv/python:poetry-project my-new-python-project
+make new-bot NAME=my-new-bot
 ```
 
 #### Go Project
@@ -116,7 +116,7 @@ pnpm nx <target> <project>
 
 The development container includes:
 
-- 🐍 Python environment with Poetry
+- 🐍 Python environment with uv
 - 🟦 Node.js with pnpm
 - 🔷 Go 1.26
 - 🐳 Docker-in-Docker support
@@ -148,5 +148,5 @@ The DevContainer comes with pre-configured settings for:
 
 - [Nx Documentation](https://nx.dev/getting-started/intro)
 - [DevContainers Documentation](https://code.visualstudio.com/docs/remote/containers)
-- [Poetry Documentation](https://python-poetry.org/docs/)
+- [uv Documentation](https://docs.astral.sh/uv/)
 - [Go Documentation](https://golang.org/doc/)
