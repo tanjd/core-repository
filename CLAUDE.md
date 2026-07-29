@@ -19,12 +19,24 @@ one-at-a-time, separate effort — do not fold a live bot in as a drive-by chang
 
 ## Common commands
 
+Prefer the `make` targets below over typing the raw `pnpm nx` invocations —
+run `make help` for the full list.
+
 ```bash
-pnpm install                          # root install (frozen lockfile: make setup)
+make setup                              # pnpm install --frozen-lockfile
+make verify                             # nx run-many -t build lint test (full local check)
+make affected                           # nx affected -t lint test (what CI actually runs)
+make nx-reset                           # pnpm nx reset, when a cached result looks stale
+make new-bot NAME=foo                   # scaffold a new bot (see "Scaffolding" below)
+make docker-build APP=food-maps-backend # docker build -f apps/<app>/Dockerfile .
+make golangci-verify                    # confirm .golangci.yaml is actually being loaded
+```
+
+Lower-level, for anything not covered above:
+
+```bash
 pnpm nx show projects                 # list all projects
-pnpm nx run-many -t lint test         # run a target across every project
 pnpm nx <target> <project>            # e.g. pnpm nx test food-maps-backend
-pnpm nx affected -t lint test         # only projects touched vs. main (what CI runs)
 ```
 
 Husky's pre-commit hook only runs `nx format:write` + generic pre-commit-hooks
@@ -40,14 +52,20 @@ same work with no cache to offset it (`neverConnectToCloud: true` in `nx.json`).
   not "golanci". The installed `golangci-lint` is v2, which requires the v2
   config schema (`version: "2"`, linter settings under `linters.settings`, not
   bare top-level keys). Verify a config change is actually being picked up with
-  `golangci-lint run -v` (look for `[config_reader] Used config file ...` and
-  compare `Active N linters` against what's enabled) — a silent fallback to
-  defaults is exactly the bug that motivated this note.
+  `make golangci-verify` (or `golangci-lint run -v`, looking for
+  `[config_reader] Used config file ...`) — a silent fallback to defaults is
+  exactly the bug that motivated this note.
 - `nx run food-maps-backend:lint` depends on `golangci-lint` (see
   `nx.json` → `targetDefaults.lint.dependsOn`), so a plain `nx affected -t lint`
   genuinely gates on it, not just `go vet`/`go fmt`.
 
 ## Scaffolding a new Telegram bot
+
+```bash
+make new-bot NAME=<bot-name>
+```
+
+Which wraps (and is easier to remember than):
 
 ```bash
 pnpm nx g ./tools/generators/telegram-bot/generators.json:telegram-bot <bot-name>
@@ -73,8 +91,9 @@ generated targets to run at all.
 ## Deployment pattern
 
 Any deployable app owns its own `Dockerfile` under `apps/<name>/`, built with
-the **repo root as build context** (`docker build -f apps/<name>/Dockerfile .`
-— see the root `.dockerignore`, since `node_modules` alone is 1.3G).
+the **repo root as build context**: `make docker-build APP=<name>` (or
+`docker build -f apps/<name>/Dockerfile .` — see the root `.dockerignore`,
+since `node_modules` alone is 1.3G).
 
 On push to `main`, `.github/workflows/release.yml`:
 
@@ -89,6 +108,16 @@ reuse the `GITHUB_TOKEN` auth already set up in `ci.yml` — not a hard lock-in.
 
 ## Known gaps / deferred work
 
+- Nx is capped at 22.2.2, not latest: @nx-go/nx-go (food-maps-backend's Go
+  plugin) has zero versions supporting Nx 23+ as of this writing (confirmed
+  by `nx show projects` crashing entirely, not just Go targets, under 23.1.0).
+  Before running `make upgrade-nx` (or `nx migrate latest`) again, check
+  `npm view @nx-go/nx-go dependencies` for its `@nx/devkit` range first.
+- food-maps' Next.js build/serve targets pin `"webpack": true` in
+  `project.json` — Turbopack (Next 16's default) can't build this workspace
+  because it hard-fails on @nx/devkit's optional Angular-schematics adapter
+  requires, where webpack just skips them gracefully. Revisit once `@nx/next`
+  catches up.
 - GitHub branch protection on `main` (requiring the CI check before merge)
   hasn't been enabled — it's a repo-settings change, not a code change.
 - pnpm is pinned to the 9.x line (EOL upstream) to match the existing
