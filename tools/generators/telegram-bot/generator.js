@@ -1,4 +1,8 @@
-const { addProjectConfiguration, formatFiles, generateFiles } = require("@nx/devkit");
+const {
+  addProjectConfiguration,
+  formatFiles,
+  generateFiles,
+} = require("@nx/devkit");
 const { execSync } = require("child_process");
 const path = require("path");
 
@@ -62,6 +66,9 @@ module.exports = async function telegramBotGenerator(tree, options) {
   await formatFiles(tree);
 
   return () => {
-    execSync("uv lock", { cwd: path.join(tree.root, projectRoot), stdio: "inherit" });
+    execSync("uv lock", {
+      cwd: path.join(tree.root, projectRoot),
+      stdio: "inherit",
+    });
   };
 };
