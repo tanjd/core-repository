@@ -20,45 +20,20 @@ func NewLocationService(db repository.Database) *LocationService {
 }
 
 func (s *LocationService) CreateLocation(ctx context.Context, req *model.CreateLocationRequest) (*model.Location, error) {
-	// Start a transaction
 	tx, err := s.db.BeginTx(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("failed to begin transaction: %w", err)
 	}
-	defer func() {
-		if err := tx.Rollback(); err != nil {
-			log.Error().Err(err).Msg("Failed to rollback transaction")
-		}
-	}()
+	defer rollbackTx(tx)
 
 	// Add transaction to context
 	ctx = context.WithValue(ctx, sqlite.TxKey, tx)
 
-	// Get or create country
-	country, err := tx.GetCountryByName(ctx, req.Body.Country)
+	city, err := getOrCreateCity(ctx, tx, req.Body.Country, req.Body.City)
 	if err != nil {
-		return nil, fmt.Errorf("failed to get country: %w", err)
-	}
-	if country == nil {
-		country = &model.Country{Name: req.Body.Country}
-		if err := tx.CreateCountry(ctx, country); err != nil {
-			return nil, fmt.Errorf("failed to create country: %w", err)
-		}
+		return nil, err
 	}
 
-	// Get or create city
-	city, err := tx.GetCityByName(ctx, req.Body.City, country.ID)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get city: %w", err)
-	}
-	if city == nil {
-		city = &model.City{Name: req.Body.City, CountryID: country.ID}
-		if err := tx.CreateCity(ctx, city); err != nil {
-			return nil, fmt.Errorf("failed to create city: %w", err)
-		}
-	}
-
-	// Create location
 	location := &model.Location{
 		ID:            uuid.New(),
 		Name:          req.Body.Name,
@@ -71,24 +46,10 @@ func (s *LocationService) CreateLocation(ctx context.Context, req *model.CreateL
 		return nil, fmt.Errorf("failed to create location: %w", err)
 	}
 
-	// Create tags
-	for _, tagName := range req.Body.Tags {
-		tag, err := tx.GetTagByName(ctx, tagName)
-		if err != nil {
-			return nil, fmt.Errorf("failed to get tag: %w", err)
-		}
-		if tag == nil {
-			tag = &model.Tag{Name: tagName}
-			if err := tx.CreateTag(ctx, tag); err != nil {
-				return nil, fmt.Errorf("failed to create tag: %w", err)
-			}
-		}
-		if err := tx.AddLocationTag(ctx, location.ID.String(), tag.ID); err != nil {
-			return nil, fmt.Errorf("failed to add location tag: %w", err)
-		}
+	if err := addLocationTags(ctx, tx, location.ID.String(), req.Body.Tags); err != nil {
+		return nil, err
 	}
 
-	// Commit transaction
 	if err := tx.Commit(); err != nil {
 		return nil, fmt.Errorf("failed to commit transaction: %w", err)
 	}
@@ -133,21 +94,15 @@ func (s *LocationService) GetLocation(ctx context.Context, id string) (*model.Lo
 }
 
 func (s *LocationService) UpdateLocation(ctx context.Context, id string, req *model.UpdateLocationRequest) (*model.Location, error) {
-	// Start a transaction
 	tx, err := s.db.BeginTx(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("failed to begin transaction: %w", err)
 	}
-	defer func() {
-		if err := tx.Rollback(); err != nil {
-			log.Error().Err(err).Msg("Failed to rollback transaction")
-		}
-	}()
+	defer rollbackTx(tx)
 
 	// Add transaction to context
 	ctx = context.WithValue(ctx, sqlite.TxKey, tx)
 
-	// Get existing location
 	location, err := tx.GetLocation(ctx, id)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get location: %w", err)
@@ -156,7 +111,6 @@ func (s *LocationService) UpdateLocation(ctx context.Context, id string, req *mo
 		return nil, nil
 	}
 
-	// Update fields if provided
 	if req.Body.Name != nil {
 		location.Name = *req.Body.Name
 	}
@@ -167,72 +121,24 @@ func (s *LocationService) UpdateLocation(ctx context.Context, id string, req *mo
 		location.GoogleMapsURL = *req.Body.GoogleMapsURL
 	}
 
-	// Update city and country if provided
 	if req.Body.City != nil && req.Body.Country != nil {
-		// Get or create country
-		country, err := tx.GetCountryByName(ctx, *req.Body.Country)
+		city, err := getOrCreateCity(ctx, tx, *req.Body.Country, *req.Body.City)
 		if err != nil {
-			return nil, fmt.Errorf("failed to get country: %w", err)
+			return nil, err
 		}
-		if country == nil {
-			country = &model.Country{Name: *req.Body.Country}
-			if err := tx.CreateCountry(ctx, country); err != nil {
-				return nil, fmt.Errorf("failed to create country: %w", err)
-			}
-		}
-
-		// Get or create city
-		city, err := tx.GetCityByName(ctx, *req.Body.City, country.ID)
-		if err != nil {
-			return nil, fmt.Errorf("failed to get city: %w", err)
-		}
-		if city == nil {
-			city = &model.City{Name: *req.Body.City, CountryID: country.ID}
-			if err := tx.CreateCity(ctx, city); err != nil {
-				return nil, fmt.Errorf("failed to create city: %w", err)
-			}
-		}
-
 		location.CityID = city.ID
 	}
 
-	// Update location
 	if err := tx.UpdateLocation(ctx, location); err != nil {
 		return nil, fmt.Errorf("failed to update location: %w", err)
 	}
 
-	// Update tags if provided
 	if req.Body.Tags != nil {
-		// Remove existing tags
-		existingTags, err := tx.GetLocationTags(ctx, id)
-		if err != nil {
-			return nil, fmt.Errorf("failed to get existing tags: %w", err)
-		}
-		for _, tag := range existingTags {
-			if err := tx.RemoveLocationTag(ctx, id, tag.ID); err != nil {
-				return nil, fmt.Errorf("failed to remove tag: %w", err)
-			}
-		}
-
-		// Add new tags
-		for _, tagName := range *req.Body.Tags {
-			tag, err := tx.GetTagByName(ctx, tagName)
-			if err != nil {
-				return nil, fmt.Errorf("failed to get tag: %w", err)
-			}
-			if tag == nil {
-				tag = &model.Tag{Name: tagName}
-				if err := tx.CreateTag(ctx, tag); err != nil {
-					return nil, fmt.Errorf("failed to create tag: %w", err)
-				}
-			}
-			if err := tx.AddLocationTag(ctx, id, tag.ID); err != nil {
-				return nil, fmt.Errorf("failed to add tag: %w", err)
-			}
+		if err := replaceLocationTags(ctx, tx, id, *req.Body.Tags); err != nil {
+			return nil, err
 		}
 	}
 
-	// Commit transaction
 	if err := tx.Commit(); err != nil {
 		return nil, fmt.Errorf("failed to commit transaction: %w", err)
 	}
@@ -287,4 +193,90 @@ func convertToTagSlice(tags []*model.Tag) []model.Tag {
 		result[i] = *tag
 	}
 	return result
+}
+
+func rollbackTx(tx repository.Transaction) {
+	if err := tx.Rollback(); err != nil {
+		log.Error().Err(err).Msg("Failed to rollback transaction")
+	}
+}
+
+func getOrCreateCountry(ctx context.Context, tx repository.Transaction, name string) (*model.Country, error) {
+	country, err := tx.GetCountryByName(ctx, name)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get country: %w", err)
+	}
+	if country != nil {
+		return country, nil
+	}
+
+	country = &model.Country{Name: name}
+	if err := tx.CreateCountry(ctx, country); err != nil {
+		return nil, fmt.Errorf("failed to create country: %w", err)
+	}
+	return country, nil
+}
+
+func getOrCreateCity(ctx context.Context, tx repository.Transaction, countryName, cityName string) (*model.City, error) {
+	country, err := getOrCreateCountry(ctx, tx, countryName)
+	if err != nil {
+		return nil, err
+	}
+
+	city, err := tx.GetCityByName(ctx, cityName, country.ID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get city: %w", err)
+	}
+	if city != nil {
+		return city, nil
+	}
+
+	city = &model.City{Name: cityName, CountryID: country.ID}
+	if err := tx.CreateCity(ctx, city); err != nil {
+		return nil, fmt.Errorf("failed to create city: %w", err)
+	}
+	return city, nil
+}
+
+func getOrCreateTag(ctx context.Context, tx repository.Transaction, name string) (*model.Tag, error) {
+	tag, err := tx.GetTagByName(ctx, name)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get tag: %w", err)
+	}
+	if tag != nil {
+		return tag, nil
+	}
+
+	tag = &model.Tag{Name: name}
+	if err := tx.CreateTag(ctx, tag); err != nil {
+		return nil, fmt.Errorf("failed to create tag: %w", err)
+	}
+	return tag, nil
+}
+
+func addLocationTags(ctx context.Context, tx repository.Transaction, locationID string, tagNames []string) error {
+	for _, tagName := range tagNames {
+		tag, err := getOrCreateTag(ctx, tx, tagName)
+		if err != nil {
+			return err
+		}
+		if err := tx.AddLocationTag(ctx, locationID, tag.ID); err != nil {
+			return fmt.Errorf("failed to add location tag: %w", err)
+		}
+	}
+	return nil
+}
+
+func replaceLocationTags(ctx context.Context, tx repository.Transaction, locationID string, tagNames []string) error {
+	existingTags, err := tx.GetLocationTags(ctx, locationID)
+	if err != nil {
+		return fmt.Errorf("failed to get existing tags: %w", err)
+	}
+	for _, tag := range existingTags {
+		if err := tx.RemoveLocationTag(ctx, locationID, tag.ID); err != nil {
+			return fmt.Errorf("failed to remove tag: %w", err)
+		}
+	}
+
+	return addLocationTags(ctx, tx, locationID, tagNames)
 }
