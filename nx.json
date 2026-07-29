@@ -11,9 +11,6 @@
         "linter": "eslint",
         "style": "tailwind"
       }
-    },
-    "@nxlv/python:poetry-project": {
-      "projectNameAndRootFormat": "derived"
     }
   },
   "namedInputs": {
@@ -39,7 +36,6 @@
   "nxCloudId": "66e5a3c8896d3879263f6d33",
   "parallel": 8,
   "plugins": [
-    "@nxlv/python",
     "@nx-go/nx-go",
     {
       "options": {

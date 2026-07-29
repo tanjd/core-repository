@@ -1,0 +1,28 @@
+import pytest
+
+from <%= moduleName %>.config import Config
+
+
+def test_from_env_uses_prod_token_by_default(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("BOT_TOKEN", "prod-token")
+    monkeypatch.delenv("ENV", raising=False)
+
+    config = Config.from_env()
+
+    assert config.telegram_bot_token == "prod-token"
+
+
+def test_from_env_uses_dev_token_when_env_is_dev(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("ENV", "dev")
+    monkeypatch.setenv("BOT_TOKEN_DEV", "dev-token")
+
+    config = Config.from_env()
+
+    assert config.telegram_bot_token == "dev-token"
+
+
+def test_validate_raises_without_token() -> None:
+    config = Config(telegram_bot_token="")
+
+    with pytest.raises(ValueError, match="Bot token not configured"):
+        config.validate()

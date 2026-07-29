@@ -1,0 +1,9 @@
+{
+  "generators": {
+    "telegram-bot": {
+      "factory": "./generator",
+      "schema": "./schema.json",
+      "description": "Generate a new Telegram bot application (uv + python-telegram-bot), wired into this repo's Nx targets and Docker release pattern"
+    }
+  }
+}

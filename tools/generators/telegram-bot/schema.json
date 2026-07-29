@@ -1,0 +1,23 @@
+{
+  "$schema": "http://json-schema.org/schema",
+  "$id": "TelegramBot",
+  "title": "Generate a new Telegram bot application",
+  "type": "object",
+  "properties": {
+    "name": {
+      "type": "string",
+      "description": "Bot name (kebab-case, e.g. \"my-cool-bot\")",
+      "$default": {
+        "$source": "argv",
+        "index": 0
+      },
+      "x-prompt": "What name would you like to use for the bot?",
+      "pattern": "^[a-z][a-z0-9-]*[a-z0-9]$"
+    },
+    "description": {
+      "type": "string",
+      "description": "Short description of what the bot does"
+    }
+  },
+  "required": ["name"]
+}
