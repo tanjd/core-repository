@@ -23,7 +23,7 @@ Prefer the `make` targets below over typing the raw `pnpm nx` invocations —
 run `make help` for the full list.
 
 ```bash
-make setup                              # pnpm install --frozen-lockfile
+make setup                              # pnpm install --frozen-lockfile, goimports, rtk init (Claude/Cursor)
 make verify                             # nx run-many -t build lint test (full local check)
 make affected                           # nx affected -t lint test (what CI actually runs)
 make nx-reset                           # pnpm nx reset, when a cached result looks stale
