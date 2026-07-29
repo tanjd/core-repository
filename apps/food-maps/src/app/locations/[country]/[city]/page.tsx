@@ -2,10 +2,10 @@ import { ApiClient } from "@tanjd/food-maps-data";
 import Link from "next/link";
 
 interface PageProps {
-  params: {
+  params: Promise<{
     country: string;
     city: string;
-  };
+  }>;
 }
 
 async function getLocations(country: string, city: string) {
@@ -30,7 +30,7 @@ async function getLocations(country: string, city: string) {
 }
 
 export default async function CityPage({ params }: PageProps) {
-  const { country, city } = params;
+  const { country, city } = await params;
   const locations = await getLocations(country, city);
   const decodedCity = decodeURIComponent(city);
   const decodedCountry = decodeURIComponent(country);
