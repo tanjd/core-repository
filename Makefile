@@ -9,8 +9,13 @@ help: ## Show this help message
 
 ##@ Development
 
-setup: ## Install deps (frozen lockfile)
+setup: ## Install deps (frozen lockfile), goimports, and rtk (Claude/Cursor token-saving hooks)
 	pnpm install --frozen-lockfile
+	go install golang.org/x/tools/cmd/goimports@latest
+	curl -fsSL https://raw.githubusercontent.com/rtk-ai/rtk/master/install.sh | RTK_VERSION=0.44.1 sh
+	rtk init -g --auto-patch
+	mkdir -p $(HOME)/.cursor
+	rtk init -g --agent cursor --auto-patch
 
 verify: ## Build, lint, and test every project (full local CI equivalent)
 	pnpm nx run-many -t build lint test

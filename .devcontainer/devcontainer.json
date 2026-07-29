@@ -32,7 +32,7 @@
       "nodeGypDependencies": true,
       "installYarnUsingApt": true,
       "version": "24",
-      "pnpmVersion": "9.15.9",
+      "pnpmVersion": "10.34.5",
       "nvmVersion": "0.40.6"
     },
     "ghcr.io/devcontainers/features/go:1": {
@@ -47,6 +47,7 @@
     "vscode": {
       "extensions": [
         "charliermarsh.ruff",
+        "esbenp.prettier-vscode",
         "mgesbert.python-path",
         "ms-python.isort",
         "ms-python.python",

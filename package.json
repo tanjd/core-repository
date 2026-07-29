@@ -44,7 +44,9 @@
     "jest": "30.0.5",
     "jest-environment-jsdom": "30.0.5",
     "jest-environment-node": "^29.7.0",
+    "jest-util": "30.0.5",
     "jsonc-eslint-parser": "^2.4.0",
+    "lint-staged": "^17.2.0",
     "next": "16.2.12",
     "nx": "22.2.2",
     "postcss": "8.4.38",
@@ -58,11 +60,28 @@
     "tslib": "^2.3.0",
     "tsx": "^4.20.3",
     "typescript": "5.9.3",
-    "typescript-eslint": "8.65.0",
-    "jest-util": "30.0.5"
+    "typescript-eslint": "8.65.0"
   },
   "license": "MIT",
+  "lint-staged": {
+    "**/*.go": [
+      "gofmt -w",
+      "goimports -w"
+    ],
+    "*.{js,jsx,ts,tsx}": [
+      "eslint --fix",
+      "prettier --write"
+    ],
+    "*.{json,md,yml,yaml,css,html}": [
+      "prettier --write"
+    ]
+  },
   "name": "@tanjd/core-repository",
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "nx"
+    ]
+  },
   "private": true,
   "scripts": {
     "format": "nx format:write --verbose",

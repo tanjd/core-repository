@@ -32,6 +32,15 @@ make docker-build APP=food-maps-backend # docker build -f apps/<app>/Dockerfile 
 make golangci-verify                    # confirm .golangci.yaml is actually being loaded
 ```
 
+pnpm is pinned via `.devcontainer/devcontainer.json`'s `pnpmVersion` (no
+`packageManager` field in `package.json` — the devcontainer is the single
+source of truth for both local dev and CI, since `ci.yml` builds it via
+`devcontainers/ci@v0.3`). pnpm 10+ blocks dependency install/postinstall
+scripts by default (a security default); packages that need one must be
+allow-listed in `package.json` → `pnpm.onlyBuiltDependencies` (currently
+just `nx`, whose postinstall does its local setup) or the script silently
+no-ops and `pnpm install` prints an "Ignored build scripts" warning.
+
 Lower-level, for anything not covered above:
 
 ```bash
@@ -39,12 +48,25 @@ pnpm nx show projects                 # list all projects
 pnpm nx <target> <project>            # e.g. pnpm nx test food-maps-backend
 ```
 
-Husky's pre-commit hook only runs `nx format:write` + generic pre-commit-hooks
-checks (whitespace, merge conflicts, etc.) — it's intentionally fast. Lint and
+Husky (`core.hooksPath=.husky/_`) is just the trigger Git calls on
+`git commit`; `.husky/pre-commit` delegates the actual checks to two layers,
+both scoped to staged files only:
+
+- `lint-staged`: ESLint `--fix` + Prettier on staged JS/TS, Prettier alone on
+  staged JSON/MD/YAML/CSS/HTML, `gofmt -w` + `goimports -w` on staged Go
+  (`goimports` is installed by `make setup`, not part of the Go toolchain by
+  default).
+- The Python `pre-commit` framework, for the generic `pre-commit-hooks`
+  checks (trailing whitespace, EOF newline, YAML/JSON sanity, merge-conflict
+  markers, etc.), run against `git diff --cached` (staged), not the working
+  tree — fixes from both layers are re-staged so they land in the commit.
+
+This is intentionally fast because neither layer goes through Nx. Lint and
 test run once, in CI, via `.github/workflows/ci.yml`'s `nx affected -t lint test`
-(triggered on `push`/`pull_request` to `main`). Don't add lint/test back into
-the pre-commit hook; that was deliberately removed to avoid double-running the
-same work with no cache to offset it (`neverConnectToCloud: true` in `nx.json`).
+(triggered on `push`/`pull_request` to `main`). Don't add Nx lint/test back
+into the pre-commit hook; that was deliberately removed to avoid
+double-running the same work with no cache to offset it
+(`neverConnectToCloud: true` in `nx.json`).
 
 ## Go (`food-maps-backend`)
 
@@ -120,8 +142,6 @@ reuse the `GITHUB_TOKEN` auth already set up in `ci.yml` — not a hard lock-in.
   catches up.
 - GitHub branch protection on `main` (requiring the CI check before merge)
   hasn't been enabled — it's a repo-settings change, not a code change.
-- pnpm is pinned to the 9.x line (EOL upstream) to match the existing
-  lockfile; bumping to 10/11 needs a lockfile migration.
 - Migrating `index-watch`/`table-talks`/`otobr-buddy` into this monorepo:
   one at a time, starting with the simplest, only after the generator +
   deploy pattern above have been proven with a throwaway app (they have real
