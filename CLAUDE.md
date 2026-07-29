@@ -49,24 +49,74 @@ pnpm nx <target> <project>            # e.g. pnpm nx test food-maps-backend
 ```
 
 Husky (`core.hooksPath=.husky/_`) is just the trigger Git calls on
-`git commit`; `.husky/pre-commit` delegates the actual checks to two layers,
-both scoped to staged files only:
+`git commit`; `.husky/pre-commit` runs three layers:
 
 - `lint-staged`: ESLint `--fix` + Prettier on staged JS/TS, Prettier alone on
   staged JSON/MD/YAML/CSS/HTML, `gofmt -w` + `goimports -w` on staged Go
   (`goimports` is installed by `make setup`, not part of the Go toolchain by
-  default).
+  default). Staged files only.
 - The Python `pre-commit` framework, for the generic `pre-commit-hooks`
   checks (trailing whitespace, EOF newline, YAML/JSON sanity, merge-conflict
   markers, etc.), run against `git diff --cached` (staged), not the working
   tree — fixes from both layers are re-staged so they land in the commit.
+- `pnpm nx affected -t lint test` — the full Nx lint/test for whatever the
+  commit affects, not staged-file-scoped like the two layers above.
 
-This is intentionally fast because neither layer goes through Nx. Lint and
-test run once, in CI, via `.github/workflows/ci.yml`'s `nx affected -t lint test`
-(triggered on `push`/`pull_request` to `main`). Don't add Nx lint/test back
-into the pre-commit hook; that was deliberately removed to avoid
-double-running the same work with no cache to offset it
-(`neverConnectToCloud: true` in `nx.json`).
+The third layer duplicates what CI runs, on purpose: failing locally before a
+push beats failing in CI, even with no remote cache to offset it
+(`neverConnectToCloud: true` in `nx.json`) — local `.nx/cache` still speeds up
+repeat commits that don't touch a given project. CI (`.github/workflows/ci.yml`,
+triggered on `push`/`pull_request` to `main`) still runs the same
+`nx affected -t lint test` as the authoritative gate, since `--no-verify` or a
+merge can land changes the hook never saw.
+
+## Nx conventions
+
+- **Caching**: `test`, `lint`, `tidy`, and `golangci-lint` are cached via
+  `targetDefaults` in `nx.json`. `neverConnectToCloud: true` keeps caching
+  local-only, no remote/distributed cache (there's no `nxCloudId` to connect
+  with anyway) — local cache still speeds up repeat `nx affected` runs (both
+  pre-commit and CI) when a project's inputs haven't changed.
+- `namedInputs.sharedGlobals` includes `.github/workflows/ci.yml` — editing
+  that file busts the cache for every project.
+- **Inferred tasks**: `@nx/next`, `@nx/playwright`, `@nx/eslint`, `@nx/jest`,
+  and `@nx-go/nx-go` are registered Nx plugins (`nx.json` → `plugins`) that
+  auto-register targets from config files already present in a project
+  (`next.config.js`, `playwright.config.ts`, `eslint.config.mjs`,
+  `jest.config.ts`) — no need to hand-write those targets for a new TS
+  app/lib. Go and Python have no such plugin coverage for their language-
+  specific targets, so those are hand-defined `nx:run-commands` targets in
+  `project.json` instead (see the Go and Python sections below).
+- **Cross-project dependencies** are declared two ways:
+  - Inferred automatically from TS imports, via `@nx/js`'s
+    `analyzeSourceFiles: true` (`nx.json` → `pluginsConfig`) — e.g.
+    `food-maps` → `libs/food-maps-data` through the `@tanjd/food-maps-data`
+    path alias, with no explicit config.
+  - Declared explicitly via `implicitDependencies` in `project.json` when
+    there's no source-level import to analyze — e.g.
+    `apps/food-maps-e2e/project.json` sets
+    `"implicitDependencies": ["food-maps"]` since Playwright drives the app
+    over HTTP rather than importing it.
+  - `pnpm nx graph` shows the resulting dependency graph.
+- **Module boundaries**: `@nx/enforce-module-boundaries` (in
+  `eslint.config.mjs`) is wired up but currently wide open — a single
+  `{ sourceTag: "*", onlyDependOnLibsWithTags: ["*"] }` constraint, and every
+  `project.json` has `"tags": []`. Proposed convention for when this needs
+  tightening (not yet applied to any project — adopt once a cross-domain
+  project, e.g. a migrated bot, makes enforcement actually useful):
+  - `type:app` / `type:lib` / `type:e2e` — what kind of project it is.
+  - `scope:food-maps` / `scope:bots` / `scope:shared` — which product/domain
+    it belongs to.
+  - Example `depConstraints`:
+    ```js
+    depConstraints: [
+      { sourceTag: "type:app", onlyDependOnLibsWithTags: ["type:lib"] },
+      { sourceTag: "type:e2e", onlyDependOnLibsWithTags: ["type:app", "type:lib"] },
+      { sourceTag: "type:lib", onlyDependOnLibsWithTags: ["type:lib"] },
+      { sourceTag: "scope:food-maps", onlyDependOnLibsWithTags: ["scope:food-maps", "scope:shared"] },
+      { sourceTag: "scope:bots", onlyDependOnLibsWithTags: ["scope:bots", "scope:shared"] },
+    ];
+    ```
 
 ## Go (`food-maps-backend`)
 
@@ -169,6 +219,10 @@ reuse the `GITHUB_TOKEN` auth already set up in `ci.yml` — not a hard lock-in.
   one at a time, starting with the simplest, only after the generator +
   deploy pattern above have been proven with a throwaway app (they have real
   users/schedules — don't touch them as a drive-by change).
+- Module boundary tags/`depConstraints` are documented as a convention (see
+  "Nx conventions") but not applied to any `project.json` yet — adopt when
+  the first cross-domain project (e.g. a migrated bot) makes enforcement
+  useful, not speculatively now.
 - Root `ruff.toml` only covers apps scaffolded by the `telegram-bot`
   generator; standalone bot repos keep their own independent config until
   migrated.

@@ -5,3 +5,5 @@ if [ -n "$STAGED_FILES" ]; then
   pre-commit run --files $STAGED_FILES
   git add -- $STAGED_FILES
 fi
+
+pnpm nx affected -t lint test
