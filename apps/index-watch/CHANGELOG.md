@@ -1,3 +1,23 @@
+# 1.0.0 (2026-07-30)
+
+### 🚀 Features
+
+- ⚠️  **index-watch:** add per-subscriber alerts, digests, and recovery notices ([#21](https://github.com/tanjd/core-repository/pull/21))
+
+### ⚠️  Breaking Changes
+
+- **index-watch:** add per-subscriber alerts, digests, and recovery notices  ([#21](https://github.com/tanjd/core-repository/pull/21))
+  alert_state's schema is now keyed by chat_id (was
+  symbol+threshold only), and AlertState's methods gained a leading chat_id
+  parameter. The schema migration runs automatically in init_db() on next
+  startup; it may cause one duplicate alert per already-triggered threshold
+  as a one-time side effect (no manual DB step required).
+  Claude-Session: https://claude.ai/code/session_015MuauJJ1vrva2EdABJN1Q9
+
+### ❤️ Thank You
+
+- Jeddy Tan @tanjd
+
 ## 0.2.0 (2026-07-30)
 
 ### 🚀 Features
