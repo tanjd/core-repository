@@ -107,6 +107,7 @@ def format_daily_report(
     fear_greed_line: str,
     history_blocks: list[str],  # optional historical frequency per index
     data_timestamp: datetime | None = None,
+    history_years: int = 20,
 ) -> str:
     """Assemble full daily report message with timestamp header."""
     parts = ["<b>📈 Daily Index Watch</b>"]
@@ -127,7 +128,7 @@ def format_daily_report(
     if history_blocks:
         parts.append("")
         parts.append("<b>📊 Historical Drawdown Frequency</b>")
-        parts.append("<i>(Last 20 years)</i>")
+        parts.append(f"<i>(Last {history_years} years)</i>")
         for block in history_blocks:
             parts.append(block)
             parts.append("")  # Spacing between indices
@@ -141,6 +142,7 @@ def format_drawdown_alert(
     threshold_pct: int,
     day_count: int,
     total_days: int,
+    history_years: int = 20,
 ) -> str:
     """Format alert when drawdown crosses a threshold with emoji indicators."""
     pct_of_history = (day_count / total_days * 100) if total_days else 0
@@ -151,7 +153,7 @@ def format_drawdown_alert(
         f"📉 <b>Current:</b> {current_drawdown_pct:.2f}% (crossed -{threshold_pct}% threshold)\n"
         f"Status: {emoji}\n\n"
         f"<b>📊 Historical Context</b>\n"
-        f"In the last 20 years, we've seen -{threshold_pct}% or worse on:\n"
+        f"In the last {history_years} years, we've seen -{threshold_pct}% or worse on:\n"
         f"• {day_count} trading days ({pct_of_history:.1f}% of ~{total_days} days)\n\n"
         f"💡 <i>This is {'a relatively rare' if pct_of_history < 5 else 'not uncommon'} event.</i>"
     )

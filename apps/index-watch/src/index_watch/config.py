@@ -4,7 +4,11 @@ import os
 from dataclasses import dataclass, field
 from pathlib import Path
 
-DEFAULT_INDEX_SYMBOLS = {"^GSPC": "S&P 500", "^NDX": "NASDAQ-100"}
+DEFAULT_INDEX_SYMBOLS = {
+    "^GSPC": "S&P 500",
+    "^NDX": "NASDAQ-100",
+    "^990100-USD-STRD": "MSCI World",
+}
 DEFAULT_DRAWDOWN_THRESHOLDS = (5, 10, 15, 20)
 DEFAULT_DAILY_REPORT_CRON = "0 22 * * 1-5"  # 22:00 UTC Mon–Fri (after US close)
 DEFAULT_ALERT_CHECK_MINUTES = 60  # Increased from 30 to reduce API calls

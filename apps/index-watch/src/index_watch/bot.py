@@ -65,7 +65,13 @@ def _build_daily_report(config: Config) -> str:
     # Use earliest data timestamp for "Updated:" display
     data_timestamp = min(data_timestamps) if data_timestamps else datetime.now(UTC)
 
-    report = format_daily_report(index_blocks, fear_greed_line, history_blocks, data_timestamp)
+    report = format_daily_report(
+        index_blocks,
+        fear_greed_line,
+        history_blocks,
+        data_timestamp,
+        history_years=config.history_years,
+    )
 
     # Add warning if serving stale data
     if has_stale_data:
@@ -129,7 +135,12 @@ def _check_drawdown_alerts(config: Config, subscribers: list[str]) -> list[tuple
             freq = historical_drawdown_frequency(closes, (threshold,))
             day_count = freq.get(threshold, 0)
             msg = format_drawdown_alert(
-                name, metrics.current_drawdown_pct, threshold, day_count, total_days
+                name,
+                metrics.current_drawdown_pct,
+                threshold,
+                day_count,
+                total_days,
+                history_years=config.history_years,
             )
             for chat_id in subscribers:
                 results.append((chat_id, msg))
