@@ -11,12 +11,8 @@
         "cwd": "apps/index-watch"
       }
     },
-    "docker-build": {
-      "executor": "nx:run-commands",
-      "options": {
-        "command": "docker build -f apps/index-watch/Dockerfile -t index-watch ."
-      }
-    },
+    "docker-build": {},
+    "docker-push": {},
     "lint": {
       "cache": true,
       "executor": "nx:run-commands",

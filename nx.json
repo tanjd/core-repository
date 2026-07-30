@@ -82,6 +82,20 @@
         "^production"
       ]
     },
+    "docker-build": {
+      "cache": false,
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "docker buildx build -f apps/$NX_TASK_TARGET_PROJECT/Dockerfile -t $NX_TASK_TARGET_PROJECT --cache-from type=gha,scope=$NX_TASK_TARGET_PROJECT --cache-to type=gha,mode=max,scope=$NX_TASK_TARGET_PROJECT ."
+      }
+    },
+    "docker-push": {
+      "cache": false,
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "docker buildx build -f apps/$NX_TASK_TARGET_PROJECT/Dockerfile -t ghcr.io/tanjd/$NX_TASK_TARGET_PROJECT:latest -t ghcr.io/tanjd/$NX_TASK_TARGET_PROJECT:${GITHUB_SHA:-$(git rev-parse HEAD)} --cache-from type=gha,scope=$NX_TASK_TARGET_PROJECT --cache-to type=gha,mode=max,scope=$NX_TASK_TARGET_PROJECT --push ."
+      }
+    },
     "e2e-ci--**/*": {
       "dependsOn": [
         "^build"

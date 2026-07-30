@@ -204,13 +204,32 @@ the **repo root as build context**: `make docker-build APP=<name>` (or
 `docker build -f apps/<name>/Dockerfile .` — see the root `.dockerignore`,
 since `node_modules` alone is 1.3G).
 
-On push to `main`, `.github/workflows/release.yml`:
+"Is this app dockerized" is expressed purely as an Nx fact: a project opts in
+by declaring empty `docker-build`/`docker-push` target stanzas (`{}`) in its
+`project.json` — the shared `nx.json` → `targetDefaults` entries supply the
+actual `docker buildx build` command via `nx:run-commands`, keyed off the
+`$NX_TASK_TARGET_PROJECT` env var Nx injects (which doubles as both the
+`apps/<name>` path segment and the `ghcr.io/tanjd/<name>` image name, so one
+shared command covers every dockerized app — no per-app duplication). Not
+every app is deployable (e.g. `food-maps` isn't Dockerized, `food-maps-backend`
+and `index-watch` are); the generator (`tools/generators/telegram-bot`) scaffolds
+new bots with these targets already wired up. Both targets are `cache: false`
+— a docker build/push has no restorable Nx artifact, and Nx-caching
+`docker-push` in particular would risk silently skipping a real push; Docker's
+own buildx layer cache (`--cache-from`/`--cache-to type=gha`) handles
+incrementality instead.
 
-1. Uses `nx show projects --affected --type app` to find changed apps.
-2. Filters to apps that own a `Dockerfile` (not every app is deployable —
-   e.g. `food-maps` isn't Dockerized, `food-maps-backend` is).
-3. Builds and pushes each to `ghcr.io/tanjd/<app-name>`, tagged `latest` and
-   by commit SHA.
+`.github/workflows/ci.yml` runs `nx affected -t docker-build` (build-only,
+verifies every affected dockerized app still builds, no registry push) on
+every push/PR to `main`. `.github/workflows/release.yml` (currently
+`workflow_dispatch`-only — see the "temporarily disabled" note in that file)
+runs `nx affected -t docker-push`, tagging `latest` and the commit SHA and
+pushing to `ghcr.io/tanjd/<app-name>`. Both replaced an earlier bash/jq loop
+that checked `apps/<app>/Dockerfile` for existence and fanned out over a
+GitHub Actions matrix per app — that detection is now just
+`nx affected --withTarget docker-build`/`docker-push`, and per-app GHA cache
+scoping comes from `$NX_TASK_TARGET_PROJECT` rather than a matrix variable, so
+there's a single `nx affected` step instead of one GH Actions job per app.
 
 GHCR was chosen over Docker Hub (which the standalone bots currently use) to
 reuse the `GITHUB_TOKEN` auth already set up in `ci.yml` — not a hard lock-in.
