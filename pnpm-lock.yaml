@@ -192,6 +192,10 @@ importers:
         specifier: 8.65.0
         version: 8.65.0(eslint@9.32.0(jiti@2.4.2))(typescript@5.9.3)
 
+  apps/food-maps-backend: {}
+
+  apps/index-watch: {}
+
 packages:
 
   '@adobe/css-tools@4.3.3':
