@@ -1,3 +1,7 @@
+## 0.1.1 (2026-07-30)
+
+This was a version bump only for index-watch to align it with other projects, there were no code changes.
+
 # CHANGELOG
 
 <!-- carried over from the standalone tanjd/index-watch repo (pre-migration history, python-semantic-release format) -->
