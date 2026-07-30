@@ -89,6 +89,9 @@ jobs:
 
       - uses: docker/setup-buildx-action@v4
 
+      - name: Expose GitHub Actions cache variables
+        uses: crazy-max/ghaction-github-runtime@v3
+
       - name: Set SHAs
         id: set-shas
         uses: nrwl/nx-set-shas@v5

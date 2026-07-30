@@ -221,18 +221,88 @@ incrementality instead.
 
 `.github/workflows/ci.yml` runs `nx affected -t docker-build` (build-only,
 verifies every affected dockerized app still builds, no registry push) on
-every push/PR to `main`. `.github/workflows/release.yml` (currently
-`workflow_dispatch`-only — see the "temporarily disabled" note in that file)
-runs `nx affected -t docker-push`, tagging `latest` and the commit SHA and
-pushing to `ghcr.io/tanjd/<app-name>`. Both replaced an earlier bash/jq loop
-that checked `apps/<app>/Dockerfile` for existence and fanned out over a
-GitHub Actions matrix per app — that detection is now just
-`nx affected --withTarget docker-build`/`docker-push`, and per-app GHA cache
-scoping comes from `$NX_TASK_TARGET_PROJECT` rather than a matrix variable, so
-there's a single `nx affected` step instead of one GH Actions job per app.
+every push/PR to `main`. Actually publishing an image is release-gated (see
+"Release versioning" below) rather than tied to every push to `main` — that
+detection is now just `nx affected --withTarget docker-build`, and per-app
+GHA cache scoping comes from `$NX_TASK_TARGET_PROJECT` rather than a matrix
+variable, so there's a single `nx affected` step instead of one GH Actions
+job per app (this replaced an earlier bash/jq loop that checked
+`apps/<app>/Dockerfile` for existence and fanned out over a matrix).
 
 GHCR was chosen over Docker Hub (which the standalone bots currently use) to
 reuse the `GITHUB_TOKEN` auth already set up in `ci.yml` — not a hard lock-in.
+
+## Release versioning (`nx release`) and publishing
+
+Versioning and image publishing are two separate, event-chained workflows,
+not one job:
+
+1. `.github/workflows/release.yml` runs on push to `main` and does
+   **only** versioning: `nx release --skip-publish` (`nx.json` → `release`)
+   computes each affected project's next version from Conventional Commits,
+   writes `CHANGELOG.md` + the version manifest, commits with `[skip ci]`
+   (so the push-back to `main` doesn't retrigger `ci.yml`/`release.yml` — no
+   loop), tags `<project>@<version>` (independent-relationship default),
+   and creates a GitHub Release per project.
+2. `.github/workflows/publish.yml` parses a release tag
+   (`<project>@<version>`) to get an exact single project name, checks out
+   that tag, and runs `nx run <project>:docker-push` — tagging the image
+   `latest`, the commit SHA, and the released `v<semver>`, pushed to
+   `ghcr.io/tanjd/<app-name>`.
+
+`publish.yml` listens for `release: published`, which does **not** fire
+for a release created via the default `GITHUB_TOKEN` — GitHub's
+anti-recursion rule blocks anything the default token creates (a push, a
+release, etc.) from triggering other workflows,
+`workflow_dispatch`/`repository_dispatch` excepted. So `release.yml`'s
+checkout and its `nx release` step both authenticate with
+`secrets.GHA_TRIGGER_TOKEN` (a fine-grained PAT, repo-scoped to
+`tanjd/core-repository`, `Contents: Read and write` only) instead — a PAT
+acts like a real user, so the release it creates fires `release: published`
+normally, no bridging step required. Same convention the standalone
+`tanjd/index-watch` repo already used (there, `GHA_TRIGGER_TOKEN` backs
+`python-semantic-release`'s `github_token` input). The PAT is a fine-grained
+token, so it expires (max 1 year) and needs rotating before then — done
+manually via GitHub UI → Settings → Developer settings → Fine-grained
+tokens, then updating the `GHA_TRIGGER_TOKEN` repo secret.
+`publish.yml`'s `workflow_dispatch` trigger doubles as how to retry a
+publish without re-cutting the release.
+
+Publishing is deliberately **not** `nx affected -t docker-push` off a
+commit range: a `release: published` event names one exact project+version,
+not a diff, and `nx affected` would be the wrong tool here anyway — the
+same `nx.json`/`pnpm-lock.yaml`-is-global ripple noted below means an
+unrelated commit range could mark a project "affected" that was never
+actually released this time, publishing an image not backed by any real
+version bump.
+
+`food-maps-backend` and `index-watch` are versioned independently —
+`release.projects` in `nx.json` is the explicit list of which apps
+participate (not every project; `food-maps`/`food-maps-data`/
+`food-maps-e2e` aren't deployed, so they're excluded). New bots must be
+added to that list by hand when scaffolded/migrated.
+
+- Each app carries a bare `package.json` (`{name, version, private: true}`)
+  purely as the version manifest `nx release` reads/writes — it joins the
+  pnpm workspace (harmless, no deps) but nothing else touches it. This
+  exists because `nx release`'s default `VersionActions` implementation
+  (from `@nx/js`) hard-requires a `package.json` to read/write the version;
+  the alternative (the experimental `@nx/docker` plugin, or a hand-rolled
+  `versionActions` implementation) was rejected as more invasive for what's
+  a fairly standard polyglot-monorepo workaround.
+- **Accepted caveat**: `nx release`'s conventional-commits engine reuses the
+  same graph-based "affected" logic as `nx affected`, and `nx.json` /
+  `pnpm-lock.yaml` are treated as global — so a commit touching either of
+  those (e.g. an unrelated JS dependency bump) force-patches every
+  `release.projects` entry, even ones it didn't touch, with a "no code
+  changes, aligned with other projects" changelog entry. There's no config
+  flag in this Nx version to disable that ripple; it's accepted as cosmetic
+  noise rather than switched to manual `nx release plan` versioning.
+- `apps/index-watch/CHANGELOG.md` was seeded with the standalone
+  `tanjd/index-watch` repo's pre-migration history (that repo used
+  `python-semantic-release`, tag format `v{version}` — an unrelated tool to
+  `nx release`) so changelog continuity survives the migration; `nx release`
+  prepends new entries above it.
 
 ## Known gaps / deferred work
 
@@ -261,3 +331,20 @@ reuse the `GITHUB_TOKEN` auth already set up in `ci.yml` — not a hard lock-in.
   and migrated apps (`index-watch`); the remaining standalone repos
   (`table-talks`, `ledger-lens`) keep their own independent config until
   migrated.
+- `nx release` (see "Release versioning" above) is configured but not yet
+  bootstrapped: no `<project>@<version>` git tag exists yet for either
+  `food-maps-backend` or `index-watch`, so the automatic-on-push flow in
+  `release.yml` has nothing to diff against on its first run. Needs a
+  one-time manual bootstrap **after this config is merged to `main`** (not
+  from a feature branch — the bootstrap commit/tags need to land on commits
+  reachable from `main`, which a squash-merge wouldn't guarantee for a
+  feature-branch-run bootstrap):
+  ```bash
+  git checkout main && git pull
+  # index-watch: pin to the version already live on Docker Hub, for continuity
+  npx nx release 1.3.0 --projects index-watch --first-release
+  # food-maps-backend: no prior external version, let conventional commits compute it
+  npx nx release --projects food-maps-backend --first-release
+  ```
+  Run each with `--dry-run` appended first to preview. After this one-time
+  step, every subsequent push to `main` versions automatically.

@@ -71,6 +71,29 @@
       "analyzeSourceFiles": true
     }
   },
+  "release": {
+    "changelog": {
+      "automaticFromRef": true,
+      "projectChangelogs": {
+        "createRelease": "github"
+      }
+    },
+    "git": {
+      "commit": true,
+      "commitMessage": "chore(release): publish [skip ci]",
+      "push": true,
+      "tag": true
+    },
+    "projects": [
+      "food-maps-backend",
+      "index-watch"
+    ],
+    "projectsRelationship": "independent",
+    "version": {
+      "conventionalCommits": true,
+      "fallbackCurrentVersionResolver": "disk"
+    }
+  },
   "targetDefaults": {
     "@nx/js:swc": {
       "cache": true,
@@ -93,7 +116,7 @@
       "cache": false,
       "executor": "nx:run-commands",
       "options": {
-        "command": "docker buildx build -f apps/$NX_TASK_TARGET_PROJECT/Dockerfile -t ghcr.io/tanjd/$NX_TASK_TARGET_PROJECT:latest -t ghcr.io/tanjd/$NX_TASK_TARGET_PROJECT:${GITHUB_SHA:-$(git rev-parse HEAD)} --cache-from type=gha,scope=$NX_TASK_TARGET_PROJECT --cache-to type=gha,mode=max,scope=$NX_TASK_TARGET_PROJECT --push ."
+        "command": "docker buildx build -f apps/$NX_TASK_TARGET_PROJECT/Dockerfile -t ghcr.io/tanjd/$NX_TASK_TARGET_PROJECT:latest -t ghcr.io/tanjd/$NX_TASK_TARGET_PROJECT:${GITHUB_SHA:-$(git rev-parse HEAD)} -t ghcr.io/tanjd/$NX_TASK_TARGET_PROJECT:v$(jq -r .version apps/$NX_TASK_TARGET_PROJECT/package.json) --cache-from type=gha,scope=$NX_TASK_TARGET_PROJECT --cache-to type=gha,mode=max,scope=$NX_TASK_TARGET_PROJECT --push ."
       }
     },
     "e2e-ci--**/*": {
