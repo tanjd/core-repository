@@ -3,6 +3,7 @@
 from datetime import UTC, datetime
 from zoneinfo import ZoneInfo
 
+from index_watch.alerts import AlertDetail, RecoveryDetail
 from index_watch.drawdown import DrawdownMetrics
 from index_watch.fear_greed import FearGreedResult
 
@@ -136,24 +137,58 @@ def format_daily_report(
     return "\n".join(parts).strip()
 
 
-def format_drawdown_alert(
-    name: str,
-    current_drawdown_pct: float,
-    threshold_pct: int,
-    day_count: int,
-    total_days: int,
-    history_years: int = 20,
-) -> str:
-    """Format alert when drawdown crosses a threshold with emoji indicators."""
-    pct_of_history = (day_count / total_days * 100) if total_days else 0
-    emoji = get_drawdown_emoji(current_drawdown_pct)
+def _format_drawdown_alert_section(detail: AlertDetail) -> str:
+    """Format one triggered alert's body (no leading emoji-header, used inside a digest)."""
+    pct_of_history = (detail.day_count / detail.total_days * 100) if detail.total_days else 0
+    emoji = get_drawdown_emoji(detail.current_drawdown_pct)
 
     return (
-        f"🚨 <b>Drawdown Alert: {name}</b> {emoji}\n\n"
-        f"📉 <b>Current:</b> {current_drawdown_pct:.2f}% (crossed -{threshold_pct}% threshold)\n"
-        f"Status: {emoji}\n\n"
+        f"<b>{detail.name}</b> {emoji}\n\n"
+        f"📉 <b>Current:</b> {detail.current_drawdown_pct:.2f}% "
+        f"(crossed -{detail.threshold_pct}% threshold)\n"
         f"<b>📊 Historical Context</b>\n"
-        f"In the last {history_years} years, we've seen -{threshold_pct}% or worse on:\n"
-        f"• {day_count} trading days ({pct_of_history:.1f}% of ~{total_days} days)\n\n"
+        f"In the last {detail.history_years} years, we've seen -{detail.threshold_pct}% "
+        f"or worse on:\n"
+        f"• {detail.day_count} trading days "
+        f"({pct_of_history:.1f}% of ~{detail.total_days} days)\n\n"
         f"💡 <i>This is {'a relatively rare' if pct_of_history < 5 else 'not uncommon'} event.</i>"
     )
+
+
+def format_drawdown_digest(alerts: list[AlertDetail]) -> str:
+    """Format one or more triggered drawdown alerts into a single digest message."""
+    count = len(alerts)
+    header = f"🚨 <b>Drawdown Alert{'s' if count != 1 else ''} ({count})</b>"
+    sections = [_format_drawdown_alert_section(detail) for detail in alerts]
+    return header + "\n\n" + "\n\n━━━━━━━━━━━━━━━━━\n\n".join(sections)
+
+
+def _format_recovery_section(detail: RecoveryDetail) -> str:
+    """Format one recovery/new-ATH notice's body (used inside a digest)."""
+    headline = (
+        f"<b>{detail.name}</b> just hit a new all-time high! 🎉"
+        if detail.is_new_ath
+        else f"<b>{detail.name}</b> has recovered to its previous all-time high! 🎉"
+    )
+    return f"{headline}\nCurrent: {detail.current_price:,.2f} (ATH: {detail.ath:,.2f})"
+
+
+def format_recovery_digest(recoveries: list[RecoveryDetail]) -> str:
+    """Format one or more recovery/new-ATH notices into a single digest section."""
+    sections = [_format_recovery_section(detail) for detail in recoveries]
+    return "📈 <b>Recovery / New Highs</b>\n\n" + "\n\n━━━━━━━━━━━━━━━━━\n\n".join(sections)
+
+
+def format_alert_digest(alerts: list[AlertDetail], recoveries: list[RecoveryDetail]) -> str:
+    """
+    Format a single combined message: drawdown alerts and/or recovery/new-ATH notices.
+
+    Only sections with content are included, so a subscriber gets at most one
+    message per check cycle even when both alert types fire.
+    """
+    sections = []
+    if alerts:
+        sections.append(format_drawdown_digest(alerts))
+    if recoveries:
+        sections.append(format_recovery_digest(recoveries))
+    return "\n\n━━━━━━━━━━━━━━━━━\n\n".join(sections)

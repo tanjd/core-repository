@@ -5,8 +5,10 @@ Telegram bot that tracks index drawdowns (e.g. S&P 500, NASDAQ-100, MSCI World),
 ## Features
 
 - **Daily report** (configurable cron, default 22:00 UTC Mon–Fri): drawdown metrics per index, Fear & Greed Index, and historical “how often” stats for each threshold.
-- **Drawdown alerts**: when current drawdown exceeds 5%, 10%, 15%, or 20%, you get a notification plus how many trading days in history the index closed at or below that drawdown.
-- **Commands**: `/start`, `/daily` (manual report), `/alerts` (show thresholds and config).
+- **Drawdown alerts**: when current drawdown exceeds 5%, 10%, 15%, or 20%, you get a single digest notification (even if multiple thresholds/indices trigger at once) with how many trading days in history the index closed at or below each drawdown.
+- **Recovery / new-ATH notifications**: when an index recovers back to (or sets a new) all-time high, you get notified — folded into the same digest message as any drawdown alerts from that check cycle. Always-on, no opt-out.
+- **Per-subscriber settings**: thresholds and tracked indices default to the global config but can be overridden per-subscriber via `/setthresholds` and `/setindices`.
+- **Commands**: `/start`, `/subscribe`, `/unsubscribe`, `/status`, `/mystats`, `/daily` (manual report), `/alerts` (show thresholds and config), `/mysettings`, `/setthresholds`, `/myindices`, `/setindices`.
 
 ## Setup
 
@@ -30,20 +32,21 @@ make run
 
 ## Environment variables
 
-| Variable                  | Description                                              | Default                   |
-| ------------------------- | -------------------------------------------------------- | ------------------------- |
-| `BOT_TOKEN`               | Production bot token from @BotFather                     | required (when ENV ≠ dev) |
-| `BOT_TOKEN_DEV`           | Development bot token from @BotFather                    | required (when ENV=dev)   |
-| `ENV`                     | `dev` → use BOT_TOKEN_DEV; anything else → use BOT_TOKEN | `prd`                     |
-| `TELEGRAM_CHAT_IDS`       | Comma-separated chat IDs for reports and alerts          | —                         |
-| `DRAWDOWN_THRESHOLDS_PCT` | Space-separated thresholds (e.g. `5 10 15 20`)           | `5 10 15 20`              |
-| `DAILY_REPORT_CRON`       | Cron: minute hour day month weekday (UTC)                | `0 22 * * 1-5`            |
-| `ALERT_CHECK_MINUTES`     | How often to check drawdown for alerts                   | `30`                      |
-| `HISTORY_YEARS`           | Years of history for ATH and frequency stats             | `20`                      |
+| Variable                  | Description                                              | Default                         |
+| ------------------------- | -------------------------------------------------------- | ------------------------------- |
+| `BOT_TOKEN`               | Production bot token from @BotFather                     | required (when ENV ≠ dev)       |
+| `BOT_TOKEN_DEV`           | Development bot token from @BotFather                    | required (when ENV=dev)         |
+| `ENV`                     | `dev` → use BOT_TOKEN_DEV; anything else → use BOT_TOKEN | `prd`                           |
+| `TELEGRAM_CHAT_IDS`       | Comma-separated chat IDs for reports and alerts          | —                               |
+| `DRAWDOWN_THRESHOLDS_PCT` | Space-separated thresholds (e.g. `5 10 15 20`)           | `5 10 15 20`                    |
+| `DAILY_REPORT_CRON`       | Cron: minute hour day month weekday (UTC)                | `0 22 * * 1-5`                  |
+| `ALERT_CHECK_MINUTES`     | How often to check drawdown for alerts                   | `60`                            |
+| `HISTORY_YEARS`           | Years of history for ATH and frequency stats             | `20`                            |
+| `INDEX_SYMBOLS`           | Tracked indices, `symbol:Name` pairs separated by `;`    | S&P 500, NASDAQ-100, MSCI World |
 
 ## Indices
 
-Default indices (Yahoo Finance symbols):
+Default indices (Yahoo Finance symbols), overridable via `INDEX_SYMBOLS`:
 
 - **S&P 500**: `^GSPC`
 - **NASDAQ-100**: `^NDX`

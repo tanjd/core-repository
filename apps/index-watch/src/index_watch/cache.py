@@ -46,11 +46,11 @@ class DataCache:
                 age = (datetime.now(UTC) - cached.fetched_at).total_seconds()
                 logger.debug("Cache HIT: key=%s age=%.1fs", key, age)
                 return cached.data, cached.fetched_at
-            # Remove expired entry
+            # Leave the expired entry in place (not deleted) so get_stale() can
+            # still serve it as a graceful-degradation fallback on fetch failure.
             if cached:
                 self._stats["expirations"] += 1
                 logger.debug("Cache EXPIRED: key=%s", key)
-                del self._cache[key]
             else:
                 logger.debug("Cache MISS: key=%s", key)
             self._stats["misses"] += 1

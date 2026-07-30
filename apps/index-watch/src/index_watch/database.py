@@ -6,7 +6,15 @@ from collections.abc import Iterator
 from contextlib import contextmanager
 from datetime import datetime
 from pathlib import Path
-from typing import Any
+from typing import Any, TypedDict
+
+
+class SubscriberOverride(TypedDict, total=False):
+    """A subscriber's threshold/index overrides; keys are absent when using the default."""
+
+    thresholds: tuple[int, ...]
+    indices: tuple[str, ...]
+
 
 logger = logging.getLogger(__name__)
 
@@ -53,13 +61,56 @@ def init_db() -> None:
             ON subscribers(active)
         """)
 
-        # Alert state persistence table
+        # One-time ad-hoc migration: alert_state's primary key gained chat_id
+        # (per-subscriber alert state). CREATE TABLE IF NOT EXISTS won't alter an
+        # existing table, so detect the old schema and drop it - this loses
+        # in-flight "already alerted" state (one possible duplicate alert per
+        # already-triggered threshold), which is accepted as a one-time,
+        # low-severity side effect of the upgrade.
+        alert_state_cols = {row["name"] for row in conn.execute("PRAGMA table_info(alert_state)")}
+        if alert_state_cols and "chat_id" not in alert_state_cols:
+            logger.warning(
+                "Migrating alert_state to per-subscriber schema (dropping old table; "
+                "may cause one duplicate alert per already-triggered threshold)"
+            )
+            conn.execute("DROP TABLE alert_state")
+
+        # Alert state persistence table (per-subscriber)
         conn.execute("""
             CREATE TABLE IF NOT EXISTS alert_state (
+                chat_id TEXT,
                 symbol TEXT,
                 threshold_pct INTEGER,
                 sent_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                PRIMARY KEY (symbol, threshold_pct)
+                PRIMARY KEY (chat_id, symbol, threshold_pct)
+            )
+        """)
+
+        # Recovery/new-ATH notification state persistence table (per-subscriber)
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS recovery_state (
+                chat_id TEXT,
+                symbol TEXT,
+                notified_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                PRIMARY KEY (chat_id, symbol)
+            )
+        """)
+
+        # Per-subscriber overrides: absence of rows for a chat_id means "use
+        # the global config defaults" - no backfill needed for existing subscribers.
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS subscriber_thresholds (
+                chat_id TEXT NOT NULL,
+                threshold_pct INTEGER NOT NULL,
+                PRIMARY KEY (chat_id, threshold_pct)
+            )
+        """)
+
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS subscriber_indices (
+                chat_id TEXT NOT NULL,
+                symbol TEXT NOT NULL,
+                PRIMARY KEY (chat_id, symbol)
             )
         """)
 
@@ -179,25 +230,25 @@ def update_last_alert_sent(chat_id: str) -> None:
         )
 
 
-def load_alert_state() -> set[tuple[str, int]]:
-    """Load persistent alert state from database."""
+def load_alert_state() -> set[tuple[str, str, int]]:
+    """Load persistent per-subscriber alert state from database."""
     with get_db() as conn:
-        rows = conn.execute("SELECT symbol, threshold_pct FROM alert_state").fetchall()
-        result = {(row["symbol"], row["threshold_pct"]) for row in rows}
+        rows = conn.execute("SELECT chat_id, symbol, threshold_pct FROM alert_state").fetchall()
+        result = {(row["chat_id"], row["symbol"], row["threshold_pct"]) for row in rows}
         logger.info("Loaded %d alert states from database", len(result))
         return result
 
 
-def save_alert_state(state: set[tuple[str, int]]) -> None:
-    """Persist alert state to database."""
+def save_alert_state(state: set[tuple[str, str, int]]) -> None:
+    """Persist per-subscriber alert state to database."""
     with get_db() as conn:
         # Clear existing state
         conn.execute("DELETE FROM alert_state")
         # Insert current state
-        for symbol, threshold_pct in state:
+        for chat_id, symbol, threshold_pct in state:
             conn.execute(
-                "INSERT INTO alert_state (symbol, threshold_pct) VALUES (?, ?)",
-                (symbol, threshold_pct),
+                "INSERT INTO alert_state (chat_id, symbol, threshold_pct) VALUES (?, ?, ?)",
+                (chat_id, symbol, threshold_pct),
             )
         logger.info("Saved %d alert states to database", len(state))
 
@@ -207,6 +258,34 @@ def clear_alert_state() -> None:
     with get_db() as conn:
         conn.execute("DELETE FROM alert_state")
     logger.info("Cleared all alert state from database")
+
+
+def load_recovery_state() -> set[tuple[str, str]]:
+    """Load persistent per-subscriber recovery/new-ATH notification state from database."""
+    with get_db() as conn:
+        rows = conn.execute("SELECT chat_id, symbol FROM recovery_state").fetchall()
+        result = {(row["chat_id"], row["symbol"]) for row in rows}
+        logger.info("Loaded %d recovery states from database", len(result))
+        return result
+
+
+def save_recovery_state(state: set[tuple[str, str]]) -> None:
+    """Persist per-subscriber recovery/new-ATH notification state to database."""
+    with get_db() as conn:
+        conn.execute("DELETE FROM recovery_state")
+        for chat_id, symbol in state:
+            conn.execute(
+                "INSERT INTO recovery_state (chat_id, symbol) VALUES (?, ?)",
+                (chat_id, symbol),
+            )
+        logger.info("Saved %d recovery states to database", len(state))
+
+
+def clear_recovery_state() -> None:
+    """Clear all recovery state (for testing or manual reset)."""
+    with get_db() as conn:
+        conn.execute("DELETE FROM recovery_state")
+    logger.info("Cleared all recovery state from database")
 
 
 def migrate_env_chat_ids(chat_ids: list[str]) -> int:
@@ -227,6 +306,98 @@ def migrate_env_chat_ids(chat_ids: list[str]) -> int:
     if migrated_count > 0:
         logger.info("Migrated %d chat IDs from .env to database", migrated_count)
     return migrated_count
+
+
+def get_subscriber_thresholds(chat_id: str) -> tuple[int, ...] | None:
+    """Get a subscriber's threshold override, or None if using the global default."""
+    with get_db() as conn:
+        rows = conn.execute(
+            "SELECT threshold_pct FROM subscriber_thresholds WHERE chat_id = ? "
+            "ORDER BY threshold_pct",
+            (chat_id,),
+        ).fetchall()
+        if not rows:
+            return None
+        return tuple(row["threshold_pct"] for row in rows)
+
+
+def set_subscriber_thresholds(chat_id: str, thresholds: list[int]) -> None:
+    """Set a subscriber's threshold override (wholesale replace)."""
+    with get_db() as conn:
+        conn.execute("DELETE FROM subscriber_thresholds WHERE chat_id = ?", (chat_id,))
+        for threshold_pct in thresholds:
+            conn.execute(
+                "INSERT INTO subscriber_thresholds (chat_id, threshold_pct) VALUES (?, ?)",
+                (chat_id, threshold_pct),
+            )
+
+
+def clear_subscriber_thresholds(chat_id: str) -> None:
+    """Clear a subscriber's threshold override, reverting them to the global default."""
+    with get_db() as conn:
+        conn.execute("DELETE FROM subscriber_thresholds WHERE chat_id = ?", (chat_id,))
+
+
+def get_subscriber_indices(chat_id: str) -> tuple[str, ...] | None:
+    """Get a subscriber's index override, or None if using the global default."""
+    with get_db() as conn:
+        rows = conn.execute(
+            "SELECT symbol FROM subscriber_indices WHERE chat_id = ? ORDER BY symbol",
+            (chat_id,),
+        ).fetchall()
+        if not rows:
+            return None
+        return tuple(row["symbol"] for row in rows)
+
+
+def set_subscriber_indices(chat_id: str, symbols: list[str]) -> None:
+    """Set a subscriber's index override (wholesale replace)."""
+    with get_db() as conn:
+        conn.execute("DELETE FROM subscriber_indices WHERE chat_id = ?", (chat_id,))
+        for symbol in symbols:
+            conn.execute(
+                "INSERT INTO subscriber_indices (chat_id, symbol) VALUES (?, ?)",
+                (chat_id, symbol),
+            )
+
+
+def clear_subscriber_indices(chat_id: str) -> None:
+    """Clear a subscriber's index override, reverting them to the global default."""
+    with get_db() as conn:
+        conn.execute("DELETE FROM subscriber_indices WHERE chat_id = ?", (chat_id,))
+
+
+def get_all_subscriber_overrides() -> dict[str, SubscriberOverride]:
+    """
+    Bulk-load every subscriber's overrides in two queries (for the alert-check loop).
+
+    Returns:
+        {chat_id: {"thresholds": (...), "indices": (...)}} - a chat_id only appears
+        under a key if it has an override for that setting.
+    """
+    overrides: dict[str, SubscriberOverride] = {}
+    with get_db() as conn:
+        threshold_rows = conn.execute(
+            "SELECT chat_id, threshold_pct FROM subscriber_thresholds "
+            "ORDER BY chat_id, threshold_pct"
+        ).fetchall()
+        index_rows = conn.execute(
+            "SELECT chat_id, symbol FROM subscriber_indices ORDER BY chat_id, symbol"
+        ).fetchall()
+
+    thresholds_by_chat: dict[str, list[int]] = {}
+    for row in threshold_rows:
+        thresholds_by_chat.setdefault(row["chat_id"], []).append(row["threshold_pct"])
+    for chat_id, thresholds in thresholds_by_chat.items():
+        overrides.setdefault(chat_id, {})["thresholds"] = tuple(thresholds)
+
+    indices_by_chat: dict[str, list[str]] = {}
+    for row in index_rows:
+        indices_by_chat.setdefault(row["chat_id"], []).append(row["symbol"])
+    for chat_id, symbols in indices_by_chat.items():
+        overrides.setdefault(chat_id, {})["indices"] = tuple(symbols)
+
+    return overrides
 
 
 def get_db_stats() -> dict[str, int]:
