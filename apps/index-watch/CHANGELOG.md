@@ -1,3 +1,13 @@
+## 0.2.0 (2026-07-30)
+
+### 🚀 Features
+
+- **index-watch:** add MSCI World index and configurable history years ([#20](https://github.com/tanjd/core-repository/pull/20))
+
+### ❤️ Thank You
+
+- Jeddy Tan @tanjd
+
 ## 0.1.1 (2026-07-30)
 
 This was a version bump only for index-watch to align it with other projects, there were no code changes.
