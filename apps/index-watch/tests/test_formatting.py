@@ -3,6 +3,7 @@
 from index_watch.drawdown import DrawdownMetrics
 from index_watch.fear_greed import FearGreedResult
 from index_watch.formatting import (
+    format_daily_report,
     format_drawdown_alert,
     format_drawdown_block,
     format_fear_greed,
@@ -50,8 +51,19 @@ def test_format_historical_frequency() -> None:
 
 
 def test_format_drawdown_alert() -> None:
-    text = format_drawdown_alert("S&P 500", -7.5, 5, 120, 5000)
+    text = format_drawdown_alert("S&P 500", -7.5, 5, 120, 5000, history_years=30)
     assert "S&P 500" in text
     assert "-7.50" in text
     assert "5%" in text
     assert "120" in text
+    assert "In the last 30 years" in text
+
+
+def test_format_daily_report_history_years() -> None:
+    text = format_daily_report(
+        [("S&P 500", "block")],
+        "fear greed line",
+        ["history block"],
+        history_years=15,
+    )
+    assert "(Last 15 years)" in text

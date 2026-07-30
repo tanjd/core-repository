@@ -1,6 +1,6 @@
 # Index Watch
 
-Telegram bot that tracks index drawdowns (e.g. S&P 500, NASDAQ-100), sends daily reports with drawdown metrics and CNN Fear & Greed, and alerts when drawdown crosses 5%/10%/15%/20% with historical frequency context. Built as a crash-buy helper.
+Telegram bot that tracks index drawdowns (e.g. S&P 500, NASDAQ-100, MSCI World), sends daily reports with drawdown metrics and CNN Fear & Greed, and alerts when drawdown crosses 5%/10%/15%/20% with historical frequency context. Built as a crash-buy helper.
 
 ## Features
 
@@ -47,6 +47,7 @@ Default indices (Yahoo Finance symbols):
 
 - **S&P 500**: `^GSPC`
 - **NASDAQ-100**: `^NDX`
+- **MSCI World**: `^990100-USD-STRD`
 
 ## Data sources
 
