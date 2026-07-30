@@ -11,13 +11,13 @@ from telegram import Update
 from telegram.ext import Application, CommandHandler, ContextTypes
 
 from index_watch import database
-from index_watch.alerts import AlertState
+from index_watch.alerts import AlertDetail, AlertState, RecoveryDetail, RecoveryState
 from index_watch.cache import get_cache
 from index_watch.config import Config
 from index_watch.fear_greed import fetch_fear_greed
 from index_watch.formatting import (
+    format_alert_digest,
     format_daily_report,
-    format_drawdown_alert,
     format_drawdown_block,
     format_fear_greed,
     format_historical_frequency,
@@ -32,6 +32,7 @@ from index_watch.rate_limiter import RATE_LIMITS, RateLimiter
 logger = logging.getLogger(__name__)
 
 alert_state = AlertState()
+recovery_state = RecoveryState()
 rate_limiter = RateLimiter()
 
 
@@ -112,46 +113,134 @@ async def send_daily_report(app: Application[Any, Any, Any, Any, Any, Any], conf
     logger.info("Daily report sent to %d/%d subscribers", sent_count, len(subscribers))
 
 
-def _check_drawdown_alerts(config: Config, subscribers: list[str]) -> list[tuple[str, str]]:
-    """Check all indices for threshold breaches; return list of (chat_id, message) to send."""
-    results: list[tuple[str, str]] = []
+def _fetch_index_data(config: Config) -> dict[str, tuple[Any, list[float], int]]:
+    """
+    Fetch + compute each index's metrics once per check cycle.
+
+    Shared by the alert and recovery checks so both draw on the same fetch
+    instead of hitting yfinance/cache twice per cycle.
+
+    Returns:
+        {symbol: (metrics, closes, total_days)}, skipping indices with no data
+        or stale (cache-fallback) data.
+    """
+    index_data_by_symbol: dict[str, tuple[Any, list[float], int]] = {}
     for symbol, name in config.index_symbols.items():
         result = get_index_metrics(symbol, name, years=config.history_years)
         if not result:
             continue
         metrics, _, is_stale = result
-        # Skip alerts if data is stale to avoid false alarms
+        # Skip if data is stale to avoid false alarms
         if is_stale:
-            logger.warning("Skipping alert check for %s - data is stale", symbol)
+            logger.warning("Skipping check for %s - data is stale", symbol)
             continue
         closes, _, _ = fetch_index_history(symbol, years=config.history_years)
-        total_days = len(closes)
-        alert_state.on_drawdown_improved(
-            symbol, metrics.current_drawdown_pct, config.drawdown_thresholds_pct
-        )
-        for threshold in config.drawdown_thresholds_pct:
-            if not alert_state.should_alert(symbol, threshold, metrics.current_drawdown_pct):
+        index_data_by_symbol[symbol] = (metrics, closes, len(closes))
+    return index_data_by_symbol
+
+
+def _check_drawdown_alerts(
+    config: Config,
+    subscribers: list[str],
+    index_data_by_symbol: dict[str, tuple[Any, list[float], int]] | None = None,
+) -> dict[str, list[AlertDetail]]:
+    """
+    Check all indices for threshold breaches, honoring per-subscriber overrides.
+
+    Returns:
+        {chat_id: [AlertDetail, ...]} for subscribers with at least one triggered alert.
+    """
+    if index_data_by_symbol is None:
+        index_data_by_symbol = _fetch_index_data(config)
+
+    overrides = database.get_all_subscriber_overrides()
+
+    results: dict[str, list[AlertDetail]] = {}
+    for symbol, (metrics, closes, total_days) in index_data_by_symbol.items():
+        name = config.index_symbols[symbol]
+        for chat_id in subscribers:
+            sub_override = overrides.get(chat_id, {})
+            sub_thresholds = sub_override.get("thresholds") or config.drawdown_thresholds_pct
+            sub_indices = sub_override.get("indices")
+            if sub_indices is not None and symbol not in sub_indices:
                 continue
-            freq = historical_drawdown_frequency(closes, (threshold,))
-            day_count = freq.get(threshold, 0)
-            msg = format_drawdown_alert(
-                name,
-                metrics.current_drawdown_pct,
-                threshold,
-                day_count,
-                total_days,
-                history_years=config.history_years,
+
+            alert_state.on_drawdown_improved(
+                chat_id, symbol, metrics.current_drawdown_pct, sub_thresholds
             )
-            for chat_id in subscribers:
-                results.append((chat_id, msg))
-            alert_state.mark_sent(symbol, threshold)
+            for threshold in sub_thresholds:
+                if not alert_state.should_alert(
+                    chat_id, symbol, threshold, metrics.current_drawdown_pct
+                ):
+                    continue
+                freq = historical_drawdown_frequency(closes, (threshold,))
+                day_count = freq.get(threshold, 0)
+                results.setdefault(chat_id, []).append(
+                    AlertDetail(
+                        symbol=symbol,
+                        name=name,
+                        current_drawdown_pct=metrics.current_drawdown_pct,
+                        threshold_pct=threshold,
+                        day_count=day_count,
+                        total_days=total_days,
+                        history_years=config.history_years,
+                    )
+                )
+                alert_state.mark_sent(chat_id, symbol, threshold)
     return results
+
+
+def _check_recovery_notifications(
+    config: Config,
+    subscribers: list[str],
+    index_data_by_symbol: dict[str, tuple[Any, list[float], int]] | None = None,
+) -> dict[str, list[RecoveryDetail]]:
+    """
+    Check all indices for recoveries/new-ATHs, always-on for every subscriber (no opt-out).
+
+    Returns:
+        {chat_id: [RecoveryDetail, ...]} for subscribers with at least one notification.
+    """
+    if index_data_by_symbol is None:
+        index_data_by_symbol = _fetch_index_data(config)
+
+    results: dict[str, list[RecoveryDetail]] = {}
+    for symbol, (metrics, _closes, _total_days) in index_data_by_symbol.items():
+        name = config.index_symbols[symbol]
+        is_new = recovery_state.is_new_ath(symbol, metrics.ath)
+        recovery_state.update_ath(symbol, metrics.ath)
+
+        for chat_id in subscribers:
+            recovery_state.on_drawdown_worsened(chat_id, symbol, metrics.current_drawdown_pct)
+            if not recovery_state.should_notify(chat_id, symbol, metrics.current_drawdown_pct):
+                continue
+            results.setdefault(chat_id, []).append(
+                RecoveryDetail(
+                    symbol=symbol,
+                    name=name,
+                    current_price=metrics.current_price,
+                    ath=metrics.ath,
+                    is_new_ath=is_new,
+                )
+            )
+            recovery_state.mark_notified(chat_id, symbol)
+    return results
+
+
+def _check_alerts_and_recoveries(
+    config: Config, subscribers: list[str]
+) -> tuple[dict[str, list[AlertDetail]], dict[str, list[RecoveryDetail]]]:
+    """Sync core of check_and_send_alerts: fetch once, run both checks off that fetch."""
+    index_data_by_symbol = _fetch_index_data(config)
+    alerts_by_chat = _check_drawdown_alerts(config, subscribers, index_data_by_symbol)
+    recoveries_by_chat = _check_recovery_notifications(config, subscribers, index_data_by_symbol)
+    return alerts_by_chat, recoveries_by_chat
 
 
 async def check_and_send_alerts(
     app: Application[Any, Any, Any, Any, Any, Any], config: Config
 ) -> None:
-    """Scheduled job: check drawdown thresholds and send alerts."""
+    """Scheduled job: check drawdown thresholds + recoveries and send digest alerts."""
     # Get subscribers from database (falls back to .env for backward compatibility)
     subscribers = database.get_active_subscribers()
     if not subscribers and config.chat_ids:
@@ -160,36 +249,52 @@ async def check_and_send_alerts(
     if not subscribers:
         return
 
-    logger.info("Checking drawdown alerts...")
-    to_send = await asyncio.to_thread(_check_drawdown_alerts, config, subscribers)
+    logger.info("Checking drawdown alerts and recoveries...")
+    alerts_by_chat, recoveries_by_chat = await asyncio.to_thread(
+        _check_alerts_and_recoveries, config, subscribers
+    )
 
-    if not to_send:
-        logger.info("No alerts to send")
-        # Save alert state even if no alerts
+    def _save_state() -> None:
         try:
             database.save_alert_state(alert_state.sent)
+            database.save_recovery_state(recovery_state.notified)
         except Exception as e:
-            logger.warning("Failed to save alert state: %s", e)
+            logger.warning("Failed to save alert/recovery state: %s", e)
+
+    chat_ids_with_updates = set(alerts_by_chat) | set(recoveries_by_chat)
+    if not chat_ids_with_updates:
+        logger.info("No alerts or recovery notifications to send")
+        _save_state()
         return
 
-    logger.info("Sending %d alert(s)...", len(to_send))
+    logger.info(
+        "Sending updates to %d subscriber(s) (%d with alerts, %d with recoveries)...",
+        len(chat_ids_with_updates),
+        len(alerts_by_chat),
+        len(recoveries_by_chat),
+    )
+
     sent_count = 0
-    for chat_id, text in to_send:
+    for chat_id in chat_ids_with_updates:
+        alerts = alerts_by_chat.get(chat_id, [])
+        recoveries = recoveries_by_chat.get(chat_id, [])
+        text = format_alert_digest(alerts, recoveries)
         try:
             await app.bot.send_message(chat_id=chat_id, text=text, parse_mode="HTML")
             database.update_last_alert_sent(chat_id)
-            logger.info("Alert sent to chat_id=%s", chat_id)
+            logger.info(
+                "Digest (%d alert(s), %d recovery notice(s)) sent to chat_id=%s",
+                len(alerts),
+                len(recoveries),
+                chat_id,
+            )
             sent_count += 1
         except Exception as e:
-            logger.exception("Failed to send alert to %s: %s", chat_id, e)
+            logger.exception("Failed to send digest to %s: %s", chat_id, e)
 
-    logger.info("Sent %d/%d alerts successfully", sent_count, len(to_send))
+    logger.info("Sent digests to %d/%d subscriber(s)", sent_count, len(chat_ids_with_updates))
 
-    # Save alert state to database
-    try:
-        database.save_alert_state(alert_state.sent)
-    except Exception as e:
-        logger.warning("Failed to save alert state: %s", e)
+    _save_state()
 
 
 async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -203,7 +308,11 @@ async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         "• /unsubscribe — Stop receiving notifications\n"
         "• /status — Check your subscription status\n"
         "• /daily — Get today's drawdown report\n"
-        "• /alerts — Show configured thresholds\n\n"
+        "• /alerts — Show configured thresholds\n"
+        "• /mysettings — View your personal thresholds/indices\n"
+        "• /setthresholds — Set your own alert thresholds\n"
+        "• /myindices — See which indices you track\n"
+        "• /setindices — Choose which indices you track\n\n"
         "<i>Use /subscribe to start receiving notifications!</i>",
         parse_mode="HTML",
     )
@@ -264,11 +373,177 @@ async def cmd_alerts(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
         await update.message.reply_text("Config not loaded.")
         return
 
-    th = ", ".join(str(t) + "%" for t in config.drawdown_thresholds_pct)
+    thresholds = database.get_subscriber_thresholds(chat_id) or config.drawdown_thresholds_pct
+    th = ", ".join(str(t) + "%" for t in thresholds)
     parts = [f"Drawdown alert thresholds: {th}"]
     parts.append(f"Indices: {', '.join(config.index_symbols.values())}")
     parts.append(f"Alert check interval: every {config.alert_check_minutes} minutes")
+    parts.append("\nUse /mysettings to see and customize your personal settings.")
     await update.message.reply_text("\n".join(parts))
+
+
+async def cmd_mysettings(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Handle /mysettings — show effective (override or default) thresholds/indices."""
+    if not update.message:
+        return
+
+    chat_id = str(update.message.chat_id)
+
+    remaining = rate_limiter.check_rate_limit(chat_id, "mysettings", RATE_LIMITS["mysettings"])
+    if remaining is not None:
+        await update.message.reply_text(
+            f"⏱ Please wait {remaining}s before using /mysettings again."
+        )
+        return
+
+    config = context.bot_data.get("config")
+    if not config:
+        await update.message.reply_text("Config not loaded.")
+        return
+
+    threshold_override = database.get_subscriber_thresholds(chat_id)
+    index_override = database.get_subscriber_indices(chat_id)
+
+    lines = ["<b>⚙️ Your Settings</b>\n"]
+
+    if threshold_override is not None:
+        th = ", ".join(f"{t}%" for t in threshold_override)
+        lines.append(f"🔔 <b>Thresholds:</b> {th} (custom)")
+    else:
+        th = ", ".join(f"{t}%" for t in config.drawdown_thresholds_pct)
+        lines.append(f"🔔 <b>Thresholds:</b> {th} (default)")
+
+    if index_override is not None:
+        names = [config.index_symbols.get(s, s) for s in index_override]
+        lines.append(f"📈 <b>Indices:</b> {', '.join(names)} (custom)")
+    else:
+        lines.append(f"📈 <b>Indices:</b> {', '.join(config.index_symbols.values())} (default)")
+
+    lines.append("\nUse /setthresholds and /setindices to customize.")
+    await update.message.reply_text("\n".join(lines), parse_mode="HTML")
+
+
+async def cmd_setthresholds(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Handle /setthresholds — set or clear a personal drawdown threshold override."""
+    if not update.message:
+        return
+
+    chat_id = str(update.message.chat_id)
+
+    remaining = rate_limiter.check_rate_limit(
+        chat_id, "setthresholds", RATE_LIMITS["setthresholds"]
+    )
+    if remaining is not None:
+        await update.message.reply_text(
+            f"⏱ Please wait {remaining}s before using /setthresholds again."
+        )
+        return
+
+    args = context.args or []
+    if not args:
+        await update.message.reply_text(
+            "Usage: /setthresholds 5 10 15 20  (or /setthresholds default to reset)"
+        )
+        return
+
+    if len(args) == 1 and args[0].lower() == "default":
+        database.clear_subscriber_thresholds(chat_id)
+        await update.message.reply_text("✅ Thresholds reset to the default.")
+        return
+
+    try:
+        thresholds = sorted({int(a.replace("%", "")) for a in args})
+    except ValueError:
+        await update.message.reply_text(
+            "❌ Thresholds must be whole numbers, e.g. /setthresholds 5 10 15"
+        )
+        return
+
+    if not thresholds or any(not 0 < t < 100 for t in thresholds):
+        await update.message.reply_text("❌ Each threshold must be between 1 and 99.")
+        return
+
+    database.set_subscriber_thresholds(chat_id, thresholds)
+    th = ", ".join(f"{t}%" for t in thresholds)
+    await update.message.reply_text(f"✅ Your alert thresholds are now: {th}")
+
+
+async def cmd_myindices(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Handle /myindices — list tracked indices and this subscriber's selection."""
+    if not update.message:
+        return
+
+    chat_id = str(update.message.chat_id)
+
+    remaining = rate_limiter.check_rate_limit(chat_id, "myindices", RATE_LIMITS["myindices"])
+    if remaining is not None:
+        await update.message.reply_text(
+            f"⏱ Please wait {remaining}s before using /myindices again."
+        )
+        return
+
+    config = context.bot_data.get("config")
+    if not config:
+        await update.message.reply_text("Config not loaded.")
+        return
+
+    override = database.get_subscriber_indices(chat_id)
+    selected = set(override) if override is not None else set(config.index_symbols)
+
+    lines = ["<b>📈 Tracked Indices</b>\n"]
+    for symbol, name in config.index_symbols.items():
+        mark = "✅" if symbol in selected else "⬜️"
+        lines.append(f"{mark} {name} ({symbol})")
+
+    lines.append(
+        f"\n{'Custom selection' if override is not None else 'Using all default indices'}."
+    )
+    lines.append("Use /setindices <symbols>|all|default to change.")
+    await update.message.reply_text("\n".join(lines), parse_mode="HTML")
+
+
+async def cmd_setindices(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Handle /setindices — set or clear a personal tracked-index override."""
+    if not update.message:
+        return
+
+    chat_id = str(update.message.chat_id)
+
+    remaining = rate_limiter.check_rate_limit(chat_id, "setindices", RATE_LIMITS["setindices"])
+    if remaining is not None:
+        await update.message.reply_text(
+            f"⏱ Please wait {remaining}s before using /setindices again."
+        )
+        return
+
+    config = context.bot_data.get("config")
+    if not config:
+        await update.message.reply_text("Config not loaded.")
+        return
+
+    args = context.args or []
+    if not args:
+        await update.message.reply_text(
+            "Usage: /setindices ^GSPC ^NDX  (or /setindices all / /setindices default to reset)"
+        )
+        return
+
+    if len(args) == 1 and args[0].lower() in ("default", "all"):
+        database.clear_subscriber_indices(chat_id)
+        await update.message.reply_text("✅ Indices reset to the default (all tracked indices).")
+        return
+
+    unknown = [s for s in args if s not in config.index_symbols]
+    if unknown:
+        available = ", ".join(config.index_symbols)
+        await update.message.reply_text(
+            f"❌ Unknown symbol(s): {', '.join(unknown)}\nAvailable: {available}"
+        )
+        return
+
+    database.set_subscriber_indices(chat_id, args)
+    names = [config.index_symbols[s] for s in args]
+    await update.message.reply_text(f"✅ Your tracked indices are now: {', '.join(names)}")
 
 
 async def cmd_subscribe(update: Update, _context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -494,6 +769,7 @@ async def cmd_debug(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 
     lines.append("\n<b>Alert State</b>")
     lines.append(f"Active alerts: {len(alert_state.sent)}")
+    lines.append(f"Active recovery notifications: {len(recovery_state.notified)}")
 
     # Cache stats
     cache = get_cache()
@@ -578,6 +854,14 @@ def setup_scheduler(
     )
     logger.info("Scheduled alert checks: every %d minutes", config.alert_check_minutes)
 
+    scheduler.add_job(
+        rate_limiter.cleanup_old_entries,
+        "interval",
+        id="rate_limiter_cleanup",
+        hours=6,
+    )
+    logger.info("Scheduled rate limiter cleanup: every 6 hours")
+
     app.bot_data["scheduler"] = scheduler
     return scheduler
 
@@ -595,6 +879,11 @@ def _cron_from_cronstr(cron: str) -> dict[str, Any]:
     """Parse cron 'minute hour day month weekday' into apscheduler kwargs (non-wildcard only)."""
     parts = cron.split()
     if len(parts) != 5:
+        logger.warning(
+            "Malformed cron string %r (expected 5 space-separated fields), "
+            "falling back to default schedule",
+            cron,
+        )
         return {}
     minute, hour, day, month, weekday = parts
     out: dict[str, Any] = {}
@@ -629,4 +918,8 @@ def build_application(config: Config) -> Application[Any, Any, Any, Any, Any, An
     app.add_handler(CommandHandler("alerts", cmd_alerts))
     app.add_handler(CommandHandler("debug", cmd_debug))
     app.add_handler(CommandHandler("clearcache", cmd_clearcache))
+    app.add_handler(CommandHandler("mysettings", cmd_mysettings))
+    app.add_handler(CommandHandler("setthresholds", cmd_setthresholds))
+    app.add_handler(CommandHandler("myindices", cmd_myindices))
+    app.add_handler(CommandHandler("setindices", cmd_setindices))
     return app

@@ -18,18 +18,16 @@ requires-python = ">=3.13"
 dependencies = [
     "python-telegram-bot>=21.0",
     "python-dotenv>=1.0.0",
-    "gspread>=6.0.0",
-    "google-auth>=2.0.0",
     "yfinance>=0.2.50",
     "fear-and-greed>=0.4",
     "apscheduler>=3.10",
 ]
 
 [project.optional-dependencies]
-dev = ["pytest>=8.0", "ruff>=0.8"]
+dev = ["pytest>=8.0", "pytest-asyncio>=0.24", "ruff>=0.8"]
 
 [dependency-groups]
-dev = ["basedpyright>=1.35", "pre-commit>=4.0", "pytest>=8.0", "ruff>=0.8"]
+dev = ["basedpyright>=1.35", "pre-commit>=4.0", "pytest>=8.0", "pytest-asyncio>=0.24", "ruff>=0.8"]
 
 [tool.ruff]
 extend = "../../ruff.toml"
@@ -38,6 +36,7 @@ src = ["src", "tests"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = ["."]
+asyncio_mode = "auto"
 
 # Basedpyright config (replaces pyright for better compatibility)
 [tool.basedpyright]

@@ -2,7 +2,7 @@
 
 import pytest
 
-from index_watch.config import DEFAULT_DRAWDOWN_THRESHOLDS, Config
+from index_watch.config import DEFAULT_DRAWDOWN_THRESHOLDS, DEFAULT_INDEX_SYMBOLS, Config
 
 
 def test_config_from_env_defaults(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -59,3 +59,43 @@ def test_config_from_env_thresholds(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("DRAWDOWN_THRESHOLDS_PCT", "5 10 15 20 25")
     config = Config.from_env()
     assert config.drawdown_thresholds_pct == (5, 10, 15, 20, 25)
+
+
+def test_config_from_env_index_symbols_default(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv("INDEX_SYMBOLS", raising=False)
+    config = Config.from_env()
+    assert config.index_symbols == DEFAULT_INDEX_SYMBOLS
+
+
+def test_config_from_env_index_symbols_single_pair(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("INDEX_SYMBOLS", "^GSPC:S&P 500")
+    config = Config.from_env()
+    assert config.index_symbols == {"^GSPC": "S&P 500"}
+
+
+def test_config_from_env_index_symbols_multiple_pairs(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("INDEX_SYMBOLS", "^GSPC:S&P 500;^NDX:NASDAQ-100")
+    config = Config.from_env()
+    assert config.index_symbols == {"^GSPC": "S&P 500", "^NDX": "NASDAQ-100"}
+
+
+def test_config_from_env_index_symbols_missing_display_name_falls_back_to_symbol(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("INDEX_SYMBOLS", "^GSPC")
+    config = Config.from_env()
+    assert config.index_symbols == {"^GSPC": "^GSPC"}
+
+
+def test_config_from_env_index_symbols_skips_blank_entries(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("INDEX_SYMBOLS", "^GSPC:S&P 500;;  ;^NDX:NASDAQ-100")
+    config = Config.from_env()
+    assert config.index_symbols == {"^GSPC": "S&P 500", "^NDX": "NASDAQ-100"}
+
+
+def test_config_validate_rejects_empty_index_symbols() -> None:
+    config = Config(telegram_bot_token="t", index_symbols={})
+    with pytest.raises(ValueError, match="index symbol"):
+        config.validate()

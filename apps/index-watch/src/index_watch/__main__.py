@@ -6,7 +6,7 @@ import sys
 from dotenv import load_dotenv
 
 from index_watch import database
-from index_watch.bot import alert_state, build_application, setup_scheduler
+from index_watch.bot import alert_state, build_application, recovery_state, setup_scheduler
 from index_watch.config import Config
 
 logging.basicConfig(
@@ -68,6 +68,15 @@ def main() -> None:
             logger.info("Loaded %d alert states from database", len(persisted_state))
     except Exception as e:
         logger.warning("Failed to load alert state from database: %s", e)
+
+    # Load recovery/new-ATH notification state from database
+    try:
+        persisted_recovery_state = database.load_recovery_state()
+        if persisted_recovery_state:
+            recovery_state.notified = persisted_recovery_state
+            logger.info("Loaded %d recovery states from database", len(persisted_recovery_state))
+    except Exception as e:
+        logger.warning("Failed to load recovery state from database: %s", e)
 
     # Build and start bot
     app = build_application(config)

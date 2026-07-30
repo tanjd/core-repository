@@ -85,4 +85,8 @@ RATE_LIMITS = {
     "alerts": 10,  # 10 seconds
     "debug": 60,  # 1 minute
     "clearcache": 30,  # 30 seconds
+    "mysettings": 10,  # 10 seconds
+    "setthresholds": 10,  # 10 seconds
+    "myindices": 10,  # 10 seconds
+    "setindices": 10,  # 10 seconds
 }
