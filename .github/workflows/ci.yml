@@ -62,28 +62,36 @@ jobs:
             pre-commit run --all-files
             npx nx affected --base=${{ env.NX_BASE }} --head=${{ env.NX_HEAD }} -t lint test --verbose
 
-  detect-dockerized:
-    uses: ./.github/workflows/detect-dockerized-apps.yml
-
-  docker-build-check:
-    needs: detect-dockerized
-    if: needs.detect-dockerized.outputs.apps != '[]'
+  docker-build:
     timeout-minutes: 15
     runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        app: ${{ fromJson(needs.detect-dockerized.outputs.apps) }}
     steps:
       - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Read pnpm version from devcontainer config
+        id: pnpm-version
+        run: |
+          version=$(jq -r '.features["ghcr.io/devcontainers/features/node:1"].pnpmVersion' .devcontainer/devcontainer.json)
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
+      - uses: pnpm/action-setup@v6
+        with:
+          version: ${{ steps.pnpm-version.outputs.version }}
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
 
       - uses: docker/setup-buildx-action@v4
 
-      - name: Build ${{ matrix.app }} (no push)
-        uses: docker/build-push-action@v7
-        with:
-          context: .
-          file: apps/${{ matrix.app }}/Dockerfile
-          push: false
-          cache-from: type=gha,scope=${{ matrix.app }}
-          cache-to: type=gha,mode=max,scope=${{ matrix.app }}
+      - name: Set SHAs
+        id: set-shas
+        uses: nrwl/nx-set-shas@v5
+
+      - name: Build affected docker images (no push)
+        run: npx nx affected -t docker-build --base=${{ steps.set-shas.outputs.base }} --head=${{ steps.set-shas.outputs.head }}

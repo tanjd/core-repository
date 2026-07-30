@@ -44,6 +44,7 @@ Thumbs.db
 # Bytecode files
 __pycache__/
 *.py[cod]
+*.egg-info/
 
 # Poetry
 .poetry/
@@ -99,3 +100,6 @@ out
 
 # Draft specs (spec-driven planning docs) - not yet ready to commit
 docs/specs/
+
+# index-watch: runtime SQLite DB (mounted as a volume in its Dockerfile)
+apps/index-watch/data/*.db

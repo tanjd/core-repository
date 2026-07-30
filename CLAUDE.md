@@ -8,14 +8,23 @@ a devcontainer. Long-term home for side projects, starting with Telegram bots.
 - `apps/food-maps` — Next.js frontend.
 - `apps/food-maps-backend` — Go API (huma + chi + SQLite via `mattn/go-sqlite3`, cgo).
 - `apps/food-maps-e2e` — Playwright E2E tests for `food-maps`.
+- `apps/index-watch` — Telegram bot (index drawdown tracker), Python/uv,
+  migrated from the standalone `tanjd/index-watch` repo (squash-imported, no
+  preserved history). Same `uv` + `nx:run-commands` pattern as the
+  `telegram-bot` generator's own output, just not generator-scaffolded itself
+  (setuptools build-backend, not hatchling, since that's what the source
+  repo used).
 - `libs/food-maps-data` — shared TS lib, consumed via the `@tanjd/food-maps-data`
   path alias in `tsconfig.base.json` (not an npm package — no `package.json` of
   its own, folded into the root pnpm workspace).
 - `tools/generators/telegram-bot` — local Nx generator for scaffolding new bots.
 
-Telegram bots (`index-watch`, `table-talks`, `otobr-buddy`) currently live in
-their own standalone repos. Migrating them into this monorepo is a deliberate,
-one-at-a-time, separate effort — do not fold a live bot in as a drive-by change.
+`table-talks` (Telegram bot) and `ledger-lens` (Next.js + FastAPI dashboard,
+not a bot) are queued to migrate into this monorepo next, one at a time,
+same as `index-watch` above — a deliberate, separate effort per app; do not
+fold one in as a drive-by change. (`otobr-buddy`, previously the third
+queued bot, is no longer in the active migration queue — superseded by
+`ledger-lens`.)
 
 ## Common commands
 
@@ -133,26 +142,31 @@ merge can land changes the hook never saw.
 
 ## Python (uv + ruff)
 
-No Python app exists in the repo yet — apps are created on demand via
-`make new-bot` (see "Scaffolding" below), which is where these conventions
-currently live.
+`apps/index-watch` (migrated) is the only Python app in the repo so far;
+further apps are created on demand via `make new-bot` (see "Scaffolding"
+below) or migrated in like `index-watch` was.
 
 - **uv**, not Poetry — matches the real standalone bot repos and eases their
   eventual migration into this monorepo (see "Scaffolding" below for detail).
 - **Ruff** for lint + format. Shared rules live in a root-level `ruff.toml`;
-  each generated app's `pyproject.toml` inherits them via
+  each app's `pyproject.toml` inherits them via
   `[tool.ruff] extend = "../../ruff.toml"` and can add per-app overrides
   below the `extend` line — ruff merges rather than replaces. Current shared
   rules: `target-version = "py313"`, `line-length = 100`,
   `select = ["E", "F", "I", "N", "W", "UP"]`, `quote-style = "double"`.
+  **Important**: ruff's `src` setting does _not_ propagate through `extend`
+  (confirmed by reproduction, not just docs) — every app must also set its
+  own `src = ["src", "tests"]` below the `extend` line, or first-party
+  imports silently fail isort's import-grouping. Both the generator template
+  and `index-watch` already do this.
 - Lint target (`uv run ruff check . && uv run ruff format --check .`) and
   test target (`uv run pytest`) are cached `nx:run-commands` targets — same
   non-plugin approach as Go, since there's no official Nx Python plugin
   (`@nxlv/python` was removed; see "Scaffolding" below).
-- The three standalone bot repos (`index-watch`, `table-talks`,
-  `otobr-buddy`) keep their own independent, near-identical ruff config —
-  the shared `ruff.toml` here only covers apps scaffolded in this repo, and
-  isn't wired up to them unless/until they're migrated in.
+- The remaining standalone bot/app repos (`table-talks`, `ledger-lens`) keep
+  their own independent, near-identical ruff config — the shared
+  `ruff.toml` here only covers apps in this repo, and isn't wired up to them
+  unless/until they're migrated in.
 
 ## Scaffolding a new Telegram bot
 
@@ -175,9 +189,9 @@ stdlib-only health-check endpoint), `Dockerfile`, `.env.example`, `README.md`,
 and a `project.json` with `build`/`serve`/`test`/`lint`/`docker-build` targets
 that shell out to `uv` (`nx:run-commands`, same pattern `food-maps-backend`
 uses for Go — no language-specific Nx plugin). Uses **uv**, not Poetry, to
-match the real standalone bot repos (`index-watch` et al.) and ease their
-eventual migration into this monorepo. `@nxlv/python` was removed as a
-dependency — nothing here uses it.
+match the remaining standalone bot repos (`table-talks` et al.) and ease
+their eventual migration into this monorepo, same as `index-watch` already
+was. `@nxlv/python` was removed as a dependency — nothing here uses it.
 
 The devcontainer's `uv` feature (`ghcr.io/va-h/devcontainers-features/uv`) is
 required for the generator's post-generation `uv lock` step and for the
@@ -190,13 +204,32 @@ the **repo root as build context**: `make docker-build APP=<name>` (or
 `docker build -f apps/<name>/Dockerfile .` — see the root `.dockerignore`,
 since `node_modules` alone is 1.3G).
 
-On push to `main`, `.github/workflows/release.yml`:
+"Is this app dockerized" is expressed purely as an Nx fact: a project opts in
+by declaring empty `docker-build`/`docker-push` target stanzas (`{}`) in its
+`project.json` — the shared `nx.json` → `targetDefaults` entries supply the
+actual `docker buildx build` command via `nx:run-commands`, keyed off the
+`$NX_TASK_TARGET_PROJECT` env var Nx injects (which doubles as both the
+`apps/<name>` path segment and the `ghcr.io/tanjd/<name>` image name, so one
+shared command covers every dockerized app — no per-app duplication). Not
+every app is deployable (e.g. `food-maps` isn't Dockerized, `food-maps-backend`
+and `index-watch` are); the generator (`tools/generators/telegram-bot`) scaffolds
+new bots with these targets already wired up. Both targets are `cache: false`
+— a docker build/push has no restorable Nx artifact, and Nx-caching
+`docker-push` in particular would risk silently skipping a real push; Docker's
+own buildx layer cache (`--cache-from`/`--cache-to type=gha`) handles
+incrementality instead.
 
-1. Uses `nx show projects --affected --type app` to find changed apps.
-2. Filters to apps that own a `Dockerfile` (not every app is deployable —
-   e.g. `food-maps` isn't Dockerized, `food-maps-backend` is).
-3. Builds and pushes each to `ghcr.io/tanjd/<app-name>`, tagged `latest` and
-   by commit SHA.
+`.github/workflows/ci.yml` runs `nx affected -t docker-build` (build-only,
+verifies every affected dockerized app still builds, no registry push) on
+every push/PR to `main`. `.github/workflows/release.yml` (currently
+`workflow_dispatch`-only — see the "temporarily disabled" note in that file)
+runs `nx affected -t docker-push`, tagging `latest` and the commit SHA and
+pushing to `ghcr.io/tanjd/<app-name>`. Both replaced an earlier bash/jq loop
+that checked `apps/<app>/Dockerfile` for existence and fanned out over a
+GitHub Actions matrix per app — that detection is now just
+`nx affected --withTarget docker-build`/`docker-push`, and per-app GHA cache
+scoping comes from `$NX_TASK_TARGET_PROJECT` rather than a matrix variable, so
+there's a single `nx affected` step instead of one GH Actions job per app.
 
 GHCR was chosen over Docker Hub (which the standalone bots currently use) to
 reuse the `GITHUB_TOKEN` auth already set up in `ci.yml` — not a hard lock-in.
@@ -215,14 +248,16 @@ reuse the `GITHUB_TOKEN` auth already set up in `ci.yml` — not a hard lock-in.
   catches up.
 - GitHub branch protection on `main` (requiring the CI check before merge)
   hasn't been enabled — it's a repo-settings change, not a code change.
-- Migrating `index-watch`/`table-talks`/`otobr-buddy` into this monorepo:
-  one at a time, starting with the simplest, only after the generator +
-  deploy pattern above have been proven with a throwaway app (they have real
-  users/schedules — don't touch them as a drive-by change).
+- Migrating standalone repos into this monorepo, one at a time (they have
+  real users/schedules — don't touch them as a drive-by change): the
+  generator + deploy pattern has now been proven with a throwaway app, and
+  `index-watch` is migrated (see `apps/index-watch` above). `table-talks`
+  and `ledger-lens` are still pending, in that order.
 - Module boundary tags/`depConstraints` are documented as a convention (see
   "Nx conventions") but not applied to any `project.json` yet — adopt when
   the first cross-domain project (e.g. a migrated bot) makes enforcement
   useful, not speculatively now.
-- Root `ruff.toml` only covers apps scaffolded by the `telegram-bot`
-  generator; standalone bot repos keep their own independent config until
+- Root `ruff.toml` covers apps scaffolded by the `telegram-bot` generator
+  and migrated apps (`index-watch`); the remaining standalone repos
+  (`table-talks`, `ledger-lens`) keep their own independent config until
   migrated.

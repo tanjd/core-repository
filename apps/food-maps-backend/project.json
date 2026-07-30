@@ -11,6 +11,8 @@
         "main": "cmd/main.go"
       }
     },
+    "docker-build": {},
+    "docker-push": {},
     "golangci-lint": {
       "executor": "nx:run-commands",
       "options": {

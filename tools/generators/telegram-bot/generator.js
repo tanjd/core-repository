@@ -54,12 +54,8 @@ module.exports = async function telegramBotGenerator(tree, options) {
           cwd: projectRoot,
         },
       },
-      "docker-build": {
-        executor: "nx:run-commands",
-        options: {
-          command: `docker build -f ${projectRoot}/Dockerfile -t ${name} .`,
-        },
-      },
+      "docker-build": {},
+      "docker-push": {},
     },
   });
 
