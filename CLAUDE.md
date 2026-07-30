@@ -221,9 +221,9 @@ incrementality instead.
 
 `.github/workflows/ci.yml` runs `nx affected -t docker-build` (build-only,
 verifies every affected dockerized app still builds, no registry push) on
-every push/PR to `main`. `.github/workflows/release.yml` (currently
-`workflow_dispatch`-only — see the "temporarily disabled" note in that file)
-runs `nx affected -t docker-push`, tagging `latest` and the commit SHA and
+every push/PR to `main`. `.github/workflows/release.yml` runs on push to
+`main` (plus `workflow_dispatch` for manual re-runs), running
+`nx affected -t docker-push`, tagging `latest` and the commit SHA and
 pushing to `ghcr.io/tanjd/<app-name>`. Both replaced an earlier bash/jq loop
 that checked `apps/<app>/Dockerfile` for existence and fanned out over a
 GitHub Actions matrix per app — that detection is now just
