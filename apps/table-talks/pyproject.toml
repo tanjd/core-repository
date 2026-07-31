@@ -1,0 +1,51 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.package-dir]
+"" = "src"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+include = ["table_talks*"]
+
+[project]
+name = "table-talks"
+version = "1.5.0"
+description = "Telegram bot for table-talk conversation cards by theme"
+readme = "README.md"
+requires-python = ">=3.13"
+dependencies = [
+    "python-telegram-bot>=21.0",
+    "python-dotenv>=1.0.0",
+    "gspread>=6.0.0",
+    "google-auth>=2.0.0",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8.0", "ruff>=0.8"]
+
+[dependency-groups]
+dev = ["basedpyright>=1.35", "pre-commit>=4.0", "pytest>=8.0", "ruff>=0.8"]
+
+[tool.ruff]
+extend = "../../ruff.toml"
+src = ["src", "tests"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
+
+# Basedpyright config (replaces pyright for better compatibility)
+[tool.basedpyright]
+pythonVersion = "3.13"
+typeCheckingMode = "standard"
+venvPath = "."
+venv = ".venv"
+# Suppress warnings for external library type stubs and mocks
+reportUnknownMemberType = false
+reportUnknownParameterType = false
+reportUnknownArgumentType = false
+reportUnknownVariableType = false
+reportMissingParameterType = false
+reportPrivateUsage = false

@@ -1,0 +1,40 @@
+{
+  "name": "table-talks",
+  "projectType": "application",
+  "sourceRoot": "apps/table-talks/src",
+  "tags": [],
+  "targets": {
+    "build": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "uv sync --locked",
+        "cwd": "apps/table-talks"
+      }
+    },
+    "docker-build": {},
+    "docker-push": {},
+    "lint": {
+      "cache": true,
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "uv run ruff check . && uv run ruff format --check .",
+        "cwd": "apps/table-talks"
+      }
+    },
+    "serve": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "uv run python -m table_talks.index",
+        "cwd": "apps/table-talks"
+      }
+    },
+    "test": {
+      "cache": true,
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "uv run pytest",
+        "cwd": "apps/table-talks"
+      }
+    }
+  }
+}

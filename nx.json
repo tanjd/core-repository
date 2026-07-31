@@ -86,7 +86,8 @@
     },
     "projects": [
       "food-maps-backend",
-      "index-watch"
+      "index-watch",
+      "table-talks"
     ],
     "projectsRelationship": "independent",
     "version": {

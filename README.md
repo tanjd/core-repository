@@ -28,7 +28,8 @@ contributors. Long-term home for side projects, starting with Telegram bots.
 │   ├── food-maps/              # Next.js frontend
 │   ├── food-maps-backend/      # Go API (huma + chi + SQLite)
 │   ├── food-maps-e2e/          # Playwright E2E tests for food-maps
-│   └── index-watch/            # Telegram bot (index drawdown tracker), Python/uv
+│   ├── index-watch/            # Telegram bot (index drawdown tracker), Python/uv
+│   └── table-talks/            # Telegram bot (conversation card game), Python/uv
 ├── libs/
 │   └── food-maps-data/         # Shared TS lib (@tanjd/food-maps-data path alias)
 ├── tools/
@@ -37,8 +38,8 @@ contributors. Long-term home for side projects, starting with Telegram bots.
 └── ...
 ```
 
-`table-talks` and `ledger-lens` are queued to migrate into this monorepo
-next, one at a time, following the same pattern used for `index-watch`.
+`ledger-lens` is queued to migrate into this monorepo next, following the
+same pattern used for `index-watch` and `table-talks`.
 
 ## 🚀 Getting Started
 
