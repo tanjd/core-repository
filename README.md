@@ -29,7 +29,9 @@ contributors. Long-term home for side projects, starting with Telegram bots.
 │   ├── food-maps-backend/      # Go API (huma + chi + SQLite)
 │   ├── food-maps-e2e/          # Playwright E2E tests for food-maps
 │   ├── index-watch/            # Telegram bot (index drawdown tracker), Python/uv
-│   └── table-talks/            # Telegram bot (conversation card game), Python/uv
+│   ├── table-talks/            # Telegram bot (conversation card game), Python/uv
+│   ├── ledger-lens-backend/    # FastAPI portfolio-analysis API, Python/uv
+│   └── ledger-lens/            # Next.js portfolio-analysis dashboard
 ├── libs/
 │   └── food-maps-data/         # Shared TS lib (@tanjd/food-maps-data path alias)
 ├── tools/
@@ -37,9 +39,6 @@ contributors. Long-term home for side projects, starting with Telegram bots.
 │       └── telegram-bot/       # Local Nx generator for scaffolding new bots
 └── ...
 ```
-
-`ledger-lens` is queued to migrate into this monorepo next, following the
-same pattern used for `index-watch` and `table-talks`.
 
 ## 🚀 Getting Started
 

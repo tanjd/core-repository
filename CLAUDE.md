@@ -28,16 +28,29 @@ a devcontainer. Long-term home for side projects, starting with Telegram bots.
   match `nx release`'s changelog header format (`#` for the newest entry,
   `##` for older ones) — `index-watch` has no equivalent runtime feature, so
   this gap was never hit there.
+- `apps/ledger-lens-backend` — Python/uv + FastAPI + SQLModel API (portfolio
+  CSV ingestion + analysis), migrated from the standalone `tanjd/ledger-lens`
+  repo's `backend/` directory (squash-imported, no preserved history).
+  Flattened directly into `apps/ledger-lens-backend` rather than nested under
+  a `backend/` subdir, which shifted `app/config.py`'s default `data_dir`
+  and `app/main.py`'s version-read path up one directory level — both
+  adapted accordingly. `app/main.py`'s `/api/version` used to read
+  `importlib.metadata.version(...)` (sourced from `pyproject.toml`); adapted
+  to read `package.json` directly (the file `nx release` actually keeps
+  current) since the frontend's version display in the sidebar depends on
+  this staying accurate, same class of fix as `table-talks`' `version.py`.
+- `apps/ledger-lens` — Next.js + Tailwind CSS + shadcn/ui frontend for the
+  above, migrated from the standalone repo's `frontend/` directory (same
+  squash-import, flattened the same way). Its `Dockerfile` can't reuse the
+  source repo's `npm ci`-based build — this app's `package.json` is a bare
+  version manifest like every other app here (no per-app dependencies; see
+  "Release versioning" below), so the image build runs `pnpm install` at the
+  repo root and builds via `pnpm exec nx build ledger-lens` instead of a
+  package.json `build` script.
 - `libs/food-maps-data` — shared TS lib, consumed via the `@tanjd/food-maps-data`
   path alias in `tsconfig.base.json` (not an npm package — no `package.json` of
   its own, folded into the root pnpm workspace).
 - `tools/generators/telegram-bot` — local Nx generator for scaffolding new bots.
-
-`ledger-lens` (Next.js + FastAPI dashboard, not a bot) is queued to migrate
-into this monorepo next, same as `index-watch`/`table-talks` above — a
-deliberate, separate effort; do not fold it in as a drive-by change.
-(`otobr-buddy`, previously a third queued bot, is no longer in the active
-migration queue — superseded by `ledger-lens`.)
 
 ## Common commands
 
@@ -178,9 +191,11 @@ Python apps in the repo so far; further apps are created on demand via
   `select = ["E", "F", "I", "N", "W", "UP"]`, `quote-style = "double"`.
   **Important**: ruff's `src` setting does _not_ propagate through `extend`
   (confirmed by reproduction, not just docs) — every app must also set its
-  own `src = ["src", "tests"]` below the `extend` line, or first-party
-  imports silently fail isort's import-grouping. The generator template,
-  `index-watch`, and `table-talks` already do this.
+  own `src` (relative to that app's actual package layout — `["src", "tests"]`
+  for the generator template, `index-watch`, and `table-talks`; `["app",
+"tests"]` for `ledger-lens-backend`, whose package dir is `app/` not
+  `src/`) below the `extend` line, or first-party imports silently fail
+  isort's import-grouping.
 - Lint target (`uv run ruff check . && uv run ruff format --check .`) and
   test target (`uv run pytest`) are cached `nx:run-commands` targets — same
   non-plugin approach as Go, since there's no official Nx Python plugin
@@ -234,8 +249,16 @@ actual `docker buildx build` command via `nx:run-commands`, keyed off the
 `apps/<name>` path segment and the `ghcr.io/tanjd/<name>` image name, so one
 shared command covers every dockerized app — no per-app duplication). Not
 every app is deployable (e.g. `food-maps` isn't Dockerized, `food-maps-backend`,
-`index-watch`, and `table-talks` are); the generator (`tools/generators/telegram-bot`)
-scaffolds new bots with these targets already wired up. Both targets are `cache: false`
+`index-watch`, `table-talks`, `ledger-lens-backend`, and `ledger-lens` are);
+the generator (`tools/generators/telegram-bot`) scaffolds new bots with these
+targets already wired up. `ledger-lens`'s `Dockerfile` established a new
+sub-pattern the first three dockerized apps didn't need: since every TS app's
+`package.json` here is a bare version manifest with no dependencies of its
+own (see "Release versioning" below), a Next.js app's Docker build can't
+`npm ci`/`npm run build` from its own app directory the way the standalone
+`tanjd/ledger-lens` repo did — it installs the full pnpm workspace from the
+repo root and builds via `pnpm exec nx build ledger-lens` instead of a
+package.json script. Both targets are `cache: false`
 — a docker build/push has no restorable Nx artifact, and Nx-caching
 `docker-push` in particular would risk silently skipping a real push; Docker's
 own buildx layer cache (`--cache-from`/`--cache-to type=gha`) handles
@@ -307,11 +330,12 @@ unrelated commit range could mark a project "affected" that was never
 actually released this time, publishing an image not backed by any real
 version bump.
 
-`food-maps-backend`, `index-watch`, and `table-talks` are versioned
-independently — `release.projects` in `nx.json` is the explicit list of
-which apps participate (not every project; `food-maps`/`food-maps-data`/
-`food-maps-e2e` aren't deployed, so they're excluded). New bots must be
-added to that list by hand when scaffolded/migrated.
+`food-maps-backend`, `index-watch`, `table-talks`, `ledger-lens-backend`, and
+`ledger-lens` are versioned independently — `release.projects` in `nx.json`
+is the explicit list of which apps participate (not every project;
+`food-maps`/`food-maps-data`/`food-maps-e2e` aren't deployed, so they're
+excluded). New bots/apps must be added to that list by hand when
+scaffolded/migrated.
 
 - Each app carries a bare `package.json` (`{name, version, private: true}`)
   purely as the version manifest `nx release` reads/writes — it joins the
@@ -367,18 +391,12 @@ release`'s format (`#` for the newest entry, `##` for older ones), not
   catches up.
 - GitHub branch protection on `main` (requiring the CI check before merge)
   hasn't been enabled — it's a repo-settings change, not a code change.
-- Migrating standalone repos into this monorepo, one at a time (they have
-  real users/schedules — don't touch them as a drive-by change): the
-  generator + deploy pattern has now been proven with a throwaway app, and
-  `index-watch` and `table-talks` are migrated (see `apps/index-watch` and
-  `apps/table-talks` above). `ledger-lens` is still pending.
 - Module boundary tags/`depConstraints` are documented as a convention (see
   "Nx conventions") but not applied to any `project.json` yet — adopt when
   the first cross-domain project (e.g. a migrated bot) makes enforcement
   useful, not speculatively now.
 - Root `ruff.toml` covers apps scaffolded by the `telegram-bot` generator
-  and migrated apps (`index-watch`, `table-talks`); the remaining standalone
-  repo (`ledger-lens`) keeps its own independent config until migrated.
+  and all migrated apps (`index-watch`, `table-talks`, `ledger-lens-backend`).
 - Prettier has been replaced by `oxfmt` (Rust-based, from the oxc project) for
   JS/TS/JSON/MD/YAML/CSS/HTML formatting — see `.oxfmtrc.json` and the
   `lint-staged`/`format` wiring in `package.json`. ESLint is unchanged for now;
@@ -389,17 +407,19 @@ release`'s format (`#` for the newest entry, `##` for older ones), not
   no-op per the "Module boundary tags" gap above, so dropping it is low-risk;
   the latter, used in `libs/food-maps-data`, would just be dropped too).
 - `nx release` is bootstrapped and running automatically on every push to
-  `main` for `food-maps-backend` and `index-watch` (tags exist:
-  `food-maps-backend@0.2.0`, `index-watch@{0.1.1,0.2.0,1.0.0}`).
-  `table-talks` still needs its one-time first-release bootstrap **after
-  this migration is merged to `main`** (not from the feature branch — the
-  bootstrap tag needs to land on a commit reachable from `main`, which a
-  squash-merge wouldn't guarantee for a feature-branch-run bootstrap):
+  `main` for `food-maps-backend`, `index-watch`, and `table-talks` (tags
+  exist: `food-maps-backend@0.2.0`, `index-watch@{0.1.1,0.2.0,1.0.0}`,
+  `table-talks@1.5.0`). `ledger-lens-backend` and `ledger-lens` still need
+  their one-time first-release bootstrap **after this migration is merged to
+  `main`** (not from the feature branch — the bootstrap tag needs to land on
+  a commit reachable from `main`, which a squash-merge wouldn't guarantee
+  for a feature-branch-run bootstrap):
   ```bash
   git checkout main && git pull
-  # table-talks: pin to the version already live on Docker Hub, for continuity
-  # (its bot-info screen displays this version to end users, unlike index-watch)
-  npx nx release 1.5.0 --projects table-talks --first-release
+  # pin both to the version already live on Docker Hub, for continuity
+  # (both surface this version to end users — the frontend sidebar reads it
+  # directly, the backend's /api/version does too)
+  npx nx release 1.5.0 --projects ledger-lens-backend,ledger-lens --first-release
   ```
   Run with `--dry-run` appended first to preview. After this one-time step,
-  every subsequent push to `main` versions `table-talks` automatically too.
+  every subsequent push to `main` versions both automatically too.

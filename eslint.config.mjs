@@ -5,7 +5,10 @@ export default [
   ...nx.configs["flat/typescript"],
   ...nx.configs["flat/javascript"],
   {
-    ignores: ["**/dist"],
+    // next-env.d.ts is Next.js-generated (triple-slash reference to next/types,
+    // not a real import) — @nx/enforce-module-boundaries otherwise flags it as
+    // an external-resource import in every Next.js app, not just this one.
+    ignores: ["**/dist", "**/next-env.d.ts"],
   },
   {
     files: ["**/*.ts", "**/*.tsx", "**/*.js", "**/*.jsx"],

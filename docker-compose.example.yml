@@ -1,0 +1,66 @@
+services:
+  backend:
+    image: ghcr.io/tanjd/ledger-lens-backend:latest
+    container_name: ledger-lens-backend
+    restart: unless-stopped
+    # Port 8000 is only needed if you want direct API access for debugging.
+    # The frontend proxies /api/* internally, so this is optional.
+    # ports:
+    #   - "8000:8000"
+    volumes:
+      # TrueNAS: use an absolute dataset path, e.g. /mnt/tank/ledger-lens
+      # Local:   ./data works fine
+      - /mnt/tank/ledger-lens:/app/data
+    environment:
+      - LEDGER_DATA_DIR=/app/data
+      # Comma-separated list of allowed origins for the backend API.
+      # For multiple origins: http://localhost:3000,http://nas.local:3000
+      - LEDGER_CORS_ORIGINS=http://localhost:3000
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')",
+        ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  frontend:
+    image: ghcr.io/tanjd/ledger-lens:latest
+    container_name: ledger-lens-frontend
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      # The Next.js server (inside Docker) proxies /api/* to this URL.
+      # Uses the Docker Compose service name — no changes needed here.
+      - BACKEND_URL=http://backend:8000
+    depends_on:
+      backend:
+        condition: service_healthy
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "require('http').get('http://localhost:3000', (r) => process.exit(r.statusCode < 400 ? 0 : 1))",
+        ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"

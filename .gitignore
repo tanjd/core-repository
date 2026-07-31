@@ -103,3 +103,11 @@ docs/specs/
 
 # index-watch: runtime SQLite DB (mounted as a volume in its Dockerfile)
 apps/index-watch/data/*.db
+
+# ledger-lens-backend: runtime CSV drop dir + SQLite DB (mounted as a volume
+# in its Dockerfile) — whole dir ignored, no tracked content inside
+apps/ledger-lens-backend/data/
+
+# ledger-lens: don't commit a locally-generated compose file; use the
+# example as a template (same convention the standalone repo used)
+docker-compose.yml
