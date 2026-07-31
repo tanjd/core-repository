@@ -290,6 +290,20 @@ tokens, then updating the `GHA_TRIGGER_TOKEN` repo secret.
 `publish.yml`'s `workflow_dispatch` trigger doubles as how to retry a
 publish without re-cutting the release.
 
+`release.yml`'s "Configure git identity" step commits release changes as
+tanjd's own account (`tanjd <42729752+tanjd@users.noreply.github.com>`), not
+`github-actions[bot]` — followed by a "Configure SSH commit signing" step
+that points `user.signingkey` at a private key written from the
+`SSH_PRIVATE_SIGNING_KEY` secret and sets `gpg.format ssh` +
+`commit.gpgsign true`, so the commit comes out Verified on GitHub. This is
+the only way to get a Verified badge here: GitHub validates a signature
+against a signing key registered on a real account, and a bot identity has
+no account settings to register one against. Same convention as
+`index-watch`/`table-talks`, which sign the same way via
+`python-semantic-release`'s `ssh_private_signing_key`/`git_committer_*`
+inputs, reusing the same key pair (`SSH_PRIVATE_SIGNING_KEY`/
+`SSH_PUBLIC_SIGNING_KEY` — one signing key per person, not per repo).
+
 Publishing is deliberately **not** `nx affected -t docker-push` off a
 commit range: a `release: published` event names one exact project+version,
 not a diff, and `nx affected` would be the wrong tool here anyway — the

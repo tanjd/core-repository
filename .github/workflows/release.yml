@@ -62,9 +62,31 @@ jobs:
       - run: pnpm install --frozen-lockfile
 
       - name: Configure git identity for release commits
+        # Commits as tanjd's own account, not github-actions[bot]: GitHub can
+        # only verify a commit signature against a signing key registered on
+        # a real account, and a bot identity has no such account settings to
+        # register one against. Same identity index-watch/table-talks commit
+        # release changes as, for the same reason.
         run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git config user.name "tanjd"
+          git config user.email "42729752+tanjd@users.noreply.github.com"
+
+      - name: Configure SSH commit signing
+        # Mirrors index-watch/table-talks's python-semantic-release
+        # ssh_private_signing_key input, hand-rolled since nx release has no
+        # equivalent option. user.signingkey points at the private key file;
+        # git derives the public half itself when signing (no ssh-agent
+        # needed for an unencrypted automation key). Verification itself is
+        # server-side against the public key already registered on tanjd's
+        # GitHub account - nothing else here needs to change.
+        run: |
+          mkdir -p ~/.ssh
+          umask 077
+          printf '%s\n' "${{ secrets.SSH_PRIVATE_SIGNING_KEY }}" > ~/.ssh/release_signing_key
+          chmod 600 ~/.ssh/release_signing_key
+          git config gpg.format ssh
+          git config user.signingkey ~/.ssh/release_signing_key
+          git config commit.gpgsign true
 
       - name: Version affected projects and tag releases
         # Uses GHA_TRIGGER_TOKEN (a fine-grained PAT), not the default
