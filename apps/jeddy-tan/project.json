@@ -1,0 +1,7 @@
+{
+  "$schema": "../../node_modules/nx/schemas/project-schema.json",
+  "name": "jeddy-tan",
+  "projectType": "application",
+  "sourceRoot": "apps/jeddy-tan/src",
+  "tags": []
+}

@@ -64,6 +64,15 @@
         "targetName": "test"
       },
       "plugin": "@nx/jest/plugin"
+    },
+    {
+      "options": {
+        "buildTargetName": "build",
+        "devTargetName": "serve",
+        "previewTargetName": "preview",
+        "testTargetName": "test"
+      },
+      "plugin": "@nx/vite/plugin"
     }
   ],
   "pluginsConfig": {

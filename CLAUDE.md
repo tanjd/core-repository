@@ -5,51 +5,30 @@ a devcontainer. Long-term home for side projects, starting with Telegram bots.
 
 ## Workspace layout
 
-- `apps/food-maps` — Next.js frontend.
-- `apps/food-maps-backend` — Go API (huma + chi + SQLite via `mattn/go-sqlite3`, cgo).
+Each non-trivial app under `apps/` has its own `apps/<name>/CLAUDE.md` with migration history,
+adaptations, and app-specific gotchas — Claude Code loads a nested `CLAUDE.md` automatically once
+work touches that directory, so it costs nothing when working elsewhere. This file stays scoped
+to conventions that apply regardless of which app you're in (Nx, Go/Python tooling, deployment,
+release process); the list below is just an index into the per-app files.
+
+- `apps/food-maps` — Next.js frontend. See `apps/food-maps/CLAUDE.md`.
+- `apps/food-maps-backend` — Go API (huma + chi + SQLite via `mattn/go-sqlite3`, cgo). See
+  `apps/food-maps-backend/CLAUDE.md`.
 - `apps/food-maps-e2e` — Playwright E2E tests for `food-maps`.
-- `apps/index-watch` — Telegram bot (index drawdown tracker), Python/uv,
-  migrated from the standalone `tanjd/index-watch` repo (squash-imported, no
-  preserved history). Same `uv` + `nx:run-commands` pattern as the
-  `telegram-bot` generator's own output, just not generator-scaffolded itself
-  (setuptools build-backend, not hatchling, since that's what the source
-  repo used).
-- `apps/table-talks` — Telegram bot (theme-based conversation card game),
-  Python/uv, migrated from the standalone `tanjd/table-talks` repo
-  (squash-imported, no preserved history). Same non-generator-scaffolded
-  pattern as `index-watch`, with two adaptations beyond the standard
-  cross-cutting drops: its `src/` package was renamed from the standalone
-  repo's flat `src/` (`python -m src.index`) to `src/table_talks/`
-  (`python -m table_talks.index`) to match `index-watch`'s and the
-  generator's nested-package convention; and its bot-info-screen feature
-  (`src/table_talks/version.py`, reads a live version + recent changelog
-  entries for in-chat display) was adapted to read `package.json` (the file
-  `nx release` actually keeps current) instead of `pyproject.toml`, and to
-  match `nx release`'s changelog header format (`#` for the newest entry,
-  `##` for older ones) — `index-watch` has no equivalent runtime feature, so
-  this gap was never hit there.
-- `apps/ledger-lens-backend` — Python/uv + FastAPI + SQLModel API (portfolio
-  CSV ingestion + analysis), migrated from the standalone `tanjd/ledger-lens`
-  repo's `backend/` directory (squash-imported, no preserved history).
-  Flattened directly into `apps/ledger-lens-backend` rather than nested under
-  a `backend/` subdir, which shifted `app/config.py`'s default `data_dir`
-  and `app/main.py`'s version-read path up one directory level — both
-  adapted accordingly. `app/main.py`'s `/api/version` used to read
-  `importlib.metadata.version(...)` (sourced from `pyproject.toml`); adapted
-  to read `package.json` directly (the file `nx release` actually keeps
-  current) since the frontend's version display in the sidebar depends on
-  this staying accurate, same class of fix as `table-talks`' `version.py`.
-- `apps/ledger-lens` — Next.js + Tailwind CSS + shadcn/ui frontend for the
-  above, migrated from the standalone repo's `frontend/` directory (same
-  squash-import, flattened the same way). Its `Dockerfile` can't reuse the
-  source repo's `npm ci`-based build — this app's `package.json` is a bare
-  version manifest like every other app here (no per-app dependencies; see
-  "Release versioning" below), so the image build runs `pnpm install` at the
-  repo root and builds via `pnpm exec nx build ledger-lens` instead of a
-  package.json `build` script.
+- `apps/index-watch` — Telegram bot (index drawdown tracker), Python/uv. See
+  `apps/index-watch/CLAUDE.md`.
+- `apps/table-talks` — Telegram bot (theme-based conversation card game), Python/uv. See
+  `apps/table-talks/CLAUDE.md`.
+- `apps/ledger-lens-backend` — Python/uv + FastAPI + SQLModel API (portfolio CSV ingestion +
+  analysis). See `apps/ledger-lens-backend/CLAUDE.md`.
+- `apps/ledger-lens` — Next.js + Tailwind CSS + shadcn/ui frontend for the above. See
+  `apps/ledger-lens/CLAUDE.md`.
 - `libs/food-maps-data` — shared TS lib, consumed via the `@tanjd/food-maps-data`
   path alias in `tsconfig.base.json` (not an npm package — no `package.json` of
   its own, folded into the root pnpm workspace).
+- `apps/jeddy-tan` — personal portfolio site (React Router + MUI), plain JS on
+  Vite/`@nx/vite` (unlike every other frontend here, which is Next.js). See
+  `apps/jeddy-tan/CLAUDE.md`.
 - `tools/generators/telegram-bot` — local Nx generator for scaffolding new bots.
 
 ## Common commands
@@ -114,14 +93,15 @@ merge can land changes the hook never saw.
   pre-commit and CI) when a project's inputs haven't changed.
 - `namedInputs.sharedGlobals` includes `.github/workflows/ci.yml` — editing
   that file busts the cache for every project.
-- **Inferred tasks**: `@nx/next`, `@nx/playwright`, `@nx/eslint`, `@nx/jest`,
-  and `@nx-go/nx-go` are registered Nx plugins (`nx.json` → `plugins`) that
-  auto-register targets from config files already present in a project
-  (`next.config.js`, `playwright.config.ts`, `eslint.config.mjs`,
-  `jest.config.ts`) — no need to hand-write those targets for a new TS
-  app/lib. Go and Python have no such plugin coverage for their language-
-  specific targets, so those are hand-defined `nx:run-commands` targets in
-  `project.json` instead (see the Go and Python sections below).
+- **Inferred tasks**: `@nx/next`, `@nx/vite`, `@nx/playwright`, `@nx/eslint`,
+  `@nx/jest`, and `@nx-go/nx-go` are registered Nx plugins (`nx.json` →
+  `plugins`) that auto-register targets from config files already present in
+  a project (`next.config.js`, `vite.config.js`, `playwright.config.ts`,
+  `eslint.config.mjs`, `jest.config.ts`) — no need to hand-write those
+  targets for a new TS app/lib. Go and Python have no such plugin coverage
+  for their language-specific targets, so those are hand-defined
+  `nx:run-commands` targets in `project.json` instead (see
+  `apps/food-maps-backend/CLAUDE.md` and the Python section below).
 - **Cross-project dependencies** are declared two ways:
   - Inferred automatically from TS imports, via `@nx/js`'s
     `analyzeSourceFiles: true` (`nx.json` → `pluginsConfig`) — e.g.
@@ -162,24 +142,12 @@ merge can land changes the hook never saw.
     ];
     ```
 
-## Go (`food-maps-backend`)
-
-- Lint config is `.golangci.yaml` at the repo root — note the full "golangci",
-  not "golanci". The installed `golangci-lint` is v2, which requires the v2
-  config schema (`version: "2"`, linter settings under `linters.settings`, not
-  bare top-level keys). Verify a config change is actually being picked up with
-  `make golangci-verify` (or `golangci-lint run -v`, looking for
-  `[config_reader] Used config file ...`) — a silent fallback to defaults is
-  exactly the bug that motivated this note.
-- `nx run food-maps-backend:lint` depends on `golangci-lint` (see
-  `nx.json` → `targetDefaults.lint.dependsOn`), so a plain `nx affected -t lint`
-  genuinely gates on it, not just `go vet`/`go fmt`.
-
 ## Python (uv + ruff)
 
-`apps/index-watch` and `apps/table-talks` (both migrated) are the only
-Python apps in the repo so far; further apps are created on demand via
-`make new-bot` (see "Scaffolding" below) or migrated in like these were.
+`apps/index-watch`, `apps/table-talks`, and `apps/ledger-lens-backend` (all
+migrated) are the only Python apps in the repo so far; further apps are
+created on demand via `make new-bot` (see "Scaffolding" below) or migrated
+in like these were.
 
 - **uv**, not Poetry — matches the real standalone bot repos and eases their
   eventual migration into this monorepo (see "Scaffolding" below for detail).
@@ -191,19 +159,13 @@ Python apps in the repo so far; further apps are created on demand via
   `select = ["E", "F", "I", "N", "W", "UP"]`, `quote-style = "double"`.
   **Important**: ruff's `src` setting does _not_ propagate through `extend`
   (confirmed by reproduction, not just docs) — every app must also set its
-  own `src` (relative to that app's actual package layout — `["src", "tests"]`
-  for the generator template, `index-watch`, and `table-talks`; `["app",
-"tests"]` for `ledger-lens-backend`, whose package dir is `app/` not
-  `src/`) below the `extend` line, or first-party imports silently fail
-  isort's import-grouping.
+  own `src` below the `extend` line, relative to that app's actual package
+  layout (see each app's own `CLAUDE.md` for its specific value), or
+  first-party imports silently fail isort's import-grouping.
 - Lint target (`uv run ruff check . && uv run ruff format --check .`) and
   test target (`uv run pytest`) are cached `nx:run-commands` targets — same
   non-plugin approach as Go, since there's no official Nx Python plugin
   (`@nxlv/python` was removed; see "Scaffolding" below).
-- The remaining standalone app repo (`ledger-lens`) keeps its own
-  independent, near-identical ruff config — the shared `ruff.toml` here
-  only covers apps in this repo, and isn't wired up to it unless/until it's
-  migrated in.
 
 ## Scaffolding a new Telegram bot
 
@@ -252,13 +214,10 @@ every app is deployable (e.g. `food-maps` isn't Dockerized, `food-maps-backend`,
 `index-watch`, `table-talks`, `ledger-lens-backend`, and `ledger-lens` are);
 the generator (`tools/generators/telegram-bot`) scaffolds new bots with these
 targets already wired up. `ledger-lens`'s `Dockerfile` established a new
-sub-pattern the first three dockerized apps didn't need: since every TS app's
+sub-pattern the first three dockerized apps didn't need, since every TS app's
 `package.json` here is a bare version manifest with no dependencies of its
-own (see "Release versioning" below), a Next.js app's Docker build can't
-`npm ci`/`npm run build` from its own app directory the way the standalone
-`tanjd/ledger-lens` repo did — it installs the full pnpm workspace from the
-repo root and builds via `pnpm exec nx build ledger-lens` instead of a
-package.json script. Both targets are `cache: false`
+own (see "Release versioning" below) — see `apps/ledger-lens/CLAUDE.md` for
+the specifics. Both `docker-build`/`docker-push` targets are `cache: false`
 — a docker build/push has no restorable Nx artifact, and Nx-caching
 `docker-push` in particular would risk silently skipping a real push; Docker's
 own buildx layer cache (`--cache-from`/`--cache-to type=gha`) handles
@@ -276,6 +235,15 @@ job per app (this replaced an earlier bash/jq loop that checked
 
 GHCR was chosen over Docker Hub (which the standalone bots currently use) to
 reuse the `GITHUB_TOKEN` auth already set up in `ci.yml` — not a hard lock-in.
+
+`apps/jeddy-tan` is the one exception to the Docker/GHCR pattern above: it's
+a static site deployed via Cloudflare Pages' own Git integration, which
+watches a repo directly and builds outside this repo's GitHub Actions
+entirely — no `docker-build`/`docker-push` targets, no GHCR image. Cloudflare
+Pages has native monorepo support (confirmed against its current docs), but
+it needs the project's dashboard settings pointed at this repo rather than
+the old standalone `tanjd/jeddy-tan` one — see "Known gaps / deferred work"
+for the exact settings this still needs (a manual, one-time dashboard change).
 
 ## Release versioning (`nx release`) and publishing
 
@@ -322,6 +290,20 @@ tokens, then updating the `GHA_TRIGGER_TOKEN` repo secret.
 `publish.yml`'s `workflow_dispatch` trigger doubles as how to retry a
 publish without re-cutting the release.
 
+`release.yml`'s "Configure git identity" step commits release changes as
+tanjd's own account (`tanjd <42729752+tanjd@users.noreply.github.com>`), not
+`github-actions[bot]` — followed by a "Configure SSH commit signing" step
+that points `user.signingkey` at a private key written from the
+`SSH_PRIVATE_SIGNING_KEY` secret and sets `gpg.format ssh` +
+`commit.gpgsign true`, so the commit comes out Verified on GitHub. This is
+the only way to get a Verified badge here: GitHub validates a signature
+against a signing key registered on a real account, and a bot identity has
+no account settings to register one against. Same convention as
+`index-watch`/`table-talks`, which sign the same way via
+`python-semantic-release`'s `ssh_private_signing_key`/`git_committer_*`
+inputs, reusing the same key pair (`SSH_PRIVATE_SIGNING_KEY`/
+`SSH_PUBLIC_SIGNING_KEY` — one signing key per person, not per repo).
+
 Publishing is deliberately **not** `nx affected -t docker-push` off a
 commit range: a `release: published` event names one exact project+version,
 not a diff, and `nx affected` would be the wrong tool here anyway — the
@@ -366,29 +348,13 @@ scaffolded/migrated.
 "auto"` in `nx.json` — only projects whose actual dependencies changed
   are marked affected by a lockfile diff now (verified: an unrelated JS
   dependency bump no longer force-patches every `release.projects` entry).
-- `apps/index-watch/CHANGELOG.md` and `apps/table-talks/CHANGELOG.md` were
-  each seeded with their standalone repo's pre-migration history (both used
-  `python-semantic-release`, tag format `v{version}` — an unrelated tool to
-  `nx release`) so changelog continuity survives the migration; `nx release`
-  prepends new entries above it. `table-talks` actually reads this file (and
-  `package.json`'s version) at runtime for its in-chat bot-info screen
-  (`src/table_talks/version.py`) — unlike `index-watch`, where nothing reads
-  either file — so its changelog-header regex was widened to match `nx
-release`'s format (`#` for the newest entry, `##` for older ones), not
-  just the carried-over `python-semantic-release` format (`##` only).
 
 ## Known gaps / deferred work
 
-- Nx is capped at 22.2.2, not latest: @nx-go/nx-go (food-maps-backend's Go
-  plugin) has zero versions supporting Nx 23+ as of this writing (confirmed
-  by `nx show projects` crashing entirely, not just Go targets, under 23.1.0).
-  Before running `make upgrade-nx` (or `nx migrate latest`) again, check
-  `npm view @nx-go/nx-go dependencies` for its `@nx/devkit` range first.
-- food-maps' Next.js build/serve targets pin `"webpack": true` in
-  `project.json` — Turbopack (Next 16's default) can't build this workspace
-  because it hard-fails on @nx/devkit's optional Angular-schematics adapter
-  requires, where webpack just skips them gracefully. Revisit once `@nx/next`
-  catches up.
+- Nx is capped at 22.2.2, not latest — see `apps/food-maps-backend/CLAUDE.md`
+  for why (its Go plugin blocks the upgrade). Before running `make upgrade-nx`
+  (or `nx migrate latest`) again, check `npm view @nx-go/nx-go dependencies`
+  for its `@nx/devkit` range first.
 - GitHub branch protection on `main` (requiring the CI check before merge)
   hasn't been enabled — it's a repo-settings change, not a code change.
 - Module boundary tags/`depConstraints` are documented as a convention (see
@@ -406,20 +372,23 @@ release`'s format (`#` for the newest entry, `##` for older ones), not
   `@nx/dependency-checks` having no oxlint equivalent (the former is already a
   no-op per the "Module boundary tags" gap above, so dropping it is low-risk;
   the latter, used in `libs/food-maps-data`, would just be dropped too).
-- `nx release` is bootstrapped and running automatically on every push to
-  `main` for `food-maps-backend`, `index-watch`, and `table-talks` (tags
-  exist: `food-maps-backend@0.2.0`, `index-watch@{0.1.1,0.2.0,1.0.0}`,
-  `table-talks@1.5.0`). `ledger-lens-backend` and `ledger-lens` still need
-  their one-time first-release bootstrap **after this migration is merged to
-  `main`** (not from the feature branch — the bootstrap tag needs to land on
-  a commit reachable from `main`, which a squash-merge wouldn't guarantee
-  for a feature-branch-run bootstrap):
-  ```bash
-  git checkout main && git pull
-  # pin both to the version already live on Docker Hub, for continuity
-  # (both surface this version to end users — the frontend sidebar reads it
-  # directly, the backend's /api/version does too)
-  npx nx release 1.5.0 --projects ledger-lens-backend,ledger-lens --first-release
-  ```
-  Run with `--dry-run` appended first to preview. After this one-time step,
-  every subsequent push to `main` versions both automatically too.
+- `apps/jeddy-tan`'s Cloudflare Pages project still points at the old
+  standalone `tanjd/jeddy-tan` repo — needs a one-time manual dashboard
+  reconfiguration after this migration is merged to `main` (do this **last**,
+  only once `apps/jeddy-tan` actually exists on `main` — flipping the source
+  repo any earlier breaks the next auto-build and takes the live site down).
+  In the `jeddy-tan` Pages project's Settings → Builds & deployments (this is
+  classic Pages, not the newer Workers Builds product):
+  - Re-point the connected Git repo to `tanjd/core-repository`, production
+    branch `main`.
+  - Framework preset: `None` (a preset like "Vite" prefills a bare `dist`
+    path assuming a non-monorepo layout — wrong here).
+  - Root directory: leave blank/repo root, **not** `apps/jeddy-tan` —
+    dependencies are hoisted to the workspace root, same reasoning as
+    `ledger-lens`'s Dockerfile (see `apps/ledger-lens/CLAUDE.md`).
+  - Build command: `pnpm install --frozen-lockfile && pnpm exec nx build jeddy-tan`
+  - Build output directory: `dist/apps/jeddy-tan`
+  - Build watch paths (separate section, same page): include
+    `apps/jeddy-tan/**`, `package.json`, `pnpm-lock.yaml`, `nx.json`, so
+    unrelated app changes don't trigger a redeploy.
+  - Verify with a manual retry-deployment before trusting it to auto-build.
