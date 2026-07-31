@@ -1,0 +1,94 @@
+{
+  "experiences": [
+    {
+      "date": "June 2025 - present",
+      "isActive": true,
+      "sections": [
+        {
+          "bullets": [
+            "Building the next generation of Autodesk's access control system \u2014 the technology that determines who is allowed to access what within their products. Created a self-service platform that lets product teams define and manage their own permission rules in a structured, consistent way."
+          ],
+          "heading": "Access Control Management (ACM)"
+        }
+      ],
+      "subtitle": "Singapore, SG",
+      "title": "Software Engineer - Autodesk",
+      "type": "work"
+    },
+    {
+      "date": "Jul 2022 - Jun 2025",
+      "isActive": false,
+      "sections": [
+        {
+          "bullets": [
+            "Designed and built the CI/CD pipeline for a monorepo using GitHub Actions and NX. The pipeline automatically integrates, tests, and deploys different types of applications (e.g. React and FastAPI) that are affected by a code change, all running at the same time."
+          ],
+          "heading": "Web Applications Platform (WAP)"
+        },
+        {
+          "bullets": [
+            "Built tools to automate internal processes and workflows for various teams. For example, automated the employee offboarding process to remove a departing employee's access from multiple applications in one go."
+          ],
+          "heading": "Internal Apps & Automation (IAA)"
+        },
+        {
+          "bullets": [
+            "Built and maintained the shared tools and infrastructure used by all engineering teams, making it faster and more reliable for developers to build, test, and release software. Standardized development environments and modernized the company's cloud setup to follow industry best practices."
+          ],
+          "heading": "Platform Team"
+        },
+        {
+          "bullets": [
+            "Consolidated the subscription and payment systems of multiple VPN brands (including PIA and CyberGhost) owned by ExpressVPN's parent company into a single unified platform. Collaborated with the marketing team on targeted email campaigns offering discounts to customers at risk of cancelling, helping reduce cancellations and win back lapsed subscribers."
+          ],
+          "heading": "Core Services & Payments Team"
+        }
+      ],
+      "subtitle": "Singapore, SG",
+      "title": "Graduate \u2192 Software Engineer - ExpressVPN",
+      "type": "work"
+    },
+    {
+      "date": "May 2021 - Aug 2021",
+      "isActive": false,
+      "sections": [
+        {
+          "bullets": [
+            "Built a prototype that automatically analyses and tests Android applications for malware, reducing the need for manual inspection."
+          ],
+          "heading": "Engineering Center"
+        }
+      ],
+      "title": "Summer Intern - Cybersecurity Agency of Singapore (CSA)",
+      "type": "work"
+    },
+    {
+      "date": "May 2020 - Aug 2020",
+      "isActive": false,
+      "sections": [
+        {
+          "bullets": [
+            "Reviewed open-source code libraries used in sensitive government projects to identify potential security weaknesses before they could be exploited."
+          ],
+          "heading": "Secure Software Development & Audit"
+        }
+      ],
+      "title": "Summer Intern - Government Technology Agency (GovTech)",
+      "type": "work"
+    },
+    {
+      "date": "Aug 2018 - May 2022",
+      "isActive": false,
+      "sections": [
+        {
+          "bullets": [
+            "Double major in Software Development & Cybersecurity"
+          ],
+          "heading": "Bachelor of Science (Information Systems & Management)"
+        }
+      ],
+      "title": "Singapore Management University",
+      "type": "education"
+    }
+  ]
+}
