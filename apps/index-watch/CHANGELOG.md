@@ -2,11 +2,11 @@
 
 ### 🚀 Features
 
-- ⚠️  **index-watch:** add per-subscriber alerts, digests, and recovery notices ([#21](https://github.com/tanjd/core-repository/pull/21))
+- ⚠️ **index-watch:** add per-subscriber alerts, digests, and recovery notices ([#21](https://github.com/tanjd/core-repository/pull/21))
 
-### ⚠️  Breaking Changes
+### ⚠️ Breaking Changes
 
-- **index-watch:** add per-subscriber alerts, digests, and recovery notices  ([#21](https://github.com/tanjd/core-repository/pull/21))
+- **index-watch:** add per-subscriber alerts, digests, and recovery notices ([#21](https://github.com/tanjd/core-repository/pull/21))
   alert_state's schema is now keyed by chat_id (was
   symbol+threshold only), and AlertState's methods gained a leading chat_id
   parameter. The schema migration runs automatically in init_db() on next

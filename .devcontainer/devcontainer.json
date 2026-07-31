@@ -47,7 +47,7 @@
     "vscode": {
       "extensions": [
         "charliermarsh.ruff",
-        "esbenp.prettier-vscode",
+        "oxc.oxc-vscode",
         "mgesbert.python-path",
         "ms-python.python",
         "ms-python.vscode-pylance",
@@ -79,7 +79,7 @@
         "[toml]": {
           "editor.defaultFormatter": "tamasfe.even-better-toml"
         },
-        "editor.defaultFormatter": "esbenp.prettier-vscode",
+        "editor.defaultFormatter": "oxc.oxc-vscode",
         "ruff.fixAll": true
       }
     }

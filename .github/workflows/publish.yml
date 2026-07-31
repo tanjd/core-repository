@@ -67,7 +67,7 @@ jobs:
       - uses: docker/setup-buildx-action@v4
 
       - name: Expose GitHub Actions cache variables
-        uses: crazy-max/ghaction-github-runtime@v3
+        uses: crazy-max/ghaction-github-runtime@v4
 
       - name: Login to GitHub Container Registry
         uses: docker/login-action@v4

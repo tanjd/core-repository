@@ -49,8 +49,8 @@
     "lint-staged": "^17.2.0",
     "next": "16.2.12",
     "nx": "22.2.2",
+    "oxfmt": "^0.61.0",
     "postcss": "8.5.25",
-    "prettier": "3.3.3",
     "react": "19.1.1",
     "react-dom": "19.1.1",
     "sql.js": "^1.14.1",
@@ -70,10 +70,10 @@
     ],
     "*.{js,jsx,ts,tsx}": [
       "eslint --fix",
-      "prettier --write"
+      "oxfmt"
     ],
     "*.{json,md,yml,yaml,css,html}": [
-      "prettier --write"
+      "oxfmt"
     ]
   },
   "name": "@tanjd/core-repository",
@@ -99,7 +99,7 @@
   },
   "private": true,
   "scripts": {
-    "format": "nx format:write --verbose",
+    "format": "oxfmt",
     "lint": "nx affected --target=lint --fix --verbose",
     "prepare": "husky",
     "test": "nx affected --target=test --verbose"

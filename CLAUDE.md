@@ -73,7 +73,7 @@ pnpm nx <target> <project>            # e.g. pnpm nx test food-maps-backend
 Husky (`core.hooksPath=.husky/_`) is just the trigger Git calls on
 `git commit`; `.husky/pre-commit` runs three layers:
 
-- `lint-staged`: ESLint `--fix` + Prettier on staged JS/TS, Prettier alone on
+- `lint-staged`: ESLint `--fix` + oxfmt on staged JS/TS, oxfmt alone on
   staged JSON/MD/YAML/CSS/HTML, `gofmt -w` + `goimports -w` on staged Go
   (`goimports` is installed by `make setup`, not part of the Go toolchain by
   default). Staged files only.
@@ -133,10 +133,19 @@ merge can land changes the hook never saw.
     ```js
     depConstraints: [
       { sourceTag: "type:app", onlyDependOnLibsWithTags: ["type:lib"] },
-      { sourceTag: "type:e2e", onlyDependOnLibsWithTags: ["type:app", "type:lib"] },
+      {
+        sourceTag: "type:e2e",
+        onlyDependOnLibsWithTags: ["type:app", "type:lib"],
+      },
       { sourceTag: "type:lib", onlyDependOnLibsWithTags: ["type:lib"] },
-      { sourceTag: "scope:food-maps", onlyDependOnLibsWithTags: ["scope:food-maps", "scope:shared"] },
-      { sourceTag: "scope:bots", onlyDependOnLibsWithTags: ["scope:bots", "scope:shared"] },
+      {
+        sourceTag: "scope:food-maps",
+        onlyDependOnLibsWithTags: ["scope:food-maps", "scope:shared"],
+      },
+      {
+        sourceTag: "scope:bots",
+        onlyDependOnLibsWithTags: ["scope:bots", "scope:shared"],
+      },
     ];
     ```
 
@@ -370,6 +379,15 @@ release`'s format (`#` for the newest entry, `##` for older ones), not
 - Root `ruff.toml` covers apps scaffolded by the `telegram-bot` generator
   and migrated apps (`index-watch`, `table-talks`); the remaining standalone
   repo (`ledger-lens`) keeps its own independent config until migrated.
+- Prettier has been replaced by `oxfmt` (Rust-based, from the oxc project) for
+  JS/TS/JSON/MD/YAML/CSS/HTML formatting — see `.oxfmtrc.json` and the
+  `lint-staged`/`format` wiring in `package.json`. ESLint is unchanged for now;
+  an ESLint → oxlint follow-up is planned separately, blocked on picking an Nx
+  integration path (no official Nx plugin yet, only the third-party
+  `nx-oxlint` package) and on `@nx/enforce-module-boundaries` /
+  `@nx/dependency-checks` having no oxlint equivalent (the former is already a
+  no-op per the "Module boundary tags" gap above, so dropping it is low-risk;
+  the latter, used in `libs/food-maps-data`, would just be dropped too).
 - `nx release` is bootstrapped and running automatically on every push to
   `main` for `food-maps-backend` and `index-watch` (tags exist:
   `food-maps-backend@0.2.0`, `index-watch@{0.1.1,0.2.0,1.0.0}`).
