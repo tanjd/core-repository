@@ -19,5 +19,11 @@ repos:
         exclude: (devcontainer|package-lock|tsconfig.*).json
       - id: check-merge-conflict
       - id: debug-statements
+        # ledger-lens-backend requires Python >=3.14 (matches its production
+        # image); this hook's own venv parses with an older Python and can't
+        # yet handle PEP 758 unparenthesized except-tuples, which ruff's
+        # formatter produces under a py314 target-version. Unrelated to what
+        # this hook actually checks for (stray pdb/breakpoint calls).
+        exclude: ^apps/ledger-lens-backend/
       - id: mixed-line-ending
         args: ["--fix=no"]

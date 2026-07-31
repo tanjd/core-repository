@@ -1,0 +1,60 @@
+{
+  "$schema": "../../node_modules/nx/schemas/project-schema.json",
+  "name": "ledger-lens",
+  "projectType": "application",
+  "sourceRoot": "apps/ledger-lens",
+  "tags": [],
+  "targets": {
+    "build": {
+      "configurations": {
+        "development": {
+          "outputPath": "apps/ledger-lens"
+        },
+        "production": {}
+      },
+      "defaultConfiguration": "production",
+      "executor": "@nx/next:build",
+      "options": {
+        "outputPath": "dist/apps/ledger-lens",
+        "webpack": true
+      },
+      "outputs": [
+        "{options.outputPath}"
+      ]
+    },
+    "dev": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "nx run-many -t serve -p ledger-lens-backend,ledger-lens --parallel=2"
+      }
+    },
+    "docker-build": {},
+    "docker-push": {},
+    "lint": {
+      "executor": "@nx/eslint:lint",
+      "outputs": [
+        "{options.outputFile}"
+      ]
+    },
+    "serve": {
+      "configurations": {
+        "development": {
+          "buildTarget": "ledger-lens:build:development",
+          "dev": true
+        },
+        "production": {
+          "buildTarget": "ledger-lens:build:production",
+          "dev": false
+        }
+      },
+      "defaultConfiguration": "development",
+      "executor": "@nx/next:server",
+      "options": {
+        "buildTarget": "ledger-lens:build",
+        "dev": true,
+        "port": 3000,
+        "webpack": true
+      }
+    }
+  }
+}

@@ -1,0 +1,41 @@
+{
+  "$schema": "../../node_modules/nx/schemas/project-schema.json",
+  "name": "ledger-lens-backend",
+  "projectType": "application",
+  "sourceRoot": "apps/ledger-lens-backend/app",
+  "tags": [],
+  "targets": {
+    "build": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "uv sync --locked",
+        "cwd": "apps/ledger-lens-backend"
+      }
+    },
+    "docker-build": {},
+    "docker-push": {},
+    "lint": {
+      "cache": true,
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "uv run ruff check . && uv run ruff format --check .",
+        "cwd": "apps/ledger-lens-backend"
+      }
+    },
+    "serve": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "uv run uvicorn app.main:app --reload --port 8000",
+        "cwd": "apps/ledger-lens-backend"
+      }
+    },
+    "test": {
+      "cache": true,
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "uv run pytest; e=$?; [ $e -eq 5 ] && exit 0 || exit $e",
+        "cwd": "apps/ledger-lens-backend"
+      }
+    }
+  }
+}
