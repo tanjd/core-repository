@@ -68,7 +68,8 @@
   ],
   "pluginsConfig": {
     "@nx/js": {
-      "analyzeSourceFiles": true
+      "analyzeSourceFiles": true,
+      "projectsAffectedByDependencyUpdates": "auto"
     }
   },
   "release": {

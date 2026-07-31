@@ -304,13 +304,26 @@ added to that list by hand when scaffolded/migrated.
   `versionActions` implementation) was rejected as more invasive for what's
   a fairly standard polyglot-monorepo workaround.
 - **Accepted caveat**: `nx release`'s conventional-commits engine reuses the
-  same graph-based "affected" logic as `nx affected`, and `nx.json` /
-  `pnpm-lock.yaml` are treated as global — so a commit touching either of
-  those (e.g. an unrelated JS dependency bump) force-patches every
-  `release.projects` entry, even ones it didn't touch, with a "no code
-  changes, aligned with other projects" changelog entry. There's no config
-  flag in this Nx version to disable that ripple; it's accepted as cosmetic
-  noise rather than switched to manual `nx release plan` versioning.
+  same graph-based "affected" logic as plain `nx affected` — and `nx.json`
+  changes are unconditionally treated as global by Nx core (confirmed via
+  `nx show projects --affected --files=nx.json`, and via the installed
+  `nx/src/config/nx-json.d.ts`: the old `implicitDependencies` field that
+  could scope this is deprecated with no `namedInputs`/`sharedGlobals`
+  replacement for nx.json itself — `sharedGlobals` only governs per-project
+  cache-hash inputs, a different mechanism from what marks a project
+  "affected"). So _any_ `nx.json` edit — not just `release.projects`
+  changes — marks every project affected, both for `nx release` (giving
+  every `release.projects` entry a "no code changes, aligned with other
+  projects" changelog entry) and for a plain `nx affected -t lint test`
+  run (reruns CI/pre-commit for the whole graph even for an unrelated
+  single-line change, as happened when `table-talks` was added to
+  `release.projects`). There's no config in this Nx version to scope
+  nx.json's own blast radius; it's accepted as unavoidable rather than
+  worked around. `pnpm-lock.yaml` used to have the same blanket effect but
+  is now scoped via `pluginsConfig["@nx/js"].projectsAffectedByDependencyUpdates:
+"auto"` in `nx.json` — only projects whose actual dependencies changed
+  are marked affected by a lockfile diff now (verified: an unrelated JS
+  dependency bump no longer force-patches every `release.projects` entry).
 - `apps/index-watch/CHANGELOG.md` and `apps/table-talks/CHANGELOG.md` were
   each seeded with their standalone repo's pre-migration history (both used
   `python-semantic-release`, tag format `v{version}` — an unrelated tool to
