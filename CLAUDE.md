@@ -14,17 +14,30 @@ a devcontainer. Long-term home for side projects, starting with Telegram bots.
   `telegram-bot` generator's own output, just not generator-scaffolded itself
   (setuptools build-backend, not hatchling, since that's what the source
   repo used).
+- `apps/table-talks` — Telegram bot (theme-based conversation card game),
+  Python/uv, migrated from the standalone `tanjd/table-talks` repo
+  (squash-imported, no preserved history). Same non-generator-scaffolded
+  pattern as `index-watch`, with two adaptations beyond the standard
+  cross-cutting drops: its `src/` package was renamed from the standalone
+  repo's flat `src/` (`python -m src.index`) to `src/table_talks/`
+  (`python -m table_talks.index`) to match `index-watch`'s and the
+  generator's nested-package convention; and its bot-info-screen feature
+  (`src/table_talks/version.py`, reads a live version + recent changelog
+  entries for in-chat display) was adapted to read `package.json` (the file
+  `nx release` actually keeps current) instead of `pyproject.toml`, and to
+  match `nx release`'s changelog header format (`#` for the newest entry,
+  `##` for older ones) — `index-watch` has no equivalent runtime feature, so
+  this gap was never hit there.
 - `libs/food-maps-data` — shared TS lib, consumed via the `@tanjd/food-maps-data`
   path alias in `tsconfig.base.json` (not an npm package — no `package.json` of
   its own, folded into the root pnpm workspace).
 - `tools/generators/telegram-bot` — local Nx generator for scaffolding new bots.
 
-`table-talks` (Telegram bot) and `ledger-lens` (Next.js + FastAPI dashboard,
-not a bot) are queued to migrate into this monorepo next, one at a time,
-same as `index-watch` above — a deliberate, separate effort per app; do not
-fold one in as a drive-by change. (`otobr-buddy`, previously the third
-queued bot, is no longer in the active migration queue — superseded by
-`ledger-lens`.)
+`ledger-lens` (Next.js + FastAPI dashboard, not a bot) is queued to migrate
+into this monorepo next, same as `index-watch`/`table-talks` above — a
+deliberate, separate effort; do not fold it in as a drive-by change.
+(`otobr-buddy`, previously a third queued bot, is no longer in the active
+migration queue — superseded by `ledger-lens`.)
 
 ## Common commands
 
@@ -142,9 +155,9 @@ merge can land changes the hook never saw.
 
 ## Python (uv + ruff)
 
-`apps/index-watch` (migrated) is the only Python app in the repo so far;
-further apps are created on demand via `make new-bot` (see "Scaffolding"
-below) or migrated in like `index-watch` was.
+`apps/index-watch` and `apps/table-talks` (both migrated) are the only
+Python apps in the repo so far; further apps are created on demand via
+`make new-bot` (see "Scaffolding" below) or migrated in like these were.
 
 - **uv**, not Poetry — matches the real standalone bot repos and eases their
   eventual migration into this monorepo (see "Scaffolding" below for detail).
@@ -157,16 +170,16 @@ below) or migrated in like `index-watch` was.
   **Important**: ruff's `src` setting does _not_ propagate through `extend`
   (confirmed by reproduction, not just docs) — every app must also set its
   own `src = ["src", "tests"]` below the `extend` line, or first-party
-  imports silently fail isort's import-grouping. Both the generator template
-  and `index-watch` already do this.
+  imports silently fail isort's import-grouping. The generator template,
+  `index-watch`, and `table-talks` already do this.
 - Lint target (`uv run ruff check . && uv run ruff format --check .`) and
   test target (`uv run pytest`) are cached `nx:run-commands` targets — same
   non-plugin approach as Go, since there's no official Nx Python plugin
   (`@nxlv/python` was removed; see "Scaffolding" below).
-- The remaining standalone bot/app repos (`table-talks`, `ledger-lens`) keep
-  their own independent, near-identical ruff config — the shared
-  `ruff.toml` here only covers apps in this repo, and isn't wired up to them
-  unless/until they're migrated in.
+- The remaining standalone app repo (`ledger-lens`) keeps its own
+  independent, near-identical ruff config — the shared `ruff.toml` here
+  only covers apps in this repo, and isn't wired up to it unless/until it's
+  migrated in.
 
 ## Scaffolding a new Telegram bot
 
@@ -189,9 +202,9 @@ stdlib-only health-check endpoint), `Dockerfile`, `.env.example`, `README.md`,
 and a `project.json` with `build`/`serve`/`test`/`lint`/`docker-build` targets
 that shell out to `uv` (`nx:run-commands`, same pattern `food-maps-backend`
 uses for Go — no language-specific Nx plugin). Uses **uv**, not Poetry, to
-match the remaining standalone bot repos (`table-talks` et al.) and ease
-their eventual migration into this monorepo, same as `index-watch` already
-was. `@nxlv/python` was removed as a dependency — nothing here uses it.
+match the standalone bot repos this pattern was proven against
+(`index-watch`, `table-talks`, both now migrated). `@nxlv/python` was
+removed as a dependency — nothing here uses it.
 
 The devcontainer's `uv` feature (`ghcr.io/va-h/devcontainers-features/uv`) is
 required for the generator's post-generation `uv lock` step and for the
@@ -211,9 +224,9 @@ actual `docker buildx build` command via `nx:run-commands`, keyed off the
 `$NX_TASK_TARGET_PROJECT` env var Nx injects (which doubles as both the
 `apps/<name>` path segment and the `ghcr.io/tanjd/<name>` image name, so one
 shared command covers every dockerized app — no per-app duplication). Not
-every app is deployable (e.g. `food-maps` isn't Dockerized, `food-maps-backend`
-and `index-watch` are); the generator (`tools/generators/telegram-bot`) scaffolds
-new bots with these targets already wired up. Both targets are `cache: false`
+every app is deployable (e.g. `food-maps` isn't Dockerized, `food-maps-backend`,
+`index-watch`, and `table-talks` are); the generator (`tools/generators/telegram-bot`)
+scaffolds new bots with these targets already wired up. Both targets are `cache: false`
 — a docker build/push has no restorable Nx artifact, and Nx-caching
 `docker-push` in particular would risk silently skipping a real push; Docker's
 own buildx layer cache (`--cache-from`/`--cache-to type=gha`) handles
@@ -237,13 +250,22 @@ reuse the `GITHUB_TOKEN` auth already set up in `ci.yml` — not a hard lock-in.
 Versioning and image publishing are two separate, event-chained workflows,
 not one job:
 
-1. `.github/workflows/release.yml` runs on push to `main` and does
-   **only** versioning: `nx release --skip-publish` (`nx.json` → `release`)
+1. `.github/workflows/release.yml` runs via a `workflow_run` trigger keyed
+   to `ci.yml`'s completion on `main` (gated with
+   `if: github.event.workflow_run.conclusion == 'success'`, since
+   `workflow_run` fires on both success and failure and the job has to
+   check itself) — not its own `push` trigger — so a CI failure on `main`
+   blocks versioning/release instead of racing it. It does **only**
+   versioning: `nx release --skip-publish` (`nx.json` → `release`)
    computes each affected project's next version from Conventional Commits,
    writes `CHANGELOG.md` + the version manifest, commits with `[skip ci]`
-   (so the push-back to `main` doesn't retrigger `ci.yml`/`release.yml` — no
-   loop), tags `<project>@<version>` (independent-relationship default),
-   and creates a GitHub Release per project.
+   (so the push-back to `main` doesn't retrigger `ci.yml`, which in turn
+   means it never retriggers `release.yml` either since that now depends on
+   a completed `ci.yml` run — no loop), tags `<project>@<version>`
+   (independent-relationship default), and creates a GitHub Release per
+   project. A `workflow_dispatch` trigger is also wired up for manual runs
+   (e.g. retrying after a transient failure) and bypasses the CI-conclusion
+   check, since there's no `workflow_run` event to inspect in that case.
 2. `.github/workflows/publish.yml` parses a release tag
    (`<project>@<version>`) to get an exact single project name, checks out
    that tag, and runs `nx run <project>:docker-push` — tagging the image
@@ -276,9 +298,9 @@ unrelated commit range could mark a project "affected" that was never
 actually released this time, publishing an image not backed by any real
 version bump.
 
-`food-maps-backend` and `index-watch` are versioned independently —
-`release.projects` in `nx.json` is the explicit list of which apps
-participate (not every project; `food-maps`/`food-maps-data`/
+`food-maps-backend`, `index-watch`, and `table-talks` are versioned
+independently — `release.projects` in `nx.json` is the explicit list of
+which apps participate (not every project; `food-maps`/`food-maps-data`/
 `food-maps-e2e` aren't deployed, so they're excluded). New bots must be
 added to that list by hand when scaffolded/migrated.
 
@@ -291,18 +313,36 @@ added to that list by hand when scaffolded/migrated.
   `versionActions` implementation) was rejected as more invasive for what's
   a fairly standard polyglot-monorepo workaround.
 - **Accepted caveat**: `nx release`'s conventional-commits engine reuses the
-  same graph-based "affected" logic as `nx affected`, and `nx.json` /
-  `pnpm-lock.yaml` are treated as global — so a commit touching either of
-  those (e.g. an unrelated JS dependency bump) force-patches every
-  `release.projects` entry, even ones it didn't touch, with a "no code
-  changes, aligned with other projects" changelog entry. There's no config
-  flag in this Nx version to disable that ripple; it's accepted as cosmetic
-  noise rather than switched to manual `nx release plan` versioning.
-- `apps/index-watch/CHANGELOG.md` was seeded with the standalone
-  `tanjd/index-watch` repo's pre-migration history (that repo used
+  same graph-based "affected" logic as plain `nx affected` — and `nx.json`
+  changes are unconditionally treated as global by Nx core (confirmed via
+  `nx show projects --affected --files=nx.json`, and via the installed
+  `nx/src/config/nx-json.d.ts`: the old `implicitDependencies` field that
+  could scope this is deprecated with no `namedInputs`/`sharedGlobals`
+  replacement for nx.json itself — `sharedGlobals` only governs per-project
+  cache-hash inputs, a different mechanism from what marks a project
+  "affected"). So _any_ `nx.json` edit — not just `release.projects`
+  changes — marks every project affected, both for `nx release` (giving
+  every `release.projects` entry a "no code changes, aligned with other
+  projects" changelog entry) and for a plain `nx affected -t lint test`
+  run (reruns CI/pre-commit for the whole graph even for an unrelated
+  single-line change, as happened when `table-talks` was added to
+  `release.projects`). There's no config in this Nx version to scope
+  nx.json's own blast radius; it's accepted as unavoidable rather than
+  worked around. `pnpm-lock.yaml` used to have the same blanket effect but
+  is now scoped via `pluginsConfig["@nx/js"].projectsAffectedByDependencyUpdates:
+"auto"` in `nx.json` — only projects whose actual dependencies changed
+  are marked affected by a lockfile diff now (verified: an unrelated JS
+  dependency bump no longer force-patches every `release.projects` entry).
+- `apps/index-watch/CHANGELOG.md` and `apps/table-talks/CHANGELOG.md` were
+  each seeded with their standalone repo's pre-migration history (both used
   `python-semantic-release`, tag format `v{version}` — an unrelated tool to
   `nx release`) so changelog continuity survives the migration; `nx release`
-  prepends new entries above it.
+  prepends new entries above it. `table-talks` actually reads this file (and
+  `package.json`'s version) at runtime for its in-chat bot-info screen
+  (`src/table_talks/version.py`) — unlike `index-watch`, where nothing reads
+  either file — so its changelog-header regex was widened to match `nx
+release`'s format (`#` for the newest entry, `##` for older ones), not
+  just the carried-over `python-semantic-release` format (`##` only).
 
 ## Known gaps / deferred work
 
@@ -321,30 +361,27 @@ added to that list by hand when scaffolded/migrated.
 - Migrating standalone repos into this monorepo, one at a time (they have
   real users/schedules — don't touch them as a drive-by change): the
   generator + deploy pattern has now been proven with a throwaway app, and
-  `index-watch` is migrated (see `apps/index-watch` above). `table-talks`
-  and `ledger-lens` are still pending, in that order.
+  `index-watch` and `table-talks` are migrated (see `apps/index-watch` and
+  `apps/table-talks` above). `ledger-lens` is still pending.
 - Module boundary tags/`depConstraints` are documented as a convention (see
   "Nx conventions") but not applied to any `project.json` yet — adopt when
   the first cross-domain project (e.g. a migrated bot) makes enforcement
   useful, not speculatively now.
 - Root `ruff.toml` covers apps scaffolded by the `telegram-bot` generator
-  and migrated apps (`index-watch`); the remaining standalone repos
-  (`table-talks`, `ledger-lens`) keep their own independent config until
-  migrated.
-- `nx release` (see "Release versioning" above) is configured but not yet
-  bootstrapped: no `<project>@<version>` git tag exists yet for either
-  `food-maps-backend` or `index-watch`, so the automatic-on-push flow in
-  `release.yml` has nothing to diff against on its first run. Needs a
-  one-time manual bootstrap **after this config is merged to `main`** (not
-  from a feature branch — the bootstrap commit/tags need to land on commits
-  reachable from `main`, which a squash-merge wouldn't guarantee for a
-  feature-branch-run bootstrap):
+  and migrated apps (`index-watch`, `table-talks`); the remaining standalone
+  repo (`ledger-lens`) keeps its own independent config until migrated.
+- `nx release` is bootstrapped and running automatically on every push to
+  `main` for `food-maps-backend` and `index-watch` (tags exist:
+  `food-maps-backend@0.2.0`, `index-watch@{0.1.1,0.2.0,1.0.0}`).
+  `table-talks` still needs its one-time first-release bootstrap **after
+  this migration is merged to `main`** (not from the feature branch — the
+  bootstrap tag needs to land on a commit reachable from `main`, which a
+  squash-merge wouldn't guarantee for a feature-branch-run bootstrap):
   ```bash
   git checkout main && git pull
-  # index-watch: pin to the version already live on Docker Hub, for continuity
-  npx nx release 1.3.0 --projects index-watch --first-release
-  # food-maps-backend: no prior external version, let conventional commits compute it
-  npx nx release --projects food-maps-backend --first-release
+  # table-talks: pin to the version already live on Docker Hub, for continuity
+  # (its bot-info screen displays this version to end users, unlike index-watch)
+  npx nx release 1.5.0 --projects table-talks --first-release
   ```
-  Run each with `--dry-run` appended first to preview. After this one-time
-  step, every subsequent push to `main` versions automatically.
+  Run with `--dry-run` appended first to preview. After this one-time step,
+  every subsequent push to `main` versions `table-talks` automatically too.
