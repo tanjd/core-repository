@@ -1,9 +1,10 @@
 name: Release
 
 on:
-  push:
-    branches:
-      - main
+  workflow_run:
+    workflows: ["CI"]
+    types: [completed]
+    branches: [main]
   workflow_dispatch:
 
 concurrency:
@@ -15,12 +16,20 @@ permissions:
 
 jobs:
   version:
+    # Gate on CI passing: workflow_run fires on every CI completion (success
+    # or failure), so we still need to check conclusion ourselves. Manual
+    # workflow_dispatch runs bypass this - there's no workflow_run event to
+    # check in that case.
+    if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' }}
     timeout-minutes: 15
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
         with:
           fetch-depth: 0
+          # workflow_run always checks out the default branch by default;
+          # pin explicitly to the commit CI actually ran on.
+          ref: ${{ github.event.workflow_run.head_sha || github.ref }}
           token: ${{ secrets.GHA_TRIGGER_TOKEN }}
 
       - name: Read pnpm version from devcontainer config

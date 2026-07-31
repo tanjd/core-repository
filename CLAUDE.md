@@ -250,13 +250,22 @@ reuse the `GITHUB_TOKEN` auth already set up in `ci.yml` — not a hard lock-in.
 Versioning and image publishing are two separate, event-chained workflows,
 not one job:
 
-1. `.github/workflows/release.yml` runs on push to `main` and does
-   **only** versioning: `nx release --skip-publish` (`nx.json` → `release`)
+1. `.github/workflows/release.yml` runs via a `workflow_run` trigger keyed
+   to `ci.yml`'s completion on `main` (gated with
+   `if: github.event.workflow_run.conclusion == 'success'`, since
+   `workflow_run` fires on both success and failure and the job has to
+   check itself) — not its own `push` trigger — so a CI failure on `main`
+   blocks versioning/release instead of racing it. It does **only**
+   versioning: `nx release --skip-publish` (`nx.json` → `release`)
    computes each affected project's next version from Conventional Commits,
    writes `CHANGELOG.md` + the version manifest, commits with `[skip ci]`
-   (so the push-back to `main` doesn't retrigger `ci.yml`/`release.yml` — no
-   loop), tags `<project>@<version>` (independent-relationship default),
-   and creates a GitHub Release per project.
+   (so the push-back to `main` doesn't retrigger `ci.yml`, which in turn
+   means it never retriggers `release.yml` either since that now depends on
+   a completed `ci.yml` run — no loop), tags `<project>@<version>`
+   (independent-relationship default), and creates a GitHub Release per
+   project. A `workflow_dispatch` trigger is also wired up for manual runs
+   (e.g. retrying after a transient failure) and bypasses the CI-conclusion
+   check, since there's no `workflow_run` event to inspect in that case.
 2. `.github/workflows/publish.yml` parses a release tag
    (`<project>@<version>`) to get an exact single project name, checks out
    that tag, and runs `nx run <project>:docker-push` — tagging the image
