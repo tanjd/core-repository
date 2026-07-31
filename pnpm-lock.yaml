@@ -211,6 +211,8 @@ importers:
 
   apps/index-watch: {}
 
+  apps/table-talks: {}
+
 packages:
 
   '@adobe/css-tools@4.3.3':
