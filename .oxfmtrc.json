@@ -1,0 +1,16 @@
+{
+  "$schema": "./node_modules/oxfmt/configuration_schema.json",
+  "ignorePatterns": [
+    "*.json",
+    "*.toml",
+    ".github/CODEOWNERS",
+    "pnpm-lock.yaml",
+    "**/.git",
+    "**/.svn",
+    "**/.hg",
+    "**/node_modules"
+  ],
+  "printWidth": 80,
+  "singleQuote": false,
+  "sortPackageJson": false
+}
