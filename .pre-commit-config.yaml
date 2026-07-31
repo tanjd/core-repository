@@ -13,6 +13,12 @@ repos:
         args:
           - --unsafe
       - id: check-added-large-files
+        # apps/jeddy-tan/assets-src/jeddy.png is the uncropped source avatar
+        # the site's favicon/logo set is generated from (see
+        # apps/jeddy-tan/CLAUDE.md) — a one-off ~700KB asset, not something
+        # that will recur or grow, so it's not worth raising the limit
+        # repo-wide for.
+        exclude: ^apps/jeddy-tan/assets-src/jeddy\.png$
       - id: pretty-format-json
         args:
           - --autofix

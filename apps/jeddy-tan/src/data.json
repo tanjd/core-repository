@@ -2,12 +2,17 @@
   "experiences": [
     {
       "date": "June 2025 - present",
+      "highlights": [
+        "Building the next generation of Autodesk's access control system",
+        "Created a self-service platform for product teams to define and manage their own permission rules"
+      ],
       "isActive": true,
       "sections": [
         {
           "bullets": [
             "Building the next generation of Autodesk's access control system \u2014 the technology that determines who is allowed to access what within their products. Created a self-service platform that lets product teams define and manage their own permission rules in a structured, consistent way."
           ],
+          "eli5": "Like giving every hotel department its own keycard-programming station, instead of everyone having to call the front desk each time someone needs new access.",
           "heading": "Access Control Management (ACM)"
         }
       ],
@@ -17,12 +22,19 @@
     },
     {
       "date": "Jul 2022 - Jun 2025",
+      "highlights": [
+        "3 years across Payments, Platform, Automation, and CI/CD teams",
+        "Built the GitHub Actions + Nx CI/CD pipeline powering the whole monorepo",
+        "Unified subscription/payment systems across multiple VPN brands into one platform",
+        "Automated internal workflows, including full employee offboarding"
+      ],
       "isActive": false,
       "sections": [
         {
           "bullets": [
             "Designed and built the CI/CD pipeline for a monorepo using GitHub Actions and NX. The pipeline automatically integrates, tests, and deploys different types of applications (e.g. React and FastAPI) that are affected by a code change, all running at the same time."
           ],
+          "eli5": "Like an assembly line that automatically inspects, tests, and ships only the parts of a car that actually changed \u2014 instead of re-testing and re-shipping the whole car for every small tweak.",
           "heading": "Web Applications Platform (WAP)"
         },
         {
@@ -41,6 +53,7 @@
           "bullets": [
             "Consolidated the subscription and payment systems of multiple VPN brands (including PIA and CyberGhost) owned by ExpressVPN's parent company into a single unified platform. Collaborated with the marketing team on targeted email campaigns offering discounts to customers at risk of cancelling, helping reduce cancellations and win back lapsed subscribers."
           ],
+          "eli5": "Imagine several sibling stores (different VPN brands) each running their own separate cash register \u2014 this project merged them into one shared register, so a pricing change or subscription update applies everywhere at once instead of being repeated four times.",
           "heading": "Core Services & Payments Team"
         }
       ],

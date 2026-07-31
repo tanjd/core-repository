@@ -21,7 +21,7 @@ function Home() {
           </a>
         </div>
       </div>
-      <Timeline />
+      <Timeline variant="condensed" />
     </div>
   );
 }

@@ -26,6 +26,9 @@ release process); the list below is just an index into the per-app files.
 - `libs/food-maps-data` — shared TS lib, consumed via the `@tanjd/food-maps-data`
   path alias in `tsconfig.base.json` (not an npm package — no `package.json` of
   its own, folded into the root pnpm workspace).
+- `libs/telegram-bot-shared` — shared Python lib (health-check server, dev/prod bot-token
+  selection, logging setup) for the Telegram bots, consumed via a `uv` local path dependency
+  (see "Python (uv + ruff)" below).
 - `apps/jeddy-tan` — personal portfolio site (React Router + MUI), plain JS on
   Vite/`@nx/vite` (unlike every other frontend here, which is Next.js). See
   `apps/jeddy-tan/CLAUDE.md`.
@@ -166,6 +169,23 @@ in like these were.
   test target (`uv run pytest`) are cached `nx:run-commands` targets — same
   non-plugin approach as Go, since there's no official Nx Python plugin
   (`@nxlv/python` was removed; see "Scaffolding" below).
+- **Shared code** (`libs/telegram-bot-shared`, used by both Telegram bots and the
+  `telegram-bot` generator) is consumed via a `uv` local **path dependency**, not a uv
+  workspace — each app keeps its own independent `uv.lock` and independent `nx release`
+  versioning, consistent with every other Python app here. The convention: the consuming
+  app's `pyproject.toml` declares the lib in `dependencies` and adds
+  `[tool.uv.sources] <lib-name> = { path = "../../libs/<lib-name>", editable = true }`.
+  Nx has no Python import-graph plugin, so the dependency edge is declared explicitly via
+  `implicitDependencies` in the consuming app's `project.json` (same mechanism
+  `apps/food-maps-e2e` uses for its non-import dependency on `food-maps`) — this is what
+  lets `nx affected` correctly flag consumers when the shared lib changes.
+  **Operational gotcha**: this doesn't auto-relock consumers — whenever
+  `libs/telegram-bot-shared`'s source changes, run `uv lock` in every consuming app before
+  its next `--frozen` sync (Docker build or CI) will succeed. A consuming app's Dockerfile
+  also can't flatten `apps/<name>` straight to `/app` the way non-lib-consuming Python apps
+  do — the `../../libs/<lib-name>` path has to resolve identically inside the image as it
+  does on the host, so the image mirrors the `apps/<name>` + `libs/<lib-name>` depth under
+  `/app` instead (see `apps/index-watch/Dockerfile` or `apps/table-talks/Dockerfile`).
 
 ## Scaffolding a new Telegram bot
 
@@ -183,9 +203,11 @@ pnpm nx g ./tools/generators/telegram-bot/generators.json:telegram-bot <bot-name
 in this Nx version — local generator collections need either a registered
 project or an explicit path to `generators.json`.)
 
-Produces `apps/<bot-name>/` with a `python-telegram-bot` skeleton (+ a
-stdlib-only health-check endpoint), `Dockerfile`, `.env.example`, `README.md`,
-and a `project.json` with `build`/`serve`/`test`/`lint`/`docker-build` targets
+Produces `apps/<bot-name>/` with a `python-telegram-bot` skeleton (health-check
+endpoint, bot-token selection, and logging setup all wired in from
+`libs/telegram-bot-shared` — see "Python (uv + ruff)" above), `Dockerfile`,
+`.env.example`, `README.md`, and a `project.json` with
+`build`/`serve`/`test`/`lint`/`docker-build` targets
 that shell out to `uv` (`nx:run-commands`, same pattern `food-maps-backend`
 uses for Go — no language-specific Nx plugin). Uses **uv**, not Poetry, to
 match the standalone bot repos this pattern was proven against

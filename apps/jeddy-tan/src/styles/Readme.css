@@ -1,0 +1,44 @@
+.readme {
+  width: 100%;
+  min-height: calc(100vh - 100px);
+  padding: 40px 8%;
+  box-sizing: border-box;
+  background-color: #192428;
+  color: #f0f0f0;
+  font-family: "Arial", sans-serif;
+  max-width: 800px;
+  margin: 0 auto;
+}
+
+.readme-path {
+  font-family: "Courier New", monospace;
+  color: #d8ab4e;
+  margin-bottom: 0;
+}
+
+.readme h2 {
+  font-family: "Courier New", monospace;
+  color: #39ace7;
+  margin-top: 4px;
+}
+
+.readme-intro {
+  font-size: 18px;
+  margin-bottom: 30px;
+}
+
+.readme-entry {
+  margin-bottom: 24px;
+}
+
+.readme-entry h3 {
+  font-family: "Courier New", monospace;
+  color: #39ace7;
+  margin-bottom: 4px;
+}
+
+@media only screen and (max-width: 600px) {
+  .readme {
+    padding: 30px 5%;
+  }
+}

@@ -1,0 +1,65 @@
+{
+  "projects": [
+    {
+      "description": "A personal Nx monorepo housing all of my side projects \u2014 Next.js apps, a Go API, and Python Telegram bots \u2014 sharing CI/CD, linting, and release tooling instead of each living in its own repo.",
+      "eli5": "Like keeping every hobby project in one shared workshop with a common set of tools, instead of a separate workshop (and separate toolbox) for each one.",
+      "links": {
+        "github": "https://github.com/tanjd/core-repository"
+      },
+      "name": "core-repository",
+      "tags": [
+        "Nx",
+        "Monorepo",
+        "pnpm",
+        "GitHub Actions"
+      ]
+    },
+    {
+      "description": "A Telegram bot that tracks stock market index drawdowns and notifies subscribers when things drop.",
+      "eli5": "A friend who watches the market all day and only taps you on the shoulder when it's dropped a lot.",
+      "links": {
+        "github": "https://github.com/tanjd/index-watch"
+      },
+      "name": "index-watch",
+      "tags": [
+        "Python",
+        "Telegram Bot",
+        "uv"
+      ]
+    },
+    {
+      "description": "A Telegram bot that deals themed conversation-starter cards to liven up group chats.",
+      "eli5": "A digital card deck that gives your group chat something better to talk about than the weather.",
+      "links": {
+        "github": "https://github.com/tanjd/table-talks"
+      },
+      "name": "table-talks",
+      "tags": [
+        "Python",
+        "Telegram Bot",
+        "uv"
+      ]
+    },
+    {
+      "description": "A home server I built and maintain myself, running my own storage and services instead of renting space from a cloud provider.",
+      "eli5": "Instead of paying rent to store my stuff in someone else's warehouse, I built my own shed in the backyard.",
+      "links": {},
+      "name": "Self-hosted NAS",
+      "tags": [
+        "Self-hosted",
+        "Docker",
+        "Linux"
+      ]
+    },
+    {
+      "description": "Ad hoc contributions \u2014 bug fixes and small features \u2014 to open-source projects I use day-to-day.",
+      "links": {
+        "github": "https://github.com/tanjd"
+      },
+      "name": "Open-source contributions",
+      "tags": [
+        "Open Source"
+      ]
+    }
+  ]
+}

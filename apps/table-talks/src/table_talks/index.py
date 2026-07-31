@@ -6,39 +6,29 @@ import sys
 from datetime import datetime
 
 from dotenv import load_dotenv
+from telegram_bot_shared.env import select_bot_token
+from telegram_bot_shared.health import start_health_server
+from telegram_bot_shared.logging_setup import configure_logging
 
 load_dotenv()
 
 # Configure logging before importing bot (so startup logs are visible)
-logging.basicConfig(
-    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-    level=logging.INFO,
-    stream=sys.stdout,
-    force=True,
-)
-logging.getLogger("httpx").setLevel(logging.WARNING)
+configure_logging(quiet_loggers=["httpx"], force=True)
 
 from .bot import build_application  # noqa: E402
-from .health import DEFAULT_HEALTH_PORT, start_health_server  # noqa: E402
 from .version import get_changelog, get_version  # noqa: E402
 
 logger = logging.getLogger(__name__)
 
 BOT_USERNAME = "TableTalksBot"
+DEFAULT_HEALTH_PORT = 9999
 
 
 def main() -> None:
     # Determine environment and select appropriate token
     env = os.environ.get("ENV", "").lower()
-    token_dev = os.environ.get("BOT_TOKEN_DEV")
-    token_prd = os.environ.get("BOT_TOKEN")
-
-    if env == "dev":
-        token = token_dev
-        env_name = "dev"
-    else:
-        token = token_prd
-        env_name = "prd" if env == "prd" else "prd (default)"
+    token = select_bot_token()
+    env_name = "dev" if env == "dev" else ("prd" if env == "prd" else "prd (default)")
 
     if not token:
         logger.critical("Bot token not set for environment '%s'; exiting", env_name)

@@ -21,6 +21,7 @@ dependencies = [
     "yfinance>=0.2.50",
     "fear-and-greed>=0.4",
     "apscheduler>=3.10",
+    "telegram-bot-shared",
 ]
 
 [project.optional-dependencies]
@@ -28,6 +29,9 @@ dev = ["pytest>=8.0", "pytest-asyncio>=0.24", "ruff>=0.8"]
 
 [dependency-groups]
 dev = ["basedpyright>=1.35", "pre-commit>=4.0", "pytest>=8.0", "pytest-asyncio>=0.24", "ruff>=0.8"]
+
+[tool.uv.sources]
+telegram-bot-shared = { path = "../../libs/telegram-bot-shared", editable = true }
 
 [tool.ruff]
 extend = "../../ruff.toml"

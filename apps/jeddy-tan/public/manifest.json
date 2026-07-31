@@ -1,9 +1,9 @@
 {
-  "background_color": "#ffffff",
+  "background_color": "#192428",
   "display": "standalone",
   "icons": [
     {
-      "sizes": "64x64 32x32 24x24 16x16",
+      "sizes": "16x16 32x32 48x48 64x64",
       "src": "favicon.ico",
       "type": "image/x-icon"
     },
@@ -18,8 +18,8 @@
       "type": "image/png"
     }
   ],
-  "name": "Create React App Sample",
-  "short_name": "React App",
+  "name": "Jeddy Tan - Software Engineer Portfolio",
+  "short_name": "Jeddy Tan",
   "start_url": ".",
-  "theme_color": "#000000"
+  "theme_color": "#192428"
 }

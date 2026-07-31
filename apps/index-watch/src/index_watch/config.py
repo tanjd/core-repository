@@ -4,6 +4,8 @@ import os
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from telegram_bot_shared.env import require_bot_token, select_bot_token
+
 DEFAULT_INDEX_SYMBOLS = {
     "^GSPC": "S&P 500",
     "^NDX": "NASDAQ-100",
@@ -52,14 +54,12 @@ class Config:
     display_timezone: str = DEFAULT_DISPLAY_TIMEZONE
     db_path: Path = field(default_factory=lambda: Path("data") / "index_watch.db")
     cache_ttl_seconds: int = DEFAULT_CACHE_TTL_SECONDS
+    health_check_port: int = 8080
 
     @classmethod
     def from_env(cls) -> "Config":
         """Load config from environment variables."""
-        env = os.getenv("ENV", "").strip().lower()
-        token_dev = (os.getenv("BOT_TOKEN_DEV") or "").strip()
-        token_prd = (os.getenv("BOT_TOKEN") or "").strip()
-        token = token_dev if env == "dev" else token_prd
+        token = select_bot_token()
 
         raw_chat_ids = os.getenv("TELEGRAM_CHAT_IDS", "").strip()
         chat_ids = [c.strip() for c in raw_chat_ids.split(",") if c.strip()]
@@ -93,12 +93,12 @@ class Config:
             display_timezone=display_tz or DEFAULT_DISPLAY_TIMEZONE,
             db_path=Path(db_path_str),
             cache_ttl_seconds=int(os.getenv("CACHE_TTL_SECONDS", str(DEFAULT_CACHE_TTL_SECONDS))),
+            health_check_port=int(os.getenv("HEALTH_CHECK_PORT", "8080")),
         )
 
     def validate(self) -> None:
         """Validate configuration on startup."""
-        if not self.telegram_bot_token:
-            raise ValueError("Bot token not configured (BOT_TOKEN or BOT_TOKEN_DEV required)")
+        require_bot_token(self.telegram_bot_token)
 
         if not 0 < self.alert_check_minutes < 1440:
             raise ValueError("alert_check_minutes must be between 1 and 1440")

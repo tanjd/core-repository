@@ -1,3 +1,4 @@
+import PropTypes from "prop-types";
 import {
   VerticalTimeline,
   VerticalTimelineElement,
@@ -6,6 +7,8 @@ import "react-vertical-timeline-component/style.min.css";
 import SchoolIcon from "@mui/icons-material/School";
 import WorkIcon from "@mui/icons-material/Work";
 import Experiences from "../data.json";
+import TimelineEntryContent from "./TimelineEntryContent";
+import "../styles/Timeline.css";
 
 const parseStartDate = (dateStr) => new Date(dateStr.split(" - ")[0]);
 
@@ -14,7 +17,7 @@ const sortedExperiences = [...Experiences.experiences].sort((a, b) => {
   return parseStartDate(b.date) - parseStartDate(a.date);
 });
 
-function Timeline() {
+function Timeline({ variant = "full" }) {
   return (
     <div className="experience">
       <VerticalTimeline lineColor="#192428">
@@ -33,31 +36,16 @@ function Timeline() {
             }}
             icon={item.type === "work" ? <WorkIcon /> : <SchoolIcon />}
           >
-            <h3 className="vertical-timeline-element-title">{item.title}</h3>
-            {item.subtitle && (
-              <h4 className="vertical-timeline-element-subtitle">
-                {item.subtitle}
-              </h4>
-            )}
-            {item.sections.map((section, i) => (
-              <div key={i}>
-                {section.heading && (
-                  <p>
-                    <strong>{section.heading}</strong>
-                  </p>
-                )}
-                <ul>
-                  {section.bullets.map((bullet, j) => (
-                    <li key={j}>{bullet}</li>
-                  ))}
-                </ul>
-              </div>
-            ))}
+            <TimelineEntryContent item={item} variant={variant} />
           </VerticalTimelineElement>
         ))}
       </VerticalTimeline>
     </div>
   );
 }
+
+Timeline.propTypes = {
+  variant: PropTypes.oneOf(["full", "condensed"]),
+};
 
 export default Timeline;

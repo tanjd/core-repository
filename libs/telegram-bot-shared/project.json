@@ -1,34 +1,22 @@
 {
-  "implicitDependencies": [
-    "telegram-bot-shared"
-  ],
-  "name": "index-watch",
-  "projectType": "application",
-  "sourceRoot": "apps/index-watch/src",
+  "name": "telegram-bot-shared",
+  "projectType": "library",
+  "sourceRoot": "libs/telegram-bot-shared/src",
   "tags": [],
   "targets": {
     "build": {
       "executor": "nx:run-commands",
       "options": {
         "command": "uv sync --locked",
-        "cwd": "apps/index-watch"
+        "cwd": "libs/telegram-bot-shared"
       }
     },
-    "docker-build": {},
-    "docker-push": {},
     "lint": {
       "cache": true,
       "executor": "nx:run-commands",
       "options": {
         "command": "uv run ruff check . && uv run ruff format --check .",
-        "cwd": "apps/index-watch"
-      }
-    },
-    "serve": {
-      "executor": "nx:run-commands",
-      "options": {
-        "command": "uv run python -m index_watch",
-        "cwd": "apps/index-watch"
+        "cwd": "libs/telegram-bot-shared"
       }
     },
     "test": {
@@ -36,7 +24,7 @@
       "executor": "nx:run-commands",
       "options": {
         "command": "uv run pytest",
-        "cwd": "apps/index-watch"
+        "cwd": "libs/telegram-bot-shared"
       }
     }
   }
