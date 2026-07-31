@@ -27,10 +27,22 @@ jobs:
       - uses: actions/checkout@v7
         with:
           fetch-depth: 0
-          # workflow_run always checks out the default branch by default;
-          # pin explicitly to the commit CI actually ran on.
-          ref: ${{ github.event.workflow_run.head_sha || github.ref }}
+          # Check out the branch (not a raw SHA) so this has a real local
+          # branch with upstream tracking - `nx release` pushes via a bare
+          # `git push` with no explicit refspec, which fails with "not
+          # currently on a branch" in detached HEAD.
+          ref: ${{ github.event.workflow_run.head_branch || github.ref }}
           token: ${{ secrets.GHA_TRIGGER_TOKEN }}
+
+      - name: Pin to the commit CI actually ran on
+        # workflow_run always checks out the default branch by default;
+        # reset to the exact commit CI tested rather than whatever the
+        # branch tip happens to be by the time this job runs. Stays on the
+        # checked-out branch (unlike checking out the SHA directly), so the
+        # branch keeps its upstream tracking. Skipped for workflow_dispatch,
+        # where there's no workflow_run event/SHA to pin to.
+        if: ${{ github.event.workflow_run.head_sha != '' }}
+        run: git reset --hard ${{ github.event.workflow_run.head_sha }}
 
       - name: Read pnpm version from devcontainer config
         id: pnpm-version
