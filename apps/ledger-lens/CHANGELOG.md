@@ -1,3 +1,13 @@
+## 1.6.0 (2026-07-31)
+
+### 🚀 Features
+
+- migrate ledger-lens into the monorepo ([#25](https://github.com/tanjd/core-repository/pull/25))
+
+### ❤️ Thank You
+
+- Jeddy Tan @tanjd
+
 # CHANGELOG
 
 <!-- carried over from the standalone tanjd/ledger-lens repo (pre-migration history, python-semantic-release format) -->

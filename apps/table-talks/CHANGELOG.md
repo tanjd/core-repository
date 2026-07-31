@@ -1,3 +1,7 @@
+## 1.6.0 (2026-07-31)
+
+This was a version bump only for table-talks to align it with other projects, there were no code changes.
+
 ## 1.5.0 (2026-07-31)
 
 This was a version bump only for table-talks to align it with other projects, there were no code changes.
