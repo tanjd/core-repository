@@ -23,6 +23,7 @@ module.exports = async function telegramBotGenerator(tree, options) {
     projectType: "application",
     sourceRoot: `${projectRoot}/src`,
     tags: [],
+    implicitDependencies: ["telegram-bot-shared"],
     targets: {
       build: {
         executor: "nx:run-commands",

@@ -96,7 +96,9 @@ coverage.xml
 .next
 out
 
-.claude
+.claude/*
+!.claude/skills
+!.claude/rules
 
 # Draft specs (spec-driven planning docs) - not yet ready to commit
 docs/specs/
@@ -111,3 +113,5 @@ apps/ledger-lens-backend/data/
 # ledger-lens: don't commit a locally-generated compose file; use the
 # example as a template (same convention the standalone repo used)
 docker-compose.yml
+
+.nx/polygraph

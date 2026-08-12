@@ -1,0 +1,51 @@
+.projects {
+  width: 100%;
+  min-height: calc(100vh - var(--navbar-height));
+  padding: 40px 8%;
+  box-sizing: border-box;
+  background-color: #192428;
+  color: #f0f0f0;
+}
+
+.projects h2 {
+  color: #39ace7;
+  text-align: center;
+  margin-bottom: 30px;
+}
+
+.project-card {
+  height: 100%;
+  background-color: #223035 !important;
+  color: #f0f0f0 !important;
+}
+
+.project-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.eli5-text {
+  color: #39ace7;
+}
+
+.project-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 12px;
+}
+
+.project-links {
+  margin-top: 12px;
+}
+
+.project-links a {
+  color: #f0f0f0;
+}
+
+@media only screen and (max-width: 600px) {
+  .projects {
+    padding: 30px 5%;
+  }
+}

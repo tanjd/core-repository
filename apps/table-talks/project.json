@@ -1,4 +1,7 @@
 {
+  "implicitDependencies": [
+    "telegram-bot-shared"
+  ],
   "name": "table-talks",
   "projectType": "application",
   "sourceRoot": "apps/table-talks/src",

@@ -4,6 +4,15 @@ An Nx monorepo (TypeScript/Next.js + Go + Python/uv), managed with pnpm and
 developed inside a devcontainer for a consistent environment across
 contributors. Long-term home for side projects, starting with Telegram bots.
 
+## 🧭 Principles
+
+- **Collaboration** — I want people to want to work with me: reliable, easy
+  to work with, no surprises.
+- **Clarity over cleverness** — simple, readable solutions beat clever ones.
+  If it needs a comment to explain the trick, it's probably too clever.
+- **Ownership** — work heartily, as unto the Lord, not unto men
+  (Colossians 3:23).
+
 ## 🛠 Tech Stack
 
 - **Build System**: [Nx](https://nx.dev/) (v22.2.2, capped — see "Known gaps"

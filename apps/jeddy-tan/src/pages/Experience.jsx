@@ -1,9 +1,10 @@
+import "../styles/Experience.css";
 import Timeline from "../components/Timeline";
 
 function Experience() {
   return (
     <div className="experience">
-      <Timeline />
+      <Timeline variant="full" />
     </div>
   );
 }

@@ -4,16 +4,14 @@ import logging
 import sys
 
 from dotenv import load_dotenv
+from telegram_bot_shared.health import start_health_server
+from telegram_bot_shared.logging_setup import configure_logging
 
 from index_watch import database
 from index_watch.bot import alert_state, build_application, recovery_state, setup_scheduler
 from index_watch.config import Config
 
-logging.basicConfig(
-    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-    level=logging.INFO,
-    stream=sys.stdout,
-)
+configure_logging()
 logger = logging.getLogger(__name__)
 
 
@@ -27,6 +25,8 @@ def main() -> None:
     except ValueError as e:
         logger.error("Configuration validation failed: %s", e)
         sys.exit(1)
+
+    start_health_server(config.health_check_port)
 
     # Initialize database
     logger.info("Initializing database at %s", config.db_path)

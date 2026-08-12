@@ -5,6 +5,8 @@
     "@eslint/compat": "^1.4.1",
     "@eslint/eslintrc": "^3.3.6",
     "@eslint/js": "^9.39.5",
+    "@fontsource/inter": "^5.3.0",
+    "@fontsource/jetbrains-mono": "^5.3.0",
     "@mui/icons-material": "^5.18.0",
     "@mui/material": "^5.18.0",
     "@next/eslint-plugin-next": "^15.5.22",
@@ -63,6 +65,7 @@
     "nx": "22.2.2",
     "oxfmt": "^0.61.0",
     "postcss": "8.5.25",
+    "prop-types": "^15.8.1",
     "radix-ui": "^1.6.7",
     "react": "19.1.1",
     "react-dom": "19.1.1",
@@ -95,7 +98,7 @@
       "eslint --fix",
       "oxfmt"
     ],
-    "*.{json,md,yml,yaml,css,html}": [
+    "*.{md,yml,yaml,css,html}": [
       "oxfmt"
     ]
   },

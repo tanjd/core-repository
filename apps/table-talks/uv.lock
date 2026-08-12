@@ -614,6 +614,7 @@ dependencies = [
     { name = "gspread" },
     { name = "python-dotenv" },
     { name = "python-telegram-bot" },
+    { name = "telegram-bot-shared" },
 ]
 
 [package.optional-dependencies]
@@ -638,6 +639,7 @@ requires-dist = [
     { name = "python-dotenv", specifier = ">=1.0.0" },
     { name = "python-telegram-bot", specifier = ">=21.0" },
     { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.8" },
+    { name = "telegram-bot-shared", editable = "../../libs/telegram-bot-shared" },
 ]
 provides-extras = ["dev"]
 
@@ -645,6 +647,19 @@ provides-extras = ["dev"]
 dev = [
     { name = "basedpyright", specifier = ">=1.35" },
     { name = "pre-commit", specifier = ">=4.0" },
+    { name = "pytest", specifier = ">=8.0" },
+    { name = "ruff", specifier = ">=0.8" },
+]
+
+[[package]]
+name = "telegram-bot-shared"
+version = "0.1.0"
+source = { editable = "../../libs/telegram-bot-shared" }
+
+[package.metadata]
+
+[package.metadata.requires-dev]
+dev = [
     { name = "pytest", specifier = ">=8.0" },
     { name = "ruff", specifier = ">=0.8" },
 ]

@@ -2,9 +2,14 @@
 #
 # Build context is the repo root:
 #   docker build -f apps/<%= name %>/Dockerfile .
+#
+# The image mirrors the repo's apps/<name> + libs/<lib> layout under /app (rather
+# than flattening apps/<%= name %> straight to /app) so that this app's
+# pyproject.toml `[tool.uv.sources]` path-dependency on ../../libs/telegram-bot-shared
+# resolves identically here and on the host — see libs/telegram-bot-shared/README.md.
 
 # -----------------------------------------------------------------------------
-# Stage 1: builder - install deps and app with uv; venv stays in /app/.venv
+# Stage 1: builder - install deps and app with uv; venv stays in .venv
 # -----------------------------------------------------------------------------
 FROM python:3.13-slim AS builder
 
@@ -13,11 +18,15 @@ WORKDIR /app
 RUN pip install --no-cache-dir --upgrade pip \
     && pip install --no-cache-dir uv
 
-COPY --link apps/<%= name %>/pyproject.toml apps/<%= name %>/uv.lock ./
+COPY --link libs/telegram-bot-shared/pyproject.toml libs/telegram-bot-shared/README.md /app/libs/telegram-bot-shared/
+COPY --link libs/telegram-bot-shared/src /app/libs/telegram-bot-shared/src/
+
+COPY --link apps/<%= name %>/pyproject.toml apps/<%= name %>/uv.lock /app/apps/<%= name %>/
+WORKDIR /app/apps/<%= name %>
 RUN uv sync --frozen --no-dev --no-install-project
 
-COPY --link apps/<%= name %>/src ./src/
-COPY --link apps/<%= name %>/README.md ./
+COPY --link apps/<%= name %>/src /app/apps/<%= name %>/src/
+COPY --link apps/<%= name %>/README.md /app/apps/<%= name %>/
 RUN uv sync --frozen --no-dev
 
 # -----------------------------------------------------------------------------
@@ -25,10 +34,11 @@ RUN uv sync --frozen --no-dev
 # -----------------------------------------------------------------------------
 FROM python:3.13-slim
 
-WORKDIR /app
+WORKDIR /app/apps/<%= name %>
 
-COPY --from=builder --link /app/.venv /app/.venv
-COPY --from=builder --link /app/src /app/src
+COPY --from=builder --link /app/apps/<%= name %>/.venv /app/apps/<%= name %>/.venv
+COPY --from=builder --link /app/apps/<%= name %>/src /app/apps/<%= name %>/src
+COPY --from=builder --link /app/libs/telegram-bot-shared/src /app/libs/telegram-bot-shared/src
 
 RUN adduser --disabled-password --gecos "" appuser \
     && chown -R appuser:appuser /app
@@ -36,8 +46,8 @@ RUN adduser --disabled-password --gecos "" appuser \
 USER appuser
 
 ENV PYTHONUNBUFFERED=1
-ENV PATH="/app/.venv/bin:$PATH"
-ENV PYTHONPATH="/app"
+ENV PATH="/app/apps/<%= name %>/.venv/bin:$PATH"
+ENV PYTHONPATH="/app/apps/<%= name %>"
 
 EXPOSE 8080
 

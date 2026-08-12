@@ -6,6 +6,9 @@ export default defineConfig({
   root: __dirname,
   cacheDir: "../../node_modules/.vite/apps/jeddy-tan",
   plugins: [react()],
+  server: {
+    host: true,
+  },
   build: {
     outDir: "../../dist/apps/jeddy-tan",
     emptyOutDir: true,

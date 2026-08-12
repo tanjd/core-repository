@@ -20,6 +20,7 @@ dependencies = [
     "python-dotenv>=1.0.0",
     "gspread>=6.0.0",
     "google-auth>=2.0.0",
+    "telegram-bot-shared",
 ]
 
 [project.optional-dependencies]
@@ -27,6 +28,9 @@ dev = ["pytest>=8.0", "ruff>=0.8"]
 
 [dependency-groups]
 dev = ["basedpyright>=1.35", "pre-commit>=4.0", "pytest>=8.0", "ruff>=0.8"]
+
+[tool.uv.sources]
+telegram-bot-shared = { path = "../../libs/telegram-bot-shared", editable = true }
 
 [tool.ruff]
 extend = "../../ruff.toml"

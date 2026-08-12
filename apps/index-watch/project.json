@@ -1,4 +1,7 @@
 {
+  "implicitDependencies": [
+    "telegram-bot-shared"
+  ],
   "name": "index-watch",
   "projectType": "application",
   "sourceRoot": "apps/index-watch/src",

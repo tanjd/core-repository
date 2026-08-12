@@ -14,10 +14,14 @@ requires-python = ">=3.13"
 dependencies = [
   "python-telegram-bot>=21.0",
   "python-dotenv>=1.0.0",
+  "telegram-bot-shared",
 ]
 
 [dependency-groups]
 dev = ["pytest>=8.0", "ruff>=0.8"]
+
+[tool.uv.sources]
+telegram-bot-shared = { path = "../../libs/telegram-bot-shared", editable = true }
 
 [tool.ruff]
 extend = "../../ruff.toml"

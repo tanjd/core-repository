@@ -1,0 +1,67 @@
+.highlights-list {
+  margin: 0 0 0.5rem;
+  padding-left: 1.2rem;
+}
+
+.timeline-section {
+  margin-top: 0.75rem;
+}
+
+.timeline-section-header {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+}
+
+.eli5-text {
+  color: #39ace7;
+}
+
+.experience .vertical-timeline-element-icon.shadow-size-small {
+  box-shadow:
+    0 0 0 2px #192428,
+    inset 0 1px 0 rgba(0, 0, 0, 0.3),
+    0 2px 0 4px rgba(0, 0, 0, 0.2);
+}
+
+.experience .vertical-timeline-element-icon.shadow-size-medium {
+  box-shadow:
+    0 0 0 3px #192428,
+    inset 0 2px 0 rgba(0, 0, 0, 0.3),
+    0 3px 0 5px rgba(0, 0, 0, 0.2);
+}
+
+.experience .vertical-timeline-element-icon.shadow-size-large {
+  box-shadow:
+    0 0 0 4px #192428,
+    inset 0 2px 0 rgba(0, 0, 0, 0.3),
+    0 4px 0 6px rgba(0, 0, 0, 0.2);
+}
+
+.experience .vertical-timeline-element-content {
+  background: #223035;
+  color: #f0f0f0;
+  box-shadow: 0 3px 0 rgba(0, 0, 0, 0.4);
+}
+
+.experience .vertical-timeline-element-content h2 {
+  color: #39ace7;
+}
+
+.experience .vertical-timeline-element-title,
+.experience .vertical-timeline-element-subtitle {
+  color: #f0f0f0;
+}
+
+.experience .vertical-timeline-element-content-arrow {
+  border-right-color: #223035;
+}
+
+.experience
+  .vertical-timeline--one-column-right
+  .vertical-timeline-element-content-arrow,
+.experience
+  .vertical-timeline--one-column-right
+  .vertical-timeline-element-content::before {
+  border-left-color: #223035;
+}
