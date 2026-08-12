@@ -20,10 +20,9 @@ staged files automatically — there's no jeddy-tan-local formatting/hook config
 
 Single-page React portfolio app with client-side routing:
 
-- `src/App.jsx` — Root with React Router routes (`/`, `/projects`, `/experience`, `/readme`) and
-  the shared `Navbar` / `Footer` (Navbar is rendered on every route)
-- `src/pages/` — One component per route (`Home.jsx`, `Projects.jsx`, `Experience.jsx`,
-  `Readme.jsx`)
+- `src/App.jsx` — Root with React Router routes (`/`, `/projects`, `/experience`) and the shared
+  `Navbar` / `Footer` (Navbar is rendered on every route)
+- `src/pages/` — One component per route (`Readme.jsx` at `/`, `Projects.jsx`, `Experience.jsx`)
 - `src/components/` — Shared UI: `Timeline.jsx`, `TimelineEntryContent.jsx`, `Navbar.jsx`,
   `Footer.jsx`
 - `src/data.json` — Single source of truth for all experience entries
@@ -91,26 +90,41 @@ cards on the Projects page. Each entry:
 
 ## Key patterns
 
-- `Timeline.jsx` consumes `data.json` and renders `react-vertical-timeline-component`; the actual
-  per-entry content (title, highlights, expand/collapse, ELI5 toggles) is delegated to
-  `TimelineEntryContent.jsx` so it can hold that interactive state. `Timeline` accepts a `variant`
-  prop: `"condensed"` (used on Home) shows highlights only with no expand/ELI5 UI; `"full"`
-  (default, used on Experience) adds a "Show more" toggle revealing `sections`/`bullets`, plus a
-  per-section lightbulb button that swaps bullets for that section's `eli5` text when present.
+- `Timeline.jsx` consumes `data.json` and renders `react-vertical-timeline-component` directly (no
+  wrapper div of its own — the page component supplies that); the actual per-entry content (title,
+  highlights, expand/collapse, ELI5 toggles) is delegated to `TimelineEntryContent.jsx` so it can
+  hold that interactive state. `Timeline` accepts a `variant` prop: `"full"` (default, the only
+  variant actually in use — Experience is Timeline's sole remaining consumer) adds a "Show more"
+  toggle revealing `sections`/`bullets`, plus a per-section lightbulb button that swaps bullets for
+  that section's `eli5` text when present. `"condensed"` (highlights only, no expand/ELI5 UI) was
+  built for the old standalone Home page's teaser and has had no consumer since Home was folded
+  into `Readme.jsx` — dead code kept around in case a condensed teaser resurfaces elsewhere, not a
+  bug.
 - Material-UI (`@mui/material`, `@mui/icons-material`) is used for icons, `Collapse`/`Button`/
   `IconButton` (expand + ELI5 toggles), and `Card`/`Grid`/`Chip` (Projects page); emotion handles
   CSS-in-JS. There's no global MUI theme/`ThemeProvider` — colors are plain CSS classes throughout,
   by design, matching the rest of the app.
 - Color palette: dark navy `#192428` backgrounds, `#f0f0f0` text, cyan `#39ace7` accents, gold
-  `#d8ab4e` for the active timeline entry.
-- The README page (`src/pages/Readme.jsx`, route `/readme`, nav label "README") is a deliberate
-  pun — a place to write about work values/working style, framed like an actual README file
-  (monospace path/heading styling in `Readme.css`). Its content is a small inline JS array at the
+  `#d8ab4e` for the active timeline entry. This is a single unified dark theme across every
+  route (Home/Readme, Projects, Experience) plus the Navbar/Footer chrome — `.App`'s own background
+  (`App.css`) is set to the same dark navy too, since it peeks through in the gap above the Footer
+  (`margin-top: 200px` in `Footer.css`) on any route shorter than the viewport; it's not just inert
+  fallback color. The Experience/Timeline page reaches this state by overriding
+  `react-vertical-timeline-component`'s default light theme (white cards, white icon-ring halo,
+  dark line/icon on white bg) in `Timeline.css`, scoped under the page's own `.experience` class
+  for specificity — the vertical line color and non-active timeline-icon colors are inverted from
+  the library's light-theme defaults (light icon fill on dark bg, muted slate line) rather than
+  reused verbatim.
+- The README page (`src/pages/Readme.jsx`, route `/`, nav label `$ home`) is a deliberate pun — it
+  doubles as the site's landing page (hero greeting + social links, formatted as a fake README
+  "title" section) and a place to write about work values/working style, framed like an actual
+  README file (monospace path/heading styling in `Readme.css`). It replaced a separate `Home.jsx`
+  page that used to render at `/` with its own condensed `Timeline` teaser — that duplicated the
+  full `Timeline` already shown on `/experience`, so it was dropped in favor of this page serving
+  both roles. Its content (both the hero copy and the `principles` array) is inline JSX/JS at the
   top of the component, **not** a JSON data file like `data.json`/`projectsData.json` — those JSON
   files earn their keep as repeatable, growing datasets; this page is a handful of one-off prose
-  entries with a single consumer, closer to how `Home.jsx`'s hero text is already inline JSX. The
-  current `principles` array in `Readme.jsx` is placeholder content flagged for replacement with
-  the user's real values, not meant to ship as final.
+  entries with a single consumer.
 - The site favicon set (`public/favicon.ico`, `logo192.png`, `logo512.png`,
   `apple-touch-icon.png`) was generated from a source avatar image via a one-off Pillow crop/resize
   script (not a build-time dependency — Pillow isn't in any `pyproject.toml`/`requirements.txt`

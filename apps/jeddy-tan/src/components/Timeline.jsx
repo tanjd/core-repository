@@ -19,28 +19,26 @@ const sortedExperiences = [...Experiences.experiences].sort((a, b) => {
 
 function Timeline({ variant = "full" }) {
   return (
-    <div className="experience">
-      <VerticalTimeline lineColor="#192428">
-        {sortedExperiences.map((item, id) => (
-          <VerticalTimelineElement
-            key={id}
-            className={
-              item.type === "work"
-                ? "vertical-timeline-element--work"
-                : "vertical-timeline-element--education"
-            }
-            date={item.date}
-            iconStyle={{
-              background: item.isActive ? "#d8ab4e" : "#192428",
-              color: item.isActive ? "#192428" : "#fff",
-            }}
-            icon={item.type === "work" ? <WorkIcon /> : <SchoolIcon />}
-          >
-            <TimelineEntryContent item={item} variant={variant} />
-          </VerticalTimelineElement>
-        ))}
-      </VerticalTimeline>
-    </div>
+    <VerticalTimeline lineColor="#5c7075">
+      {sortedExperiences.map((item, id) => (
+        <VerticalTimelineElement
+          key={id}
+          className={
+            item.type === "work"
+              ? "vertical-timeline-element--work"
+              : "vertical-timeline-element--education"
+          }
+          date={item.date}
+          iconStyle={{
+            background: item.isActive ? "#d8ab4e" : "#f0f0f0",
+            color: "#192428",
+          }}
+          icon={item.type === "work" ? <WorkIcon /> : <SchoolIcon />}
+        >
+          <TimelineEntryContent item={item} variant={variant} />
+        </VerticalTimelineElement>
+      ))}
+    </VerticalTimeline>
   );
 }
 

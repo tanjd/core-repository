@@ -1,3 +1,4 @@
+import "../styles/Experience.css";
 import Timeline from "../components/Timeline";
 
 function Experience() {

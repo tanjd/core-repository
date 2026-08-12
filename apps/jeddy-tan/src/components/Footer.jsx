@@ -13,7 +13,7 @@ function Footer() {
           <LinkedInIcon />
         </a>
       </div>
-      <p> &copy; 2026 jeddy-tan.com</p>
+      <p> &copy; work.tanjd.com</p>
     </div>
   );
 }

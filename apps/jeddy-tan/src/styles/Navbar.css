@@ -1,88 +1,152 @@
-.navbar {
-  width: 100%;
-  height: 100px;
-  background: #192428;
+:root {
+  --navbar-height: 64px;
 }
 
-.links {
+.navbar {
+  position: sticky;
+  top: 0;
+  z-index: 100;
+}
+
+.navbar-bar {
   width: 100%;
-  height: 100%;
+  height: var(--navbar-height);
+  background: #192428;
   display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 24px;
+  box-sizing: border-box;
+}
+
+.navbar-brand {
+  font-family: "JetBrains Mono", "Courier New", monospace;
+  color: #d8ab4e;
+  font-size: 18px;
+  font-weight: 500;
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.navbar-links {
+  display: flex;
+  align-items: center;
+  gap: 28px;
+}
+
+.navbar-link {
+  font-family: "JetBrains Mono", "Courier New", monospace;
+  font-size: 15px;
+  color: #f0f0f0;
+  text-decoration: none;
+  display: inline-flex;
+  align-items: center;
+  padding: 6px 2px;
+  transition: color 0.2s ease;
+}
+
+.navbar-link-prompt {
+  color: #5c7075;
+  margin-right: 2px;
+  transition: color 0.2s ease;
+}
+
+.navbar-link:hover,
+.navbar-link:hover .navbar-link-prompt {
+  color: #39ace7;
+}
+
+.navbar-cursor {
+  display: inline-block;
+  margin-left: 6px;
+  color: #39ace7;
+  opacity: 0;
+  transition: opacity 0.2s ease;
+}
+
+.navbar-link--active,
+.navbar-link--active .navbar-link-prompt {
+  color: #39ace7;
+}
+
+.navbar-link--active .navbar-cursor {
+  opacity: 1;
+  animation: navbar-cursor-blink 1.1s step-end infinite;
+}
+
+@keyframes navbar-cursor-blink {
+  0%,
+  50% {
+    opacity: 1;
+  }
+  50.01%,
+  100% {
+    opacity: 0;
+  }
+}
+
+.navbar-toggle {
+  display: none;
+  align-items: center;
+  background: transparent;
+  border: none;
+  color: #f0f0f0;
+  cursor: pointer;
+  padding: 4px;
+}
+
+.navbar-toggle svg {
+  font-size: 32px;
+}
+
+.navbar-overlay {
+  position: fixed;
+  top: var(--navbar-height);
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: #192428;
+  display: flex;
+  flex-direction: column;
   align-items: center;
   justify-content: center;
-  color: white;
+  gap: 32px;
+  z-index: 99;
+  opacity: 0;
+  visibility: hidden;
+  transform: translateY(-8px);
+  transition:
+    opacity 0.25s ease,
+    transform 0.25s ease,
+    visibility 0s 0.25s;
 }
 
-.navbar a {
-  color: white;
-  text-decoration: none;
-  margin: 20px;
-  font-size: 25px;
+.navbar-overlay--open {
+  opacity: 1;
+  visibility: visible;
+  transform: translateY(0);
+  transition:
+    opacity 0.25s ease,
+    transform 0.25s ease,
+    visibility 0s 0s;
 }
 
-.toggleButton {
-  width: 100%;
-  height: 100px;
-  display: flex;
-  align-items: center;
-  justify-content: flex-end;
-}
-
-.toggleButton svg {
-  font-size: 50px;
-}
-.toggleButton button {
-  margin-right: 20px;
-  background-color: transparent;
-  border: none;
-  color: white;
-  cursor: pointer;
-}
-
-#open {
-  height: 100vh;
-}
-
-#open .links {
-  flex-direction: column;
-  justify-content: flex-start;
-  margin-top: 100px;
-}
-
-#open a {
-  width: 100%;
-  text-align: center;
-}
-
-@media only screen and (max-width: 900px) {
-  .navbar a {
-    width: 70px;
-  }
+.navbar-link--mobile {
+  font-size: 22px;
 }
 
 @media only screen and (max-width: 600px) {
-  .toggleButton {
-    display: flex;
-  }
-  #close a {
+  .navbar-links {
     display: none;
+  }
+
+  .navbar-toggle {
+    display: inline-flex;
   }
 }
 
-@media only screen and (min-width: 600px) {
-  .toggleButton {
+@media only screen and (min-width: 601px) {
+  .navbar-overlay {
     display: none;
-  }
-
-  .hiddenLinks {
-    display: none;
-  }
-
-  #open {
-    height: 100px;
-  }
-
-  #open .links {
-    flex-direction: row;
   }
 }

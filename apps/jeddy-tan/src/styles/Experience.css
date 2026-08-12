@@ -1,0 +1,14 @@
+.experience {
+  width: 100%;
+  min-height: calc(100vh - 100px);
+  padding: 40px 8%;
+  box-sizing: border-box;
+  background-color: #192428;
+  color: #f0f0f0;
+}
+
+@media only screen and (max-width: 600px) {
+  .experience {
+    padding: 30px 5%;
+  }
+}
