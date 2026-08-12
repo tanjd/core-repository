@@ -22,7 +22,7 @@ repos:
       - id: pretty-format-json
         args:
           - --autofix
-        exclude: (devcontainer|package-lock|tsconfig.*).json
+        exclude: (devcontainer.*|package-lock|tsconfig.*)\.json$
       - id: check-merge-conflict
       - id: debug-statements
         # ledger-lens-backend requires Python >=3.14 (matches its production
