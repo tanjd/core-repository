@@ -96,7 +96,7 @@
       "eslint --fix",
       "oxfmt"
     ],
-    "*.{json,md,yml,yaml,css,html}": [
+    "*.{md,yml,yaml,css,html}": [
       "oxfmt"
     ]
   },
