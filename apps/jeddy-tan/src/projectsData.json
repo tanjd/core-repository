@@ -41,24 +41,14 @@
       ]
     },
     {
-      "description": "A home server I built and maintain myself, running my own storage and services instead of renting space from a cloud provider.",
-      "eli5": "Instead of paying rent to store my stuff in someone else's warehouse, I built my own shed in the backyard.",
+      "description": "A home server built from spare parts left over from years of building and upgrading my own gaming PCs, running my own storage and services instead of renting space from a cloud provider. One service it runs is Immich, a self-hosted replacement for Google Photos.",
+      "eli5": "Instead of paying rent to store my stuff in someone else's warehouse, I built my own shed in the backyard \u2014 out of spare parts I already had lying around from years of upgrading my gaming PC.",
       "links": {},
       "name": "Self-hosted NAS",
       "tags": [
         "Self-hosted",
         "Docker",
         "Linux"
-      ]
-    },
-    {
-      "description": "Ad hoc contributions \u2014 bug fixes and small features \u2014 to open-source projects I use day-to-day.",
-      "links": {
-        "github": "https://github.com/tanjd"
-      },
-      "name": "Open-source contributions",
-      "tags": [
-        "Open Source"
       ]
     }
   ]

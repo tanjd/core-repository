@@ -23,10 +23,10 @@
     {
       "date": "Jul 2022 - Jun 2025",
       "highlights": [
-        "3 years across Payments, Platform, Automation, and CI/CD teams",
-        "Built the GitHub Actions + Nx CI/CD pipeline powering the whole monorepo",
-        "Unified subscription/payment systems across multiple VPN brands into one platform",
-        "Automated internal workflows, including full employee offboarding"
+        "3 years across Payments, Platform, DevSecOps, and Internal App teams",
+        "Built the GitHub Actions + Nx CI/CD pipeline powering the whole monorepo for frontend team to deploy frontend applications",
+        "Unified subscription/payment systems across multiple VPN brands into one backend system",
+        "Automated internal workflows, including full employee onboard/offboarding, creating SCIM connectors"
       ],
       "isActive": false,
       "sections": [
