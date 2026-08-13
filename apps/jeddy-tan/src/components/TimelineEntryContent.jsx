@@ -1,6 +1,6 @@
 import { useState } from "react";
 import PropTypes from "prop-types";
-import { Button, Collapse, IconButton } from "@mui/material";
+import { Button, Collapse, IconButton, Tooltip } from "@mui/material";
 import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
 import ExpandLessIcon from "@mui/icons-material/ExpandLess";
 import LightbulbIcon from "@mui/icons-material/Lightbulb";
@@ -19,13 +19,17 @@ function SectionDetail({ section }) {
       <div className="timeline-section-header">
         {section.heading && <strong>{section.heading}</strong>}
         {section.eli5 && (
-          <IconButton
-            size="small"
-            aria-label="Toggle plain-language explanation"
-            onClick={() => setEli5Open((open) => !open)}
-          >
-            <LightbulbIcon fontSize="small" />
-          </IconButton>
+          <Tooltip title="Explain like I'm 5" enterTouchDelay={0}>
+            <IconButton
+              size="small"
+              className="eli5-toggle"
+              aria-label="Toggle plain-language explanation"
+              aria-pressed={eli5Open}
+              onClick={() => setEli5Open((open) => !open)}
+            >
+              <LightbulbIcon fontSize="small" />
+            </IconButton>
+          </Tooltip>
         )}
       </div>
       {section.eli5 && (

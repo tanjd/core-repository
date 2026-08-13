@@ -4,15 +4,19 @@
       "date": "June 2025 - present",
       "highlights": [
         "Building the next generation of Autodesk's access control system",
-        "Created a self-service platform for product teams to define and manage their own permission rules"
+        "Created a self-service platform for product teams to define and manage their own permission rules",
+        "Rebuilt the onboarding experience \u2014 docs and live demos \u2014 until new teammates called it the clearest explanation of the platform they'd had"
       ],
       "isActive": true,
       "sections": [
         {
           "bullets": [
-            "Building the next generation of Autodesk's access control system \u2014 the technology that determines who is allowed to access what within their products. Created a self-service platform that lets product teams define and manage their own permission rules in a structured, consistent way."
+            "Building the next generation of Autodesk's access control system \u2014 the technology that determines who is allowed to access what within their products. Created a self-service platform that lets product teams define and manage their own permission rules in a structured, consistent way.",
+            "Access control is critical infrastructure, and in a microservices company teams are naturally wary of moving something this sensitive onto an unproven system \u2014 made harder by the fact that the platform's flexibility, built to model complex permission scenarios, meant a real learning curve before a team saw any payoff. Partnered with a UX engineer to rewrite the documentation from scratch, breaking it into a guided path instead of a full-flexibility dump, and recorded demo walkthroughs of the platform end to end.",
+            "Proudest part of this was being able to stand in front of another team, take a real business use case, and demo \u2014 step by step, live \u2014 how it translates into a working permission rule on the platform. The feedback that mattered most: teammates who'd just joined ACM said the demos were the clearest explanation of the platform they'd gotten, including from people who'd already been on the team a while.",
+            "Two teams are currently onboarding in staging, with a production rollout next."
           ],
-          "eli5": "Like giving every hotel department its own keycard-programming station, instead of everyone having to call the front desk each time someone needs new access.",
+          "eli5": "Think of it like a bouncer checking people into a concert: there's a rule for who's allowed in, a window of time it applies (doors open until the show starts), and a specific thing that gets checked at the door (the barcode on the ticket). Building that bouncer wasn't the hard part \u2014 the hard part was teaching every venue how to describe their own \"who's allowed in, and when\" in those same three pieces, without needing us standing at the door every time.",
           "heading": "Access Control Management (ACM)"
         }
       ],
@@ -32,28 +36,41 @@
       "sections": [
         {
           "bullets": [
-            "Designed and built the CI/CD pipeline for a monorepo using GitHub Actions and NX. The pipeline automatically integrates, tests, and deploys different types of applications (e.g. React and FastAPI) that are affected by a code change, all running at the same time."
+            "Designed and built a monorepo platform using Nx and GitHub Actions that let frontend teams ship microfrontend apps and run fast A/B tests. Centralized what used to be a separate deployment pipeline per repo into one shared, standardized setup \u2014 including a full CI suite (Playwright end-to-end tests among others) \u2014 with typical deploys taking 15-25 minutes.",
+            "Nx's dependency graph means a change only rebuilds, tests, and deploys the specific apps and libraries it actually affects, rather than the whole monorepo. Wiring this into CI wasn't turnkey at the time \u2014 no official tooling existed yet \u2014 so wrote a custom script to compute the affected project list inside GitHub Actions; Nx later shipped an official action solving the same problem.",
+            "The bigger win was speed to start, not just speed to ship: launching a brand-new frontend app used to mean creating a new GitHub repo, copying and hand-editing a CI/CD pipeline, and writing new infrastructure-as-code from scratch \u2014 real work before a single line of the actual app existed. Built a generator that scaffolds a fully wired app \u2014 pipeline and infrastructure included \u2014 in one command.",
+            "Designed the platform to be extensible beyond frontend apps too \u2014 Lambda-based services could plug into the same shared pipeline instead of needing their own bespoke setup."
           ],
-          "eli5": "Like an assembly line that automatically inspects, tests, and ships only the parts of a car that actually changed \u2014 instead of re-testing and re-shipping the whole car for every small tweak.",
+          "eli5": "Think of it like ordering a food truck. Launching a brand-new frontend app used to mean building your own truck from scratch \u2014 get a vehicle, wire the kitchen, sort the permits \u2014 all before serving a single dish. We built a system where one order gets you a fully licensed, wired, ready-to-park truck, so you go straight to cooking: writing the actual app, instead of the plumbing around it.",
           "heading": "Web Applications Platform (WAP)"
         },
         {
           "bullets": [
-            "Built tools to automate internal processes and workflows for various teams. For example, automated the employee offboarding process to remove a departing employee's access from multiple applications in one go."
+            "ExpressVPN grew quickly, with hiring waves and periods of headcount reduction along the way \u2014 and onboarding/offboarding was entirely manual: HR cloned a Google Sheet checklist and worked through it by hand, application by application, for every employee.",
+            "Built a SCIM connector for Okta to automate provisioning and deprovisioning \u2014 including writing connectors from scratch for apps that didn't support SCIM out of the box, and for internal, in-house-built applications too, so offboarding wasn't limited to off-the-shelf SaaS tools.",
+            "Applied the same monorepo pattern built for WAP to house the SCIM connectors \u2014 one shared platform instead of a one-off integration per app.",
+            "Also built integrations with Airtable, which management relied on heavily day to day \u2014 meeting the org where its actual tools were rather than pushing everyone onto a \"correct\" one."
           ],
+          "eli5": "Think of offboarding like flipping light switches in a large building \u2014 before, HR walked room to room, manually flipping every switch (revoking access to every application) off a paper checklist. We wired a master switch instead: flip it once and every room's access shuts off automatically, including custom-built rooms that didn't come with a standard switch, where one got wired in ourselves. And instead of wiring each room differently, every switch lived in the same shared control panel \u2014 the same pattern already built for WAP.",
           "heading": "Internal Apps & Automation (IAA)"
         },
         {
           "bullets": [
-            "Built and maintained the shared tools and infrastructure used by all engineering teams, making it faster and more reliable for developers to build, test, and release software. Standardized development environments and modernized the company's cloud setup to follow industry best practices."
+            "Standardized local development with devcontainers and golden Docker images \u2014 particularly valuable for legacy systems that were previously painful to set up by hand. Beyond faster onboarding, this made it easy for engineers to move across teams and jump in to help, which mattered in a company that reorganized often.",
+            "Modernized the cloud setup with IaC modules on Scalr, replacing what had been a \"wild west\" of teams running their own AWS accounts however they liked. This enforced consistent resource tagging, so cloud cost could finally be attributed accurately to the team responsible for it.",
+            "Standardized on ECS as the default compute platform, reserving Kubernetes for cases with a genuinely strong justification \u2014 making cost and maintenance predictable, and cutting out a recurring source of tech-stack debate between teams."
           ],
+          "eli5": "Think of it like running an apartment building. Devcontainers meant every unit came fully furnished and move-in ready \u2014 including the older, oddly-wired units that used to take days to set up \u2014 so any tenant (engineer) could move between units (teams) without reassembling furniture each time. On the finance side, tenants used to run their own separate accounts and spend however they liked, a real wild west. We put everyone on one shared, metered account instead, so costs traced back to the right tenant, and set a standard unit layout (ECS) that covers almost every need, reserving custom-built layouts (Kubernetes) for the rare case that actually needs one \u2014 which also ended a lot of arguments about whose layout was best.",
           "heading": "Platform Team"
         },
         {
           "bullets": [
-            "Consolidated the subscription and payment systems of multiple VPN brands (including PIA and CyberGhost) owned by ExpressVPN's parent company into a single unified platform. Collaborated with the marketing team on targeted email campaigns offering discounts to customers at risk of cancelling, helping reduce cancellations and win back lapsed subscribers."
+            "Consolidated the subscription and payment systems of multiple VPN brands (including PIA and CyberGhost) owned by ExpressVPN's parent company into a single unified platform.",
+            "The hardest technical part was correctness during the migration itself \u2014 the platform couldn't afford downtime, so relied on Change Data Capture (CDC) to keep the old and new systems in sync in real time throughout the cutover, rather than a big-bang switch.",
+            "The harder part wasn't technical at all: a change in leadership late in the project brought real hesitation about whether to proceed, out of concern for how consolidation might affect one brand's distinct market position. Helping build the confidence to see the migration through to completion mattered as much as getting the migration itself right.",
+            "Collaborated with the marketing team on targeted email campaigns offering discounts to customers at risk of cancelling, helping win back lapsed subscribers."
           ],
-          "eli5": "Imagine several sibling stores (different VPN brands) each running their own separate cash register \u2014 this project merged them into one shared register, so a pricing change or subscription update applies everywhere at once instead of being repeated four times.",
+          "eli5": "Imagine several sibling stores (different VPN brands) each running their own separate cash register \u2014 this project merged them into one shared register, so a pricing change or subscription update applies everywhere at once instead of being repeated four times. The tricky part was making the swap without ever closing the doors \u2014 customers kept shopping while the register got rewired underneath them \u2014 and, near the finish line, convincing store management that sharing a register wouldn't make their flagship store look like just another branch.",
           "heading": "Core Services & Payments Team"
         }
       ],
@@ -67,7 +84,8 @@
       "sections": [
         {
           "bullets": [
-            "Built a prototype that automatically analyses and tests Android applications for malware, reducing the need for manual inspection."
+            "Built a prototype that automatically analyzed and tested Android applications for malware, reducing the need for manual inspection.",
+            "The standout memory from the internship wasn't the project, though \u2014 it was sitting in on a Black Hat tutorial on rooting an Android phone, hands-on and a little mischievous, and a good reminder of what drew me to security in the first place."
           ],
           "heading": "Engineering Center"
         }
@@ -81,8 +99,13 @@
       "sections": [
         {
           "bullets": [
-            "Reviewed open-source code libraries used in sensitive government projects to identify potential security weaknesses before they could be exploited."
+            "Reviewed open-source code libraries used in sensitive government projects to identify potential security weaknesses before they could be exploited.",
+            "This is where I first learned to use static analysis tools like SonarQube \u2014 a habit that's stuck ever since; it's one of the first things I set up on any team I join now.",
+            "Also picked up a skill that mattered more than expected at the time: quickly telling real vulnerabilities apart from the false positives these tools throw off constantly.",
+            "Alongside the audit work, built a small side project with another intern \u2014 an Android app that detects whether you've actually lost internet access, not just Wi-Fi, by pinging an outside server rather than just checking if you're connected to a router.",
+            "On my last day, my supervisor gave me a book \u2014 Winning with Honour \u2014 a small gesture that's stuck with me longer than most of the technical work did."
           ],
+          "eli5": "Being connected to Wi-Fi doesn't mean you have working internet \u2014 it's like being plugged into a phone line where the call never actually connects. The app didn't just check whether the phone was plugged in; it checked whether the call went through.",
           "heading": "Secure Software Development & Audit"
         }
       ],
@@ -95,7 +118,8 @@
       "sections": [
         {
           "bullets": [
-            "Double major in Software Development & Cybersecurity"
+            "Double major in Software Development & Cybersecurity.",
+            "The best part wasn't the coursework \u2014 it was building projects with friends and figuring things out together."
           ],
           "heading": "Bachelor of Science (Information Systems & Management)"
         }
