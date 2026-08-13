@@ -7,10 +7,11 @@ import {
   Collapse,
   Grid,
   IconButton,
-  Typography,
+  Tooltip,
 } from "@mui/material";
 import GitHubIcon from "@mui/icons-material/GitHub";
 import LightbulbIcon from "@mui/icons-material/Lightbulb";
+import TelegramIcon from "@mui/icons-material/Telegram";
 import projectsData from "../projectsData.json";
 import "../styles/Projects.css";
 
@@ -21,15 +22,19 @@ function ProjectCard({ project }) {
     <Card className="project-card">
       <CardContent>
         <div className="project-card-header">
-          <Typography variant="h6">{project.name}</Typography>
+          <h3 className="project-card-title">{project.name}</h3>
           {project.eli5 && (
-            <IconButton
-              size="small"
-              aria-label="Toggle plain-language explanation"
-              onClick={() => setEli5Open((open) => !open)}
-            >
-              <LightbulbIcon fontSize="small" />
-            </IconButton>
+            <Tooltip title="Explain like I'm 5" enterTouchDelay={0}>
+              <IconButton
+                size="small"
+                className="eli5-toggle"
+                aria-label="Toggle plain-language explanation"
+                aria-pressed={eli5Open}
+                onClick={() => setEli5Open((open) => !open)}
+              >
+                <LightbulbIcon fontSize="small" />
+              </IconButton>
+            </Tooltip>
           )}
         </div>
 
@@ -41,7 +46,7 @@ function ProjectCard({ project }) {
           </Collapse>
         )}
         <Collapse in={!eli5Open} timeout="auto" unmountOnExit>
-          <Typography variant="body2">{project.description}</Typography>
+          <p className="project-card-description">{project.description}</p>
         </Collapse>
 
         {project.tags?.length > 0 && (
@@ -52,11 +57,28 @@ function ProjectCard({ project }) {
           </div>
         )}
 
-        {project.links?.github && (
+        {(project.links?.github || project.links?.live) && (
           <div className="project-links">
-            <a href={project.links.github} target="_blank" rel="noreferrer">
-              <GitHubIcon />
-            </a>
+            {project.links?.github && (
+              <a
+                href={project.links.github}
+                target="_blank"
+                rel="noreferrer"
+                aria-label={`${project.name} on GitHub`}
+              >
+                <GitHubIcon />
+              </a>
+            )}
+            {project.links?.live && (
+              <a
+                href={project.links.live}
+                target="_blank"
+                rel="noreferrer"
+                aria-label={`Try ${project.name}`}
+              >
+                <TelegramIcon />
+              </a>
+            )}
           </div>
         )}
       </CardContent>
@@ -81,6 +103,13 @@ function Projects() {
   return (
     <div className="projects">
       <h2>Side Projects</h2>
+      <p className="projects-intro">
+        A few things I&apos;ve built outside of work, mostly to solve a problem
+        I actually ran into.
+      </p>
+      <p className="projects-hint">
+        Click the 💡 on any card for a plain-language explanation.
+      </p>
       <Grid container spacing={3}>
         {projectsData.projects.map((project) => (
           <Grid item xs={12} sm={6} md={4} key={project.name}>

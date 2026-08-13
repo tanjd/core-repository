@@ -10,38 +10,98 @@
 .projects h2 {
   color: #39ace7;
   text-align: center;
-  margin-bottom: 30px;
+  margin-bottom: 8px;
+}
+
+.projects-intro {
+  max-width: 640px;
+  margin: 0 auto 4px;
+  color: #a8b3b6;
+  font-size: 16px;
+  text-align: center;
+}
+
+.projects-hint {
+  max-width: 640px;
+  margin: 0 auto 30px;
+  color: #9fb0b5;
+  font-size: 0.9rem;
+  text-align: center;
 }
 
 .project-card {
   height: 100%;
   background-color: #223035 !important;
   color: #f0f0f0 !important;
+  border-left: 3px solid #39ace7;
+  border-radius: 8px !important;
+  transition:
+    transform 0.15s ease,
+    box-shadow 0.15s ease;
+}
+
+.project-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.35);
 }
 
 .project-card-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  gap: 8px;
+}
+
+.project-card-title {
+  color: #39ace7;
+  margin: 0;
+  font-size: 18px;
+}
+
+.project-card-description {
+  color: #f0f0f0;
+  line-height: 1.5;
+  margin: 8px 0 0;
+}
+
+.eli5-toggle {
+  color: #39ace7 !important;
 }
 
 .eli5-text {
   color: #39ace7;
+  line-height: 1.5;
+  margin: 8px 0 0;
 }
 
 .project-tags {
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
-  margin-top: 12px;
+  margin-top: 14px;
+}
+
+.project-tags .MuiChip-root {
+  font-family: inherit;
+  background-color: rgba(57, 172, 231, 0.12);
+  color: #39ace7;
+  border: 1px solid rgba(57, 172, 231, 0.4);
 }
 
 .project-links {
-  margin-top: 12px;
+  margin-top: 14px;
+  display: flex;
+  gap: 14px;
 }
 
 .project-links a {
-  color: #f0f0f0;
+  color: #a8b3b6;
+  display: inline-flex;
+  transition: color 0.15s ease;
+}
+
+.project-links a:hover {
+  color: #39ace7;
 }
 
 @media only screen and (max-width: 600px) {

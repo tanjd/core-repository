@@ -7,7 +7,7 @@ import SchoolIcon from "@mui/icons-material/School";
 
 const principles = [
   {
-    title: "People first",
+    title: "People centric",
     icon: HandshakeIcon,
     description:
       "I want to be someone people actually want on their team — reliable, kind, and genuinely fun to be around.",
@@ -16,7 +16,7 @@ const principles = [
   {
     title: "Wholeheartedly",
     icon: FlagIcon,
-    description: "I try to work wholeheartedly, not to be recognized for it.",
+    description: "I try to work heartily, not to be recognized for it.",
     question: "Would I still give my best effort if no one ever rewarded it?",
   },
   {

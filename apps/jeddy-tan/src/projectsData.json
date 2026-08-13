@@ -18,7 +18,8 @@
       "description": "A Telegram bot that tracks stock market index drawdowns and notifies subscribers when things drop.",
       "eli5": "A friend who watches the market all day and only taps you on the shoulder when it's dropped a lot.",
       "links": {
-        "github": "https://github.com/tanjd/index-watch"
+        "github": "https://github.com/tanjd/core-repository/tree/main/apps/index-watch",
+        "live": "https://t.me/IndexWatch_Bot"
       },
       "name": "index-watch",
       "tags": [
@@ -31,7 +32,8 @@
       "description": "A Telegram bot that deals themed conversation-starter cards to liven up group chats.",
       "eli5": "A digital card deck that gives your group chat something better to talk about than the weather.",
       "links": {
-        "github": "https://github.com/tanjd/table-talks"
+        "github": "https://github.com/tanjd/core-repository/tree/main/apps/table-talks",
+        "live": "https://t.me/TableTalksBot"
       },
       "name": "table-talks",
       "tags": [
