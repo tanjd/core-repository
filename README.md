@@ -30,6 +30,7 @@ contributors. Long-term home for side projects, starting with Telegram bots.
 │   ├── food-maps-e2e/          # Playwright E2E tests for food-maps
 │   ├── index-watch/            # Telegram bot (index drawdown tracker), Python/uv
 │   ├── table-talks/            # Telegram bot (conversation card game), Python/uv
+│   ├── otobr-buddy/            # Telegram bot (1:1 Bible reading partnerships), Python/uv
 │   ├── ledger-lens-backend/    # FastAPI portfolio-analysis API, Python/uv
 │   ├── ledger-lens/            # Next.js portfolio-analysis dashboard
 │   ├── bookshelf-backend/      # Go API (huma + GORM/SQLite), book-lending app

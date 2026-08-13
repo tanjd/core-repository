@@ -19,6 +19,8 @@ release process); the list below is just an index into the per-app files.
   `apps/index-watch/CLAUDE.md`.
 - `apps/table-talks` — Telegram bot (theme-based conversation card game), Python/uv. See
   `apps/table-talks/CLAUDE.md`.
+- `apps/otobr-buddy` — Telegram bot (one-to-one Bible reading partnerships), Python/uv. See
+  `apps/otobr-buddy/CLAUDE.md`.
 - `apps/ledger-lens-backend` — Python/uv + FastAPI + SQLModel API (portfolio CSV ingestion +
   analysis). See `apps/ledger-lens-backend/CLAUDE.md`.
 - `apps/ledger-lens` — Next.js + Tailwind CSS + shadcn/ui frontend for the above. See
