@@ -10,7 +10,7 @@ from telegram_bot_shared.logging_setup import configure_logging
 from <%= moduleName %>.bot import build_application
 from <%= moduleName %>.config import Config
 
-configure_logging()
+configure_logging(quiet_loggers=["httpx"])
 logger = logging.getLogger(__name__)
 
 

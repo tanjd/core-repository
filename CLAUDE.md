@@ -29,8 +29,8 @@ release process); the list below is just an index into the per-app files.
   path alias in `tsconfig.base.json` (not an npm package — no `package.json` of
   its own, folded into the root pnpm workspace).
 - `libs/telegram-bot-shared` — shared Python lib (health-check server, dev/prod bot-token
-  selection, logging setup) for the Telegram bots, consumed via a `uv` local path dependency
-  (see `.claude/rules/python.md`).
+  selection, `ADMIN_CHAT_IDS` allowlist parsing, logging setup) for the Telegram bots, consumed
+  via a `uv` local path dependency (see `.claude/rules/python.md`).
 - `apps/jeddy-tan` — personal portfolio site (React Router + MUI), plain JS on
   Vite/`@nx/vite` (unlike every other frontend here, which is Next.js). See
   `apps/jeddy-tan/CLAUDE.md`.

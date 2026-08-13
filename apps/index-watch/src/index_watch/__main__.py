@@ -11,7 +11,7 @@ from index_watch import database
 from index_watch.bot import alert_state, build_application, recovery_state, setup_scheduler
 from index_watch.config import Config
 
-configure_logging()
+configure_logging(quiet_loggers=["httpx"])
 logger = logging.getLogger(__name__)
 
 
