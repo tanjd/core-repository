@@ -1,0 +1,63 @@
+services:
+  backend:
+    image: ghcr.io/tanjd/bookshelf-backend:latest
+    container_name: bookshelf-backend
+    restart: unless-stopped
+    # Port 8000 is only needed if you want direct API access for debugging.
+    # ports:
+    #   - "8000:8000"
+    volumes:
+      # TrueNAS: use an absolute dataset path, e.g. /mnt/tank/bookshelf
+      # Local:   ./data works fine
+      - /mnt/tank/bookshelf:/app/data
+    environment:
+      - ENV=prd
+      - PORT=8000
+      - DB_PATH=/app/data/bookshelf.db
+      - JWT_SECRET=${JWT_SECRET}
+      - CORS_ORIGINS=https://${DOMAIN}
+      - RESEND_API_KEY=${RESEND_API_KEY:-}
+      - EMAIL_FROM=${EMAIL_FROM:-noreply@yourdomain.com}
+      - GOOGLE_BOOKS_API_KEY=${GOOGLE_BOOKS_API_KEY:-}
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  frontend:
+    image: ghcr.io/tanjd/bookshelf:latest
+    container_name: bookshelf-frontend
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      # The Next.js server (inside Docker) proxies /api/* to this URL.
+      # Uses the Docker Compose service name — no changes needed here.
+      - BACKEND_URL=http://backend:8000
+    depends_on:
+      backend:
+        condition: service_healthy
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "require('http').get('http://localhost:3000/api/health', (r) => process.exit(r.statusCode === 200 ? 0 : 1))",
+        ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"

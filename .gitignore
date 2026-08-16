@@ -4,6 +4,7 @@
 dist
 tmp
 /out-tsc
+*.tsbuildinfo
 
 # dependencies
 node_modules
@@ -103,15 +104,23 @@ out
 # Draft specs (spec-driven planning docs) - not yet ready to commit
 docs/specs/
 
-# index-watch: runtime SQLite DB (mounted as a volume in its Dockerfile)
-apps/index-watch/data/*.db
+# Runtime SQLite DBs (mounted as volumes in app Dockerfiles) - never committed
+*.db
+*.sqlite
+*.sqlite3
 
-# ledger-lens-backend: runtime CSV drop dir + SQLite DB (mounted as a volume
-# in its Dockerfile) — whole dir ignored, no tracked content inside
+# ledger-lens-backend: runtime CSV drop dir (whole dir ignored, no tracked
+# content inside)
 apps/ledger-lens-backend/data/
 
 # ledger-lens: don't commit a locally-generated compose file; use the
 # example as a template (same convention the standalone repo used)
 docker-compose.yml
+
+# bookshelf: server-side-only env vars (e.g. BACKEND_URL) for local dev
+apps/bookshelf/.env.local
+
+# bookshelf-backend: cached book cover images written to disk at runtime
+apps/bookshelf-backend/data/covers/
 
 .nx/polygraph

@@ -285,6 +285,10 @@ importers:
         specifier: 3.2.6
         version: 3.2.6(@types/node@18.16.9)(jiti@2.7.0)(jsdom@25.0.1)(less@4.8.1)(lightningcss@1.32.0)(msw@2.15.0(@types/node@18.16.9)(typescript@5.9.3))(sass-embedded@1.100.0)(sass@1.102.0)(stylus@0.64.0)(terser@5.49.0)(tsx@4.23.1)(yaml@2.9.0)
 
+  apps/bookshelf: {}
+
+  apps/bookshelf-backend: {}
+
   apps/food-maps-backend: {}
 
   apps/index-watch: {}

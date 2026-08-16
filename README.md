@@ -40,7 +40,9 @@ contributors. Long-term home for side projects, starting with Telegram bots.
 │   ├── index-watch/            # Telegram bot (index drawdown tracker), Python/uv
 │   ├── table-talks/            # Telegram bot (conversation card game), Python/uv
 │   ├── ledger-lens-backend/    # FastAPI portfolio-analysis API, Python/uv
-│   └── ledger-lens/            # Next.js portfolio-analysis dashboard
+│   ├── ledger-lens/            # Next.js portfolio-analysis dashboard
+│   ├── bookshelf-backend/      # Go API (huma + GORM/SQLite), book-lending app
+│   └── bookshelf/              # Next.js frontend for the above
 ├── libs/
 │   └── food-maps-data/         # Shared TS lib (@tanjd/food-maps-data path alias)
 ├── tools/

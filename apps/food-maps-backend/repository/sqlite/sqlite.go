@@ -6,7 +6,7 @@ import (
 	"fmt"
 
 	"github.com/google/uuid"
-	_ "github.com/mattn/go-sqlite3"
+	_ "github.com/mattn/go-sqlite3" // registers the "sqlite3" driver with database/sql
 	"github.com/rs/zerolog/log"
 	"github.com/tanjd/core-repository/apps/food-maps-backend/model"
 	"github.com/tanjd/core-repository/apps/food-maps-backend/repository"
@@ -17,12 +17,12 @@ type txKeyType struct{}
 
 var TxKey = txKeyType{}
 
-type SQLiteDB struct {
+type DB struct {
 	db *sql.DB
 }
 
-// NewSQLiteDB creates a new SQLite database connection
-func NewSQLiteDB(dbPath string) (*SQLiteDB, error) {
+// NewDB creates a new SQLite database connection
+func NewDB(dbPath string) (*DB, error) {
 	log.Debug().Str("path", dbPath).Msg("Opening SQLite database")
 	db, err := sql.Open("sqlite3", dbPath)
 	if err != nil {
@@ -30,21 +30,21 @@ func NewSQLiteDB(dbPath string) (*SQLiteDB, error) {
 	}
 
 	// Test the connection
-	if err := db.Ping(); err != nil {
+	if err := db.PingContext(context.Background()); err != nil {
 		return nil, fmt.Errorf("error connecting to database: %w", err)
 	}
 	log.Debug().Msg("Successfully connected to database")
 
 	// Enable foreign keys
-	if _, err := db.Exec("PRAGMA foreign_keys = ON"); err != nil {
+	if _, err := db.ExecContext(context.Background(), "PRAGMA foreign_keys = ON"); err != nil {
 		return nil, fmt.Errorf("error enabling foreign keys: %w", err)
 	}
 
-	return &SQLiteDB{db: db}, nil
+	return &DB{db: db}, nil
 }
 
 // Close closes the database connection
-func (s *SQLiteDB) Close() error {
+func (s *DB) Close() error {
 	log.Debug().Msg("Closing database connection")
 	if s.db == nil {
 		log.Warn().Msg("Database connection is already nil")
@@ -56,7 +56,7 @@ func (s *SQLiteDB) Close() error {
 // executor returns the appropriate database executor (transaction or database connection)
 // This is used by other functions in the package to handle database operations
 // nolint:unused
-func (s *SQLiteDB) executor(ctx context.Context) interface {
+func (s *DB) executor(ctx context.Context) interface {
 	ExecContext(context.Context, string, ...interface{}) (sql.Result, error)
 	QueryContext(context.Context, string, ...interface{}) (*sql.Rows, error)
 	QueryRowContext(context.Context, string, ...interface{}) *sql.Row
@@ -73,7 +73,7 @@ func (s *SQLiteDB) executor(ctx context.Context) interface {
 	}
 
 	// Check if database is still open
-	if err := s.db.Ping(); err != nil {
+	if err := s.db.PingContext(ctx); err != nil {
 		log.Error().Err(err).Msg("Database connection is not alive")
 		return nil
 	}
@@ -82,14 +82,14 @@ func (s *SQLiteDB) executor(ctx context.Context) interface {
 	return s.db
 }
 
-// SQLiteTx wraps a sql.Tx to implement the Transaction interface
-type SQLiteTx struct {
-	*SQLiteDB
+// Tx wraps a sql.Tx to implement the Transaction interface
+type Tx struct {
+	*DB
 	tx *sql.Tx
 }
 
 // Commit commits the transaction
-func (t *SQLiteTx) Commit() error {
+func (t *Tx) Commit() error {
 	if t.tx == nil {
 		return fmt.Errorf("transaction is nil")
 	}
@@ -97,7 +97,7 @@ func (t *SQLiteTx) Commit() error {
 }
 
 // Rollback rolls back the transaction
-func (t *SQLiteTx) Rollback() error {
+func (t *Tx) Rollback() error {
 	if t.tx == nil {
 		return nil // Already committed or rolled back
 	}
@@ -105,7 +105,7 @@ func (t *SQLiteTx) Rollback() error {
 }
 
 // BeginTx starts a new transaction
-func (s *SQLiteDB) BeginTx(ctx context.Context) (repository.Transaction, error) {
+func (s *DB) BeginTx(ctx context.Context) (repository.Transaction, error) {
 	if s.db == nil {
 		return nil, fmt.Errorf("database connection is nil")
 	}
@@ -115,14 +115,14 @@ func (s *SQLiteDB) BeginTx(ctx context.Context) (repository.Transaction, error) 
 		return nil, fmt.Errorf("error beginning transaction: %w", err)
 	}
 
-	return &SQLiteTx{
-		SQLiteDB: s,
-		tx:       tx,
+	return &Tx{
+		DB: s,
+		tx: tx,
 	}, nil
 }
 
 // UpdateLocation updates a location in the database
-func (s *SQLiteDB) UpdateLocation(ctx context.Context, loc *model.Location) error {
+func (s *DB) UpdateLocation(ctx context.Context, loc *model.Location) error {
 	exec := s.executor(ctx)
 	if exec == nil {
 		return fmt.Errorf("database connection is nil")
@@ -138,7 +138,7 @@ func (s *SQLiteDB) UpdateLocation(ctx context.Context, loc *model.Location) erro
 }
 
 // RemoveLocationTag removes a tag from a location
-func (s *SQLiteDB) RemoveLocationTag(ctx context.Context, locationID string, tagID int64) error {
+func (s *DB) RemoveLocationTag(ctx context.Context, locationID string, tagID int64) error {
 	exec := s.executor(ctx)
 	if exec == nil {
 		return fmt.Errorf("database connection is nil")
@@ -154,7 +154,7 @@ func (s *SQLiteDB) RemoveLocationTag(ctx context.Context, locationID string, tag
 }
 
 // ListTags retrieves all tags from the database
-func (s *SQLiteDB) ListTags(ctx context.Context) ([]*model.Tag, error) {
+func (s *DB) ListTags(ctx context.Context) ([]*model.Tag, error) {
 	exec := s.executor(ctx)
 	if exec == nil {
 		return nil, fmt.Errorf("database connection is nil")
@@ -187,7 +187,7 @@ func (s *SQLiteDB) ListTags(ctx context.Context) ([]*model.Tag, error) {
 }
 
 // ListLocations retrieves locations from the database with pagination
-func (s *SQLiteDB) ListLocations(ctx context.Context, limit, offset int) ([]*model.Location, error) {
+func (s *DB) ListLocations(ctx context.Context, limit, offset int) ([]*model.Location, error) {
 	exec := s.executor(ctx)
 	if exec == nil {
 		return nil, fmt.Errorf("database connection is nil")
@@ -229,7 +229,7 @@ func (s *SQLiteDB) ListLocations(ctx context.Context, limit, offset int) ([]*mod
 }
 
 // ListCountries retrieves all countries from the database
-func (s *SQLiteDB) ListCountries(ctx context.Context) ([]*model.Country, error) {
+func (s *DB) ListCountries(ctx context.Context) ([]*model.Country, error) {
 	exec := s.executor(ctx)
 	if exec == nil {
 		return nil, fmt.Errorf("database connection is nil")
@@ -262,7 +262,7 @@ func (s *SQLiteDB) ListCountries(ctx context.Context) ([]*model.Country, error) 
 }
 
 // ListCities retrieves all cities from the database
-func (s *SQLiteDB) ListCities(ctx context.Context) ([]*model.City, error) {
+func (s *DB) ListCities(ctx context.Context) ([]*model.City, error) {
 	exec := s.executor(ctx)
 	if exec == nil {
 		return nil, fmt.Errorf("database connection is nil")
@@ -295,7 +295,7 @@ func (s *SQLiteDB) ListCities(ctx context.Context) ([]*model.City, error) {
 }
 
 // GetTagByName retrieves a tag from the database by name
-func (s *SQLiteDB) GetTagByName(ctx context.Context, name string) (*model.Tag, error) {
+func (s *DB) GetTagByName(ctx context.Context, name string) (*model.Tag, error) {
 	exec := s.executor(ctx)
 	if exec == nil {
 		return nil, fmt.Errorf("database connection is nil")
@@ -317,7 +317,7 @@ func (s *SQLiteDB) GetTagByName(ctx context.Context, name string) (*model.Tag, e
 }
 
 // GetTag retrieves a tag from the database by ID
-func (s *SQLiteDB) GetTag(ctx context.Context, id int64) (*model.Tag, error) {
+func (s *DB) GetTag(ctx context.Context, id int64) (*model.Tag, error) {
 	exec := s.executor(ctx)
 	if exec == nil {
 		return nil, fmt.Errorf("database connection is nil")
@@ -339,7 +339,7 @@ func (s *SQLiteDB) GetTag(ctx context.Context, id int64) (*model.Tag, error) {
 }
 
 // GetLocationTags retrieves all tags for a location
-func (s *SQLiteDB) GetLocationTags(ctx context.Context, locationID string) ([]*model.Tag, error) {
+func (s *DB) GetLocationTags(ctx context.Context, locationID string) ([]*model.Tag, error) {
 	exec := s.executor(ctx)
 	if exec == nil {
 		return nil, fmt.Errorf("database connection is nil")
@@ -377,7 +377,7 @@ func (s *SQLiteDB) GetLocationTags(ctx context.Context, locationID string) ([]*m
 }
 
 // GetLocation retrieves a location from the database by ID
-func (s *SQLiteDB) GetLocation(ctx context.Context, id string) (*model.Location, error) {
+func (s *DB) GetLocation(ctx context.Context, id string) (*model.Location, error) {
 	exec := s.executor(ctx)
 	if exec == nil {
 		return nil, fmt.Errorf("database connection is nil")
@@ -407,7 +407,7 @@ func (s *SQLiteDB) GetLocation(ctx context.Context, id string) (*model.Location,
 }
 
 // GetCountryByName retrieves a country from the database by name
-func (s *SQLiteDB) GetCountryByName(ctx context.Context, name string) (*model.Country, error) {
+func (s *DB) GetCountryByName(ctx context.Context, name string) (*model.Country, error) {
 	exec := s.executor(ctx)
 	if exec == nil {
 		return nil, fmt.Errorf("database connection is nil")
@@ -429,7 +429,7 @@ func (s *SQLiteDB) GetCountryByName(ctx context.Context, name string) (*model.Co
 }
 
 // GetCountry retrieves a country from the database by ID
-func (s *SQLiteDB) GetCountry(ctx context.Context, id int64) (*model.Country, error) {
+func (s *DB) GetCountry(ctx context.Context, id int64) (*model.Country, error) {
 	exec := s.executor(ctx)
 	if exec == nil {
 		return nil, fmt.Errorf("database connection is nil")
@@ -451,7 +451,7 @@ func (s *SQLiteDB) GetCountry(ctx context.Context, id int64) (*model.Country, er
 }
 
 // GetCityByName retrieves a city from the database by name and country ID
-func (s *SQLiteDB) GetCityByName(ctx context.Context, name string, countryID int64) (*model.City, error) {
+func (s *DB) GetCityByName(ctx context.Context, name string, countryID int64) (*model.City, error) {
 	exec := s.executor(ctx)
 	if exec == nil {
 		return nil, fmt.Errorf("database connection is nil")
@@ -473,7 +473,7 @@ func (s *SQLiteDB) GetCityByName(ctx context.Context, name string, countryID int
 }
 
 // GetCity retrieves a city from the database by ID
-func (s *SQLiteDB) GetCity(ctx context.Context, id int64) (*model.City, error) {
+func (s *DB) GetCity(ctx context.Context, id int64) (*model.City, error) {
 	exec := s.executor(ctx)
 	if exec == nil {
 		return nil, fmt.Errorf("database connection is nil")
@@ -495,7 +495,7 @@ func (s *SQLiteDB) GetCity(ctx context.Context, id int64) (*model.City, error) {
 }
 
 // DeleteLocation deletes a location from the database
-func (s *SQLiteDB) DeleteLocation(ctx context.Context, id string) error {
+func (s *DB) DeleteLocation(ctx context.Context, id string) error {
 	exec := s.executor(ctx)
 	if exec == nil {
 		return fmt.Errorf("database connection is nil")
@@ -519,7 +519,7 @@ func (s *SQLiteDB) DeleteLocation(ctx context.Context, id string) error {
 }
 
 // CreateTag creates a new tag in the database
-func (s *SQLiteDB) CreateTag(ctx context.Context, tag *model.Tag) error {
+func (s *DB) CreateTag(ctx context.Context, tag *model.Tag) error {
 	exec := s.executor(ctx)
 	if exec == nil {
 		return fmt.Errorf("database connection is nil")
@@ -541,7 +541,7 @@ func (s *SQLiteDB) CreateTag(ctx context.Context, tag *model.Tag) error {
 }
 
 // CreateLocation creates a new location in the database
-func (s *SQLiteDB) CreateLocation(ctx context.Context, loc *model.Location) error {
+func (s *DB) CreateLocation(ctx context.Context, loc *model.Location) error {
 	exec := s.executor(ctx)
 	if exec == nil {
 		return fmt.Errorf("database connection is nil")
@@ -557,7 +557,7 @@ func (s *SQLiteDB) CreateLocation(ctx context.Context, loc *model.Location) erro
 }
 
 // CreateCountry creates a new country in the database
-func (s *SQLiteDB) CreateCountry(ctx context.Context, country *model.Country) error {
+func (s *DB) CreateCountry(ctx context.Context, country *model.Country) error {
 	exec := s.executor(ctx)
 	if exec == nil {
 		return fmt.Errorf("database connection is nil")
@@ -579,7 +579,7 @@ func (s *SQLiteDB) CreateCountry(ctx context.Context, country *model.Country) er
 }
 
 // CreateCity creates a new city in the database
-func (s *SQLiteDB) CreateCity(ctx context.Context, city *model.City) error {
+func (s *DB) CreateCity(ctx context.Context, city *model.City) error {
 	exec := s.executor(ctx)
 	if exec == nil {
 		return fmt.Errorf("database connection is nil")
@@ -601,7 +601,7 @@ func (s *SQLiteDB) CreateCity(ctx context.Context, city *model.City) error {
 }
 
 // AddLocationTag adds a tag to a location
-func (s *SQLiteDB) AddLocationTag(ctx context.Context, locationID string, tagID int64) error {
+func (s *DB) AddLocationTag(ctx context.Context, locationID string, tagID int64) error {
 	exec := s.executor(ctx)
 	if exec == nil {
 		return fmt.Errorf("database connection is nil")

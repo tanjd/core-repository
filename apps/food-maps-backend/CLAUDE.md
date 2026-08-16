@@ -14,6 +14,11 @@ cross-cutting conventions (Nx, deployment, release process).
 - `nx run food-maps-backend:lint` depends on `golangci-lint` (see `nx.json` →
   `targetDefaults.lint.dependsOn`), so a plain `nx affected -t lint` genuinely gates on it, not
   just `go vet`/`go fmt`.
+- `repository/sqlite`'s `DB`/`Tx` types were named `SQLiteDB`/`SQLiteTx` until root's
+  `.golangci.yaml` gained `revive` (flagged as a stuttering name, `sqlite.SQLiteDB`) — see
+  `apps/bookshelf-backend/CLAUDE.md`'s Go tooling notes for the full story of that config change,
+  which also fixed a `gosec` G112 finding here (`ReadHeaderTimeout` on the `http.Server` in
+  `cmd/main.go`) and four `noctx` findings (`Ping`/`Exec` → `PingContext`/`ExecContext`).
 
 ## Known gaps
 

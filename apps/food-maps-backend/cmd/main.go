@@ -64,15 +64,15 @@ func configureLogging(options *Options) error {
 	return nil
 }
 
-func setupDatabase(dbPath string) (*sqlite.SQLiteDB, error) {
+func setupDatabase(dbPath string) (*sqlite.DB, error) {
 	if err := sqlite.InitializeDatabase(dbPath); err != nil {
 		return nil, err
 	}
 
-	return sqlite.NewSQLiteDB(dbPath)
+	return sqlite.NewDB(dbPath)
 }
 
-func buildServer(db *sqlite.SQLiteDB, options *Options) *http.Server {
+func buildServer(db *sqlite.DB, options *Options) *http.Server {
 	locationService := service.NewLocationService(db)
 	locationHandler := handler.NewLocationHandler(locationService)
 
@@ -85,12 +85,13 @@ func buildServer(db *sqlite.SQLiteDB, options *Options) *http.Server {
 	routes.AddLocationRoutes()
 
 	return &http.Server{
-		Addr:    fmt.Sprintf(":%d", options.Port),
-		Handler: router,
+		Addr:              fmt.Sprintf(":%d", options.Port),
+		Handler:           router,
+		ReadHeaderTimeout: 10 * time.Second,
 	}
 }
 
-func registerLifecycleHooks(hooks humacli.Hooks, srv *http.Server, db *sqlite.SQLiteDB, options *Options) {
+func registerLifecycleHooks(hooks humacli.Hooks, srv *http.Server, db *sqlite.DB, options *Options) {
 	shutdown := make(chan struct{})
 
 	hooks.OnStart(func() {
@@ -126,7 +127,7 @@ func waitForShutdownSignal() {
 	<-quit
 }
 
-func shutdownServer(srv *http.Server, db *sqlite.SQLiteDB) {
+func shutdownServer(srv *http.Server, db *sqlite.DB) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 

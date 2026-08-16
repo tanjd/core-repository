@@ -9,7 +9,12 @@ linters:
     - errname
     - exhaustive
     - gocognit
+    - gocritic
+    - gosec
     - importas
+    - misspell
+    - noctx
+    - revive
     - rowserrcheck
     - sqlclosecheck
     - testifylint
