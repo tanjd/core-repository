@@ -48,7 +48,7 @@ func main() {
 		Str("port", cfg.Port).
 		Str("db_path", cfg.DBPath).
 		Str("cors_origins", strings.Join(cfg.CORSOrigins, ", ")).
-		Bool("email_enabled", cfg.ResendAPIKey != "").
+		Bool("email_enabled", cfg.SMTPHost != "").
 		Str("email_from", cfg.EmailFrom).
 		Bool("google_books_enabled", cfg.GoogleBooksAPIKey != "").
 		Str("metadata_refresh_interval", cfg.MetadataRefreshInterval).
@@ -79,7 +79,7 @@ func main() {
 	waitlistRepo := gormrepo.NewWaitlistRepository(database)
 
 	// Services
-	emailSvc := services.NewEmailService(cfg.ResendAPIKey, cfg.EmailFrom, cfg.Env, cfg.DevEmailOverride)
+	emailSvc := services.NewEmailService(cfg.SMTPHost, cfg.SMTPPort, cfg.SMTPUsername, cfg.SMTPPassword, cfg.EmailFrom, cfg.Env, cfg.DevEmailOverride)
 	workflow := services.NewLoanWorkflow(copyRepo, loanRepo, notifRepo, userRepo, waitlistRepo, emailSvc)
 	scheduler := services.NewScheduler(bookRepo, adminRepo, coversDir, cfg.MetadataRefreshInterval)
 

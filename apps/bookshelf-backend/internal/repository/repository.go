@@ -106,6 +106,36 @@ type AdminRepository interface {
 	GetSetting(key string) (string, error)
 	UpsertSetting(key, value string) error
 	CountByRole(role string) (int64, error)
+	GetDashboardStats() (*DashboardStats, error)
+}
+
+// BookBorrowStat pairs a book with how many times it has been loaned out
+// (loan requests that reached "accepted" or "returned").
+type BookBorrowStat struct {
+	BookID      uint   `json:"book_id"`
+	Title       string `json:"title"`
+	Author      string `json:"author"`
+	BorrowCount int64  `json:"borrow_count"`
+}
+
+// LenderStat pairs a user with how many copies they currently have out on loan.
+type LenderStat struct {
+	UserID      uint   `json:"user_id"`
+	Name        string `json:"name"`
+	ActiveLoans int64  `json:"active_loans"`
+}
+
+// DashboardStats aggregates the counts and rankings shown on the admin dashboard.
+type DashboardStats struct {
+	TotalBooks        int64            `json:"total_books"`
+	TotalCopies       int64            `json:"total_copies"`
+	AvailableCopies   int64            `json:"available_copies"`
+	LoanedCopies      int64            `json:"loaned_copies"`
+	TotalUsers        int64            `json:"total_users"`
+	SignupsThisWeek   int64            `json:"signups_this_week"`
+	OverdueCount      int64            `json:"overdue_count"`
+	MostBorrowedBooks []BookBorrowStat `json:"most_borrowed_books"`
+	ActiveLenders     []LenderStat     `json:"active_lenders"`
 }
 
 // WaitlistRepository handles persistence for WaitlistEntry records.

@@ -12,6 +12,7 @@ import type {
   PaginatedResult,
   JobStatus,
   VerificationStatus,
+  DashboardStats,
 } from "./types";
 
 export type {
@@ -27,6 +28,7 @@ export type {
   WaitlistStatus,
   PaginatedResult,
   VerificationStatus,
+  DashboardStats,
 };
 
 /** Returns an error message if the password does not meet complexity requirements, or null if valid. */
@@ -247,6 +249,7 @@ export const api = {
     request<void>("/notifications/read-all", { method: "PATCH" }),
 
   // Admin
+  adminGetDashboardStats: () => request<DashboardStats>("/admin/dashboard"),
   adminListUsers: (params?: { page?: number; page_size?: number }) => {
     const p: Record<string, string> = {};
     if (params?.page) p.page = String(params.page);

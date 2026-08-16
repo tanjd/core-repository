@@ -89,11 +89,24 @@ type metadataStatusOutput struct {
 	Body []MetadataProviderStatus
 }
 
+type adminDashboardOutput struct {
+	Body repository.DashboardStats
+}
+
 // --- Route registration ---
 
 // RegisterRoutes registers all admin routes on the given huma API.
 func (h *AdminHandler) RegisterRoutes(api huma.API) {
 	security := []map[string][]string{{"bearer": {}}}
+
+	huma.Register(api, huma.Operation{
+		OperationID: "admin-dashboard-stats",
+		Method:      "GET",
+		Path:        "/admin/dashboard",
+		Tags:        []string{"admin"},
+		Summary:     "Get admin dashboard statistics",
+		Security:    security,
+	}, h.getDashboardStats)
 
 	huma.Register(api, huma.Operation{
 		OperationID: "admin-list-users",
@@ -161,6 +174,19 @@ func (h *AdminHandler) RegisterRoutes(api huma.API) {
 }
 
 // --- Handlers ---
+
+func (h *AdminHandler) getDashboardStats(ctx context.Context, _ *struct{}) (*adminDashboardOutput, error) {
+	if err := middleware.RequireAdmin(ctx); err != nil {
+		return nil, adminError(err)
+	}
+
+	stats, err := h.admin.GetDashboardStats()
+	if err != nil {
+		return nil, huma.Error500InternalServerError("could not fetch dashboard stats")
+	}
+
+	return &adminDashboardOutput{Body: *stats}, nil
+}
 
 func (h *AdminHandler) listUsers(ctx context.Context, input *adminUsersInput) (*adminUsersOutput, error) {
 	if err := middleware.RequireAdmin(ctx); err != nil {

@@ -1,0 +1,52 @@
+# Copy to docker-compose.yml (gitignored — see root .gitignore) wherever
+# you're running the stack (e.g. your NAS), put a .env file next to it
+# (see .env.example), then:
+#
+#   docker compose pull && docker compose up -d
+#
+# Only the frontend's port is published. The backend is reachable solely
+# via the compose-internal network at http://bookshelf-backend:8000 —
+# apps/bookshelf's src/app/api/[...path]/route.ts proxies every API call
+# server-side, so browsers never talk to the backend directly and it
+# doesn't need to be exposed.
+
+services:
+  bookshelf-backend:
+    image: ghcr.io/tanjd/bookshelf-backend:latest
+    restart: unless-stopped
+    environment:
+      ENV: ${ENV:-dev}
+      PORT: "8000"
+      DB_PATH: /app/data/bookshelf.db
+      JWT_SECRET: ${JWT_SECRET:?set a long random string in .env — see .env.example}
+      ENCRYPTION_SECRET: ${ENCRYPTION_SECRET:?set a long random string in .env — see .env.example}
+      CORS_ORIGINS: ${FRONTEND_ORIGIN:-http://localhost:3000}
+      SMTP_HOST: ${SMTP_HOST:-}
+      SMTP_PORT: ${SMTP_PORT:-587}
+      SMTP_USERNAME: ${SMTP_USERNAME:-}
+      SMTP_PASSWORD: ${SMTP_PASSWORD:-}
+      EMAIL_FROM: ${EMAIL_FROM:-noreply@bookshelf.local}
+      DEV_EMAIL_OVERRIDE: ${DEV_EMAIL_OVERRIDE:-}
+      GOOGLE_BOOKS_API_KEY: ${GOOGLE_BOOKS_API_KEY:-}
+    volumes:
+      - bookshelf-data:/app/data
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 5s
+      start_period: 10s
+      retries: 3
+
+  bookshelf:
+    image: ghcr.io/tanjd/bookshelf:latest
+    restart: unless-stopped
+    depends_on:
+      bookshelf-backend:
+        condition: service_healthy
+    environment:
+      BACKEND_URL: http://bookshelf-backend:8000
+    ports:
+      - "3000:3000"
+
+volumes:
+  bookshelf-data:

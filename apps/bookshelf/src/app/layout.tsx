@@ -20,14 +20,14 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body
-        className={`${geist.variable} font-sans antialiased`}
+        className={`${geist.variable} font-sans antialiased min-h-screen flex flex-col`}
         suppressHydrationWarning
       >
         <NavBar />
-        <main className="max-w-6xl mx-auto px-4 py-6">
+        <main className="flex-1 w-full max-w-6xl mx-auto px-4 py-6 pb-24 md:pb-6">
           <SetupGuard>{children}</SetupGuard>
         </main>
-        <footer className="text-sm text-muted-foreground text-center py-6 flex items-center justify-center gap-3">
+        <footer className="shrink-0 text-sm text-muted-foreground text-center py-6 pb-24 md:pb-6 flex items-center justify-center gap-3">
           <span>v{process.env.NEXT_PUBLIC_VERSION}</span>
           <span>·</span>
           <a href="/about" className="hover:underline underline-offset-2">

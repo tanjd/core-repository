@@ -7,7 +7,7 @@ import { api } from "@/lib/api";
 import type { Book } from "@/lib/types";
 import { Badge } from "@/components/ui/badge";
 
-function BookSpine({ book }: { book: Book }) {
+function BookSpine({ book, ownedByMe }: { book: Book; ownedByMe: boolean }) {
   return (
     <Link
       href={`/catalog/${book.id}`}
@@ -16,6 +16,11 @@ function BookSpine({ book }: { book: Book }) {
     >
       {/* Book cover — lifts on hover like a book pulled off a shelf */}
       <div className="relative aspect-[2/3] w-full rounded-t-sm overflow-hidden shadow-[2px_4px_8px_rgba(0,0,0,0.35)] group-hover:-translate-y-2 group-hover:shadow-[4px_8px_16px_rgba(0,0,0,0.4)] transition-all duration-200 ease-out">
+        {ownedByMe && (
+          <Badge className="absolute top-1.5 left-1.5 z-10 shadow-sm text-[9px] px-1 py-0 h-4">
+            Yours
+          </Badge>
+        )}
         {book.cover_url ? (
           <Image
             src={book.cover_url}
@@ -70,9 +75,10 @@ function BookSpineSkeleton() {
 
 interface BookshelfRowProps {
   limit?: number;
+  ownedBookIds: Set<number>;
 }
 
-export function BookshelfRow({ limit = 16 }: BookshelfRowProps) {
+export function BookshelfRow({ limit = 16, ownedBookIds }: BookshelfRowProps) {
   const [books, setBooks] = useState<Book[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -110,19 +116,21 @@ export function BookshelfRow({ limit = 16 }: BookshelfRowProps) {
                 ))
               : books.map((book) => (
                   <div key={book.id} className="snap-start">
-                    <BookSpine book={book} />
+                    <BookSpine
+                      book={book}
+                      ownedByMe={ownedBookIds.has(book.id)}
+                    />
                   </div>
                 ))}
           </div>
         </div>
 
-        {/* Wooden shelf plank */}
-        <div className="mt-1 h-4 rounded-sm bg-gradient-to-b from-amber-700 via-amber-800 to-amber-950 shadow-[0_4px_8px_rgba(0,0,0,0.4)]">
-          {/* Wood grain texture overlay */}
-          <div className="h-full w-full rounded-sm opacity-20 bg-[repeating-linear-gradient(90deg,transparent,transparent_40px,rgba(0,0,0,0.15)_40px,rgba(0,0,0,0.15)_41px)]" />
-        </div>
-        {/* Shelf shadow on wall below */}
-        <div className="h-2 bg-gradient-to-b from-black/10 to-transparent rounded-b-sm" />
+        {/* Shelf line — flat, token-driven divider instead of a literal
+            wood-grain plank, so it doesn't clash with the rest of the app's
+            neutral palette; the cover-lift-on-hover effect above still
+            carries the "pulling a book off a shelf" feeling on its own. */}
+        <div className="mt-1 h-px bg-border" />
+        <div className="h-2 bg-gradient-to-b from-foreground/5 to-transparent" />
       </div>
     </section>
   );

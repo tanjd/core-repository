@@ -2,12 +2,17 @@ package gorm
 
 import (
 	"errors"
+	"time"
 
 	"gorm.io/gorm"
 
 	"github.com/tanjd/core-repository/apps/bookshelf-backend/internal/models"
 	"github.com/tanjd/core-repository/apps/bookshelf-backend/internal/repository"
 )
+
+// dashboardRankingLimit caps how many rows are returned for each ranked list
+// (most-borrowed books, active lenders) on the admin dashboard.
+const dashboardRankingLimit = 5
 
 // AdminRepository is the GORM implementation of repository.AdminRepository.
 type AdminRepository struct {
@@ -91,4 +96,62 @@ func (r *AdminRepository) CountByRole(role string) (int64, error) {
 	var count int64
 	err := r.db.Model(&models.User{}).Where("role = ?", role).Count(&count).Error
 	return count, err
+}
+
+func (r *AdminRepository) GetDashboardStats() (*repository.DashboardStats, error) {
+	var stats repository.DashboardStats
+
+	if err := r.db.Model(&models.Book{}).Count(&stats.TotalBooks).Error; err != nil {
+		return nil, err
+	}
+	if err := r.db.Model(&models.Copy{}).Count(&stats.TotalCopies).Error; err != nil {
+		return nil, err
+	}
+	if err := r.db.Model(&models.Copy{}).Where("status = ?", "available").Count(&stats.AvailableCopies).Error; err != nil {
+		return nil, err
+	}
+	if err := r.db.Model(&models.Copy{}).Where("status = ?", "loaned").Count(&stats.LoanedCopies).Error; err != nil {
+		return nil, err
+	}
+	if err := r.db.Model(&models.User{}).Count(&stats.TotalUsers).Error; err != nil {
+		return nil, err
+	}
+	if err := r.db.Model(&models.User{}).
+		Where("created_at >= ?", time.Now().AddDate(0, 0, -7)).
+		Count(&stats.SignupsThisWeek).Error; err != nil {
+		return nil, err
+	}
+	if err := r.db.Model(&models.LoanRequest{}).
+		Where("status = ? AND expected_return_date IS NOT NULL AND expected_return_date < ?", "accepted", time.Now()).
+		Count(&stats.OverdueCount).Error; err != nil {
+		return nil, err
+	}
+
+	stats.MostBorrowedBooks = []repository.BookBorrowStat{}
+	if err := r.db.Table("loan_requests").
+		Select("books.id AS book_id, books.title AS title, books.author AS author, COUNT(*) AS borrow_count").
+		Joins("JOIN copies ON copies.id = loan_requests.copy_id").
+		Joins("JOIN books ON books.id = copies.book_id").
+		Where("loan_requests.status IN ?", []string{"accepted", "returned"}).
+		Group("books.id, books.title, books.author").
+		Order("borrow_count DESC").
+		Limit(dashboardRankingLimit).
+		Scan(&stats.MostBorrowedBooks).Error; err != nil {
+		return nil, err
+	}
+
+	stats.ActiveLenders = []repository.LenderStat{}
+	if err := r.db.Table("loan_requests").
+		Select("users.id AS user_id, users.name AS name, COUNT(*) AS active_loans").
+		Joins("JOIN copies ON copies.id = loan_requests.copy_id").
+		Joins("JOIN users ON users.id = copies.owner_id").
+		Where("loan_requests.status = ?", "accepted").
+		Group("users.id, users.name").
+		Order("active_loans DESC").
+		Limit(dashboardRankingLimit).
+		Scan(&stats.ActiveLenders).Error; err != nil {
+		return nil, err
+	}
+
+	return &stats, nil
 }

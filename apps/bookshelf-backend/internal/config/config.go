@@ -13,7 +13,10 @@ type Config struct {
 	JWTSecret               string
 	EncryptionSecret        string
 	CORSOrigins             []string
-	ResendAPIKey            string
+	SMTPHost                string
+	SMTPPort                string
+	SMTPUsername            string
+	SMTPPassword            string
 	EmailFrom               string
 	DevEmailOverride        string
 	Env                     string
@@ -31,7 +34,10 @@ func Load() *Config {
 		JWTSecret:               getEnv("JWT_SECRET", "dev-secret-change-me"),
 		EncryptionSecret:        getEnv("ENCRYPTION_SECRET", ""),
 		CORSOrigins:             strings.Split(getEnv("CORS_ORIGINS", "http://localhost:3000"), ","),
-		ResendAPIKey:            getEnv("RESEND_API_KEY", ""),
+		SMTPHost:                getEnv("SMTP_HOST", ""),
+		SMTPPort:                getEnv("SMTP_PORT", "587"),
+		SMTPUsername:            getEnv("SMTP_USERNAME", ""),
+		SMTPPassword:            getEnv("SMTP_PASSWORD", ""),
 		EmailFrom:               getEnv("EMAIL_FROM", "noreply@bookshelf.local"),
 		DevEmailOverride:        getEnv("DEV_EMAIL_OVERRIDE", ""),
 		Env:                     getEnv("ENV", "dev"),

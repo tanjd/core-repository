@@ -6,6 +6,7 @@ import { AdminGuard } from "@/components/auth/AdminGuard";
 import { cn } from "@/lib/utils";
 
 const adminLinks = [
+  { href: "/admin/dashboard", label: "Dashboard" },
   { href: "/admin/profile", label: "Profile" },
   { href: "/admin/users", label: "Users" },
   { href: "/admin/settings", label: "Settings" },
