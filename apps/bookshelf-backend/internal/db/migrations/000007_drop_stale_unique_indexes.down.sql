@@ -1,0 +1,2 @@
+-- Intentionally empty. Recreating these indexes would reintroduce the
+-- empty-string constraint failure bug they were removed to fix.

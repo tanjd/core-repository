@@ -1,0 +1,60 @@
+{
+  "$schema": "../../node_modules/nx/schemas/project-schema.json",
+  "name": "bookshelf",
+  "projectType": "application",
+  "sourceRoot": "apps/bookshelf",
+  "tags": [],
+  "targets": {
+    "build": {
+      "configurations": {
+        "development": {
+          "outputPath": "apps/bookshelf"
+        },
+        "production": {}
+      },
+      "defaultConfiguration": "production",
+      "executor": "@nx/next:build",
+      "options": {
+        "outputPath": "dist/apps/bookshelf",
+        "webpack": true
+      },
+      "outputs": [
+        "{options.outputPath}"
+      ]
+    },
+    "dev": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "nx run-many -t serve -p bookshelf-backend,bookshelf --parallel=2"
+      }
+    },
+    "docker-build": {},
+    "docker-push": {},
+    "lint": {
+      "executor": "@nx/eslint:lint",
+      "outputs": [
+        "{options.outputFile}"
+      ]
+    },
+    "serve": {
+      "configurations": {
+        "development": {
+          "buildTarget": "bookshelf:build:development",
+          "dev": true
+        },
+        "production": {
+          "buildTarget": "bookshelf:build:production",
+          "dev": false
+        }
+      },
+      "defaultConfiguration": "development",
+      "executor": "@nx/next:server",
+      "options": {
+        "buildTarget": "bookshelf:build",
+        "dev": true,
+        "port": 3000,
+        "webpack": true
+      }
+    }
+  }
+}

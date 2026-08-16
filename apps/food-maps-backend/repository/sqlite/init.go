@@ -1,6 +1,7 @@
 package sqlite
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -17,7 +18,7 @@ func InitializeDatabase(dbPath string) error {
 	}
 
 	// Create database connection
-	db, err := NewSQLiteDB(dbPath)
+	db, err := NewDB(dbPath)
 	if err != nil {
 		return fmt.Errorf("failed to create database: %w", err)
 	}
@@ -28,7 +29,7 @@ func InitializeDatabase(dbPath string) error {
 	}()
 
 	// Execute schema
-	if _, err := db.db.Exec(schema); err != nil {
+	if _, err := db.db.ExecContext(context.Background(), schema); err != nil {
 		return fmt.Errorf("failed to execute schema: %w", err)
 	}
 

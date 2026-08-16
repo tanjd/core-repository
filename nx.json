@@ -99,7 +99,9 @@
       "index-watch",
       "table-talks",
       "ledger-lens-backend",
-      "ledger-lens"
+      "ledger-lens",
+      "bookshelf-backend",
+      "bookshelf"
     ],
     "projectsRelationship": "independent",
     "version": {

@@ -1,0 +1,7 @@
+CREATE TABLE IF NOT EXISTS waitlist_entries (
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    copy_id    INTEGER NOT NULL REFERENCES copies(id) ON DELETE CASCADE,
+    user_id    INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    created_at DATETIME NOT NULL DEFAULT (CURRENT_TIMESTAMP),
+    UNIQUE (copy_id, user_id)
+);

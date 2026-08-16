@@ -32,6 +32,10 @@ release process); the list below is just an index into the per-app files.
 - `apps/jeddy-tan` — personal portfolio site (React Router + MUI), plain JS on
   Vite/`@nx/vite` (unlike every other frontend here, which is Next.js). See
   `apps/jeddy-tan/CLAUDE.md`.
+- `apps/bookshelf-backend` — Go API (huma + GORM/SQLite), community book-lending app. See
+  `apps/bookshelf-backend/CLAUDE.md`.
+- `apps/bookshelf` — Next.js + Tailwind CSS + shadcn/ui frontend for the above. See
+  `apps/bookshelf/CLAUDE.md`.
 - `tools/generators/telegram-bot` — local Nx generator for scaffolding new bots.
 
 ## Common commands
