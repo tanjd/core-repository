@@ -1,3 +1,7 @@
+## 1.2.0 (2026-08-16)
+
+This was a version bump only for index-watch to align it with other projects, there were no code changes.
+
 ## 1.1.0 (2026-07-31)
 
 This was a version bump only for index-watch to align it with other projects, there were no code changes.

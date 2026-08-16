@@ -1,3 +1,13 @@
+## 0.4.0 (2026-08-16)
+
+### 🚀 Features
+
+- migrate bookshelf into the monorepo ([#30](https://github.com/tanjd/core-repository/pull/30))
+
+### ❤️ Thank You
+
+- Jeddy Tan @tanjd
+
 ## 0.3.0 (2026-07-31)
 
 This was a version bump only for food-maps-backend to align it with other projects, there were no code changes.

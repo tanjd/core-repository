@@ -1,3 +1,13 @@
+## 1.7.0 (2026-08-16)
+
+### 🚀 Features
+
+- migrate bookshelf into the monorepo ([#30](https://github.com/tanjd/core-repository/pull/30))
+
+### ❤️ Thank You
+
+- Jeddy Tan @tanjd
+
 ## 1.6.0 (2026-07-31)
 
 ### 🚀 Features
