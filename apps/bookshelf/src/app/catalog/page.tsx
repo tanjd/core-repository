@@ -1,7 +1,8 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
-import { Search, SlidersHorizontal } from "lucide-react";
+import Link from "next/link";
+import { Search, SlidersHorizontal, Plus } from "lucide-react";
 import { api } from "@/lib/api";
 import type { Book, PaginatedResult } from "@/lib/types";
 import { BookCard } from "@/components/BookCard";
@@ -17,10 +18,12 @@ import {
 } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
+import { useOwnedBookIds } from "@/hooks/useOwnedBookIds";
 
 const PAGE_SIZE = 20;
 
 export default function CatalogPage() {
+  const ownedBookIds = useOwnedBookIds();
   const [result, setResult] = useState<PaginatedResult<Book> | null>(null);
   const [search, setSearch] = useState("");
   const [sort, setSort] = useState("title");
@@ -79,7 +82,7 @@ export default function CatalogPage() {
   return (
     <div className="flex flex-col gap-8">
       {/* Recently added bookshelf (only when not searching) */}
-      {!search && <BookshelfRow limit={16} />}
+      {!search && <BookshelfRow limit={16} ownedBookIds={ownedBookIds} />}
 
       <div className="flex flex-col gap-1">
         <h1 className="text-2xl font-bold">Book Catalog</h1>
@@ -158,6 +161,14 @@ export default function CatalogPage() {
               Clear filters
             </button>
           )}
+          {search.trim() && (
+            <Link
+              href={`/share?q=${encodeURIComponent(search.trim())}`}
+              className="text-sm text-primary hover:underline"
+            >
+              Can&apos;t find it? Share &ldquo;{search.trim()}&rdquo; →
+            </Link>
+          )}
         </div>
       ) : (
         <>
@@ -169,7 +180,11 @@ export default function CatalogPage() {
             )}
             <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
               {books.map((book) => (
-                <BookCard key={book.id} book={book} />
+                <BookCard
+                  key={book.id}
+                  book={book}
+                  ownedByMe={ownedBookIds.has(book.id)}
+                />
               ))}
             </div>
           </div>
@@ -180,6 +195,19 @@ export default function CatalogPage() {
           />
         </>
       )}
+
+      {/* Mobile-only FAB — desktop already has "Share a Book" in the top
+          nav; "Share" isn't a bottom-tab slot (see navItems.ts), so this is
+          how mobile users reach it from the primary browse screen. Sits
+          above the bottom tab bar + its safe-area inset. */}
+      <Link
+        href="/share"
+        aria-label="Share a book"
+        className="md:hidden fixed right-4 z-40 flex size-14 items-center justify-center rounded-full bg-primary text-primary-foreground shadow-lg active:scale-95 transition-transform"
+        style={{ bottom: "calc(env(safe-area-inset-bottom) + 4.5rem)" }}
+      >
+        <Plus className="size-6" />
+      </Link>
     </div>
   );
 }

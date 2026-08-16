@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
@@ -63,6 +63,9 @@ const statusVariant: Record<
 export default function MyBooksPage() {
   const router = useRouter();
   const [bookGroups, setBookGroups] = useState<BookGroup[]>([]);
+  const [pendingCounts, setPendingCounts] = useState<Record<number, number>>(
+    {},
+  );
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
@@ -84,26 +87,28 @@ export default function MyBooksPage() {
   // Delete confirm
   const [deletingId, setDeletingId] = useState<number | null>(null);
 
-  useEffect(() => {
-    const token = localStorage.getItem("bookshelf_token");
-    if (!token) {
-      router.push("/login");
-      return;
-    }
-    const stored = localStorage.getItem("bookshelf_user");
-    if (stored) {
-      try {
-        JSON.parse(stored); // validate JSON
-        loadMyCopies();
-      } catch {
-        router.push("/login");
-      }
-    } else {
-      router.push("/login");
-    }
-  }, [router]);
+  // Fetched separately, after the main copies list renders — a per-copy
+  // pending-request count isn't returned by GET /copies/mine, and this
+  // shouldn't block the page's primary loading state.
+  const loadPendingCounts = useCallback(async (copies: Copy[]) => {
+    const results = await Promise.all(
+      copies.map((copy) =>
+        api
+          .getLoanRequestsByCopy(copy.id)
+          .then(
+            (reqs) =>
+              [
+                copy.id,
+                reqs.filter((r) => r.status === "pending").length,
+              ] as const,
+          )
+          .catch(() => [copy.id, 0] as const),
+      ),
+    );
+    setPendingCounts(Object.fromEntries(results));
+  }, []);
 
-  async function loadMyCopies() {
+  const loadMyCopies = useCallback(async () => {
     setLoading(true);
     setError("");
     try {
@@ -130,6 +135,7 @@ export default function MyBooksPage() {
         groupMap.get(book.id)!.copies.push(enriched);
       }
       setBookGroups([...groupMap.values()]);
+      loadPendingCounts(copies);
     } catch (err) {
       setError(
         err instanceof Error ? err.message : "Failed to load your books",
@@ -137,7 +143,26 @@ export default function MyBooksPage() {
     } finally {
       setLoading(false);
     }
-  }
+  }, [loadPendingCounts]);
+
+  useEffect(() => {
+    const token = localStorage.getItem("bookshelf_token");
+    if (!token) {
+      router.push("/login");
+      return;
+    }
+    const stored = localStorage.getItem("bookshelf_user");
+    if (stored) {
+      try {
+        JSON.parse(stored); // validate JSON
+        loadMyCopies();
+      } catch {
+        router.push("/login");
+      }
+    } else {
+      router.push("/login");
+    }
+  }, [router, loadMyCopies]);
 
   function openEdit(copy: MyCopy) {
     setEditCopy(copy);
@@ -371,6 +396,11 @@ export default function MyBooksPage() {
                         <Link href={`/my-books/${copy.id}/requests`}>
                           <Button size="sm" variant="secondary">
                             Manage Requests
+                            {!!pendingCounts[copy.id] && (
+                              <Badge variant="destructive" className="px-1.5">
+                                {pendingCounts[copy.id]}
+                              </Badge>
+                            )}
                           </Button>
                         </Link>
                       </div>

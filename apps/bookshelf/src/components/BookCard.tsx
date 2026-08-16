@@ -1,18 +1,25 @@
 import Link from "next/link";
 import Image from "next/image";
+import { BookOpen } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import type { Book } from "@/lib/types";
 
 interface BookCardProps {
   book: Book;
+  ownedByMe?: boolean;
 }
 
-export function BookCard({ book }: BookCardProps) {
+export function BookCard({ book, ownedByMe }: BookCardProps) {
   return (
     <Link href={`/catalog/${book.id}`} className="block group">
       <Card className="h-full overflow-hidden transition-shadow group-hover:shadow-md py-0 gap-0">
         <div className="relative aspect-[2/3] w-full bg-muted overflow-hidden">
+          {ownedByMe && (
+            <Badge className="absolute top-2 left-2 z-10 shadow-sm">
+              Yours
+            </Badge>
+          )}
           {book.cover_url ? (
             <Image
               src={book.cover_url}
@@ -22,8 +29,11 @@ export function BookCard({ book }: BookCardProps) {
               sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 20vw"
             />
           ) : (
-            <div className="flex h-full items-center justify-center text-muted-foreground text-sm px-4 text-center">
-              No cover available
+            <div className="flex h-full flex-col items-center justify-center gap-2 px-4 text-center">
+              <BookOpen className="size-8 text-muted-foreground/60" />
+              <span className="text-xs text-muted-foreground line-clamp-3">
+                {book.title}
+              </span>
             </div>
           )}
         </div>

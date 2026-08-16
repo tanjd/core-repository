@@ -152,3 +152,28 @@ export interface MetadataProviderStatus {
   latency_ms: number;
   error?: string;
 }
+
+export interface BookBorrowStat {
+  book_id: number;
+  title: string;
+  author: string;
+  borrow_count: number;
+}
+
+export interface LenderStat {
+  user_id: number;
+  name: string;
+  active_loans: number;
+}
+
+export interface DashboardStats {
+  total_books: number;
+  total_copies: number;
+  available_copies: number;
+  loaned_copies: number;
+  total_users: number;
+  signups_this_week: number;
+  overdue_count: number;
+  most_borrowed_books: BookBorrowStat[];
+  active_lenders: LenderStat[];
+}

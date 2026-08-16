@@ -62,6 +62,15 @@ export default function SharePage() {
 
   // --- Step 1: Search ---
   const [query, setQuery] = useState("");
+
+  // Pre-fill from a catalog search that came up empty (?q=...). Read via
+  // window.location on mount (rather than useSearchParams) to avoid a
+  // server/client hydration mismatch and the Suspense boundary that hook
+  // requires.
+  useEffect(() => {
+    const q = new URLSearchParams(window.location.search).get("q");
+    if (q) setQuery(q);
+  }, []);
   const [searchResults, setSearchResults] = useState<BookMetadataResult[]>([]);
   const [searching, setSearching] = useState(false);
   const [searchError, setSearchError] = useState("");

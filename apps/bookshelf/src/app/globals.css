@@ -130,15 +130,3 @@
     @apply bg-background text-foreground;
   }
 }
-/* ── Privacy mode: blur financial values ───────────────────────────────── */
-.privacy-on .font-mono,
-.privacy-on [data-val] {
-  filter: blur(6px);
-  user-select: none;
-  transition: filter 0.2s ease;
-}
-
-.privacy-on .recharts-wrapper {
-  filter: blur(10px);
-  transition: filter 0.2s ease;
-}
