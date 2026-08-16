@@ -1,7 +1,6 @@
 {
   "compileOnSave": false,
   "compilerOptions": {
-    "baseUrl": ".",
     "declaration": false,
     "emitDecoratorMetadata": true,
     "experimentalDecorators": true,
@@ -14,7 +13,7 @@
     "moduleResolution": "node",
     "paths": {
       "@tanjd/food-maps-data": [
-        "libs/food-maps-data/src/index.ts"
+        "./libs/food-maps-data/src/index.ts"
       ]
     },
     "rootDir": ".",
