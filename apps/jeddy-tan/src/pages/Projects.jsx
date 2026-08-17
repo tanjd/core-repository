@@ -10,6 +10,7 @@ import {
   Tooltip,
 } from "@mui/material";
 import GitHubIcon from "@mui/icons-material/GitHub";
+import LaunchIcon from "@mui/icons-material/Launch";
 import LightbulbIcon from "@mui/icons-material/Lightbulb";
 import TelegramIcon from "@mui/icons-material/Telegram";
 import projectsData from "../projectsData.json";
@@ -17,6 +18,8 @@ import "../styles/Projects.css";
 
 function ProjectCard({ project }) {
   const [eli5Open, setEli5Open] = useState(false);
+  const isTelegramLink = project.links?.live?.startsWith("https://t.me/");
+  const LiveIcon = isTelegramLink ? TelegramIcon : LaunchIcon;
 
   return (
     <Card className="project-card">
@@ -76,7 +79,7 @@ function ProjectCard({ project }) {
                 rel="noreferrer"
                 aria-label={`Try ${project.name}`}
               >
-                <TelegramIcon />
+                <LiveIcon />
               </a>
             )}
           </div>

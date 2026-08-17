@@ -15,8 +15,8 @@
       ]
     },
     {
-      "description": "A self-hosted book-lending app for tracking a home library and loaning books to friends \u2014 Go API backend, Next.js frontend.",
-      "eli5": "A digital library card catalog that also remembers who borrowed which book and when it's due back.",
+      "description": "A self-hosted book-lending app for tracking a home library and loaning books to friends \u2014 Go API backend, Next.js frontend, running on my home NAS and exposed publicly through a Cloudflare Tunnel.",
+      "eli5": "A digital library card catalog that also remembers who borrowed which book and when it's due back \u2014 running on a machine in my house, not in someone else's data center.",
       "links": {
         "github": "https://github.com/tanjd/core-repository/tree/main/apps/bookshelf",
         "live": "https://bookshelf.tanjd.com"
