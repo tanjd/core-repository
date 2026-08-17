@@ -156,3 +156,22 @@ scaffolded/migrated.
 "auto"` in `nx.json` — only projects whose actual dependencies changed
   are marked affected by a lockfile diff now (verified: an unrelated JS
   dependency bump no longer force-patches every `release.projects` entry).
+- **PR title format is load-bearing, not cosmetic**: this repo only allows
+  squash merging, and GitHub uses the PR title as the squash commit message
+  whenever the PR has more than one commit (`squash_merge_commit_title:
+COMMIT_OR_PR_TITLE`). `nx release`'s `conventionalCommits` engine reads
+  that squash commit on `main` to decide whether a project gets a version
+  bump — a title that isn't `type(scope): summary` produces a commit it
+  can't parse, so the touched project(s) get **no bump, no changelog entry,
+  no published image**, with no error or warning anywhere in CI. This
+  happened for real: PRs #31 and #33 shipped admin dashboard/SMTP/
+  email-change features to `bookshelf-backend` under plain-sentence titles
+  ("Bookshelf: SMTP email, admin dashboard, mobile bottom nav"), so it stayed
+  on the 0.2.0 image in production while `/admin/dashboard` 404'd — that
+  route only existed in source, never in a shipped image. Fixed by manually
+  cutting `bookshelf-backend@0.3.0` (see that app's `CHANGELOG.md`).
+  `.github/workflows/pr-title.yml` now checks PR titles against Conventional
+  Commits format, and the `create-pr` skill enforces it when drafting titles
+  — but the check isn't a required status check yet (branch protection on
+  `main` isn't enabled, see root `CLAUDE.md`'s "Known gaps"), so it can't
+  block a merge on its own yet.
