@@ -1,6 +1,17 @@
 ## 0.3.0 (2026-08-17)
 
-This was a version bump only for bookshelf-backend to align it with other projects, there were no code changes.
+### 🚀 Features
+
+- admin dashboard stats, user management, and app settings endpoints ([#31](https://github.com/tanjd/core-repository/pull/31))
+- SMTP-based email notifications ([#31](https://github.com/tanjd/core-repository/pull/31))
+- pending email-change confirmation flow ([#33](https://github.com/tanjd/core-repository/pull/33))
+
+This release was cut manually: PRs #31 and #33 used non-Conventional-Commit
+squash titles ("Bookshelf: ..." instead of "feat(bookshelf-backend): ..."),
+so `nx release`'s conventional-commits detection never picked them up and
+`bookshelf-backend` stayed on 0.2.0 while the code on `main` moved ahead —
+this is what broke the admin dashboard in production (404 on
+`/admin/dashboard`, a route that didn't exist in the 0.2.0 image).
 
 ## 0.2.0 (2026-08-16)
 
