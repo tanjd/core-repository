@@ -9,6 +9,7 @@ import type { LoanRequest } from "@/lib/types";
 import { ContactReveal } from "@/components/ContactReveal";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Skeleton } from "@/components/ui/skeleton";
 import {
   Dialog,
   DialogContent,
@@ -153,7 +154,7 @@ export default function CopyRequestsPage() {
       {loading && (
         <div className="flex flex-col gap-2">
           {[1, 2, 3].map((i) => (
-            <div key={i} className="h-12 rounded bg-muted animate-pulse" />
+            <Skeleton key={i} className="h-12" />
           ))}
         </div>
       )}

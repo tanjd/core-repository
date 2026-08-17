@@ -6,6 +6,7 @@ import { api } from "@/lib/api";
 import type { MetadataProviderStatus } from "@/lib/types";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Skeleton } from "@/components/ui/skeleton";
 
 const PROVIDER_META: Record<string, { label: string; description: string }> = {
   openlibrary: {
@@ -59,7 +60,7 @@ export default function AdminMetadataPage() {
     return (
       <div className="flex flex-col gap-3">
         {[1, 2, 3].map((i) => (
-          <div key={i} className="h-24 rounded-lg bg-muted animate-pulse" />
+          <Skeleton key={i} className="h-24 rounded-lg" />
         ))}
       </div>
     );

@@ -13,6 +13,7 @@ import { api } from "@/lib/api";
 import type { DashboardStats } from "@/lib/types";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
 
 function StatCard({
@@ -77,10 +78,10 @@ export default function AdminDashboardPage() {
       <div className="flex flex-col gap-4">
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4">
           {[1, 2, 3, 4, 5].map((i) => (
-            <div key={i} className="h-24 rounded-lg bg-muted animate-pulse" />
+            <Skeleton key={i} className="h-24 rounded-lg" />
           ))}
         </div>
-        <div className="h-48 rounded-lg bg-muted animate-pulse" />
+        <Skeleton className="h-48 rounded-lg" />
       </div>
     );
   }

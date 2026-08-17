@@ -9,6 +9,7 @@ import { BookCard } from "@/components/BookCard";
 import { BookshelfRow } from "@/components/BookshelfRow";
 import { Pagination } from "@/components/ui/Pagination";
 import { Input } from "@/components/ui/input";
+import { Skeleton } from "@/components/ui/skeleton";
 import {
   Select,
   SelectContent,
@@ -140,10 +141,10 @@ export default function CatalogPage() {
       {loading ? (
         <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
           {Array.from({ length: 10 }).map((_, i) => (
-            <div key={i} className="animate-pulse">
-              <div className="aspect-[2/3] rounded-lg bg-muted" />
-              <div className="mt-2 h-4 rounded bg-muted w-3/4" />
-              <div className="mt-1 h-3 rounded bg-muted w-1/2" />
+            <div key={i}>
+              <Skeleton className="aspect-[2/3] rounded-lg" />
+              <Skeleton className="mt-2 h-4 w-3/4" />
+              <Skeleton className="mt-1 h-3 w-1/2" />
             </div>
           ))}
         </div>
