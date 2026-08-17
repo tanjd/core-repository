@@ -7,6 +7,7 @@ import { BookOpen, LogOut } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { NotificationBell } from "@/components/NotificationBell";
 import { BottomTabBar } from "@/components/layout/BottomTabBar";
+import { ThemeToggle } from "@/components/theme-toggle";
 import { primaryNavItems, profileNavItem } from "@/components/layout/navItems";
 import { cn } from "@/lib/utils";
 
@@ -102,6 +103,7 @@ export function NavBar() {
                   </Link>
                 </>
               )}
+              <ThemeToggle />
             </div>
 
             {/* Mobile — guests get compact login/register CTAs; authenticated
@@ -129,6 +131,7 @@ export function NavBar() {
                   </Link>
                 </>
               )}
+              <ThemeToggle />
             </div>
           </div>
         </div>
