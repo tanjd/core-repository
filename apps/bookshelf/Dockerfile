@@ -64,8 +64,13 @@ ENV HOSTNAME="0.0.0.0"
 # Next's standalone tracer preserves the workspace-relative path for a
 # monorepo project — server.js lands at apps/bookshelf/server.js, not at
 # the standalone root, with node_modules hoisted to the root alongside it.
+# server.js does process.chdir(__dirname) (apps/bookshelf/) and then resolves
+# the baked-in distDir ("./../../dist/apps/bookshelf/.next") relative to that
+# cwd — i.e. it reads static assets from dist/apps/bookshelf/.next/static, not
+# apps/bookshelf/.next/static. public/ isn't affected: Next resolves it
+# relative to `dir` (apps/bookshelf/) directly, not through distDir.
 COPY --from=builder --chown=appuser:appuser /app/dist/apps/bookshelf/.next/standalone ./
-COPY --from=builder --chown=appuser:appuser /app/dist/apps/bookshelf/.next/static ./apps/bookshelf/.next/static
+COPY --from=builder --chown=appuser:appuser /app/dist/apps/bookshelf/.next/static ./dist/apps/bookshelf/.next/static
 COPY --from=builder --chown=appuser:appuser /app/apps/bookshelf/public ./apps/bookshelf/public
 
 USER appuser
