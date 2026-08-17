@@ -64,8 +64,13 @@ ENV HOSTNAME="0.0.0.0"
 # Next's standalone tracer preserves the workspace-relative path for a
 # monorepo project — server.js lands at apps/ledger-lens/server.js, not at
 # the standalone root, with node_modules hoisted to the root alongside it.
+# server.js does process.chdir(__dirname) (apps/ledger-lens/) and then resolves
+# the baked-in distDir ("./../../dist/apps/ledger-lens/.next") relative to that
+# cwd — i.e. it reads static assets from dist/apps/ledger-lens/.next/static, not
+# apps/ledger-lens/.next/static. public/ isn't affected: Next resolves it
+# relative to `dir` (apps/ledger-lens/) directly, not through distDir.
 COPY --from=builder --chown=appuser:appuser /app/dist/apps/ledger-lens/.next/standalone ./
-COPY --from=builder --chown=appuser:appuser /app/dist/apps/ledger-lens/.next/static ./apps/ledger-lens/.next/static
+COPY --from=builder --chown=appuser:appuser /app/dist/apps/ledger-lens/.next/static ./dist/apps/ledger-lens/.next/static
 COPY --from=builder --chown=appuser:appuser /app/apps/ledger-lens/public ./apps/ledger-lens/public
 
 USER appuser
