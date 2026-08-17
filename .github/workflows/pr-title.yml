@@ -1,0 +1,42 @@
+name: PR Title
+
+# Squash merging is the only merge method allowed on this repo
+# (allow_squash_merge only), and GitHub uses the PR title as the squash
+# commit message whenever a PR has more than one commit
+# (squash_merge_commit_title: COMMIT_OR_PR_TITLE) — that squash commit is
+# exactly what nx release's conventionalCommits engine reads to decide
+# whether a project gets a version bump. A non-conventional title means
+# nx release silently skips versioning/publishing for every project the PR
+# touches, even though real code shipped to main. This already happened to
+# bookshelf-backend (see apps/bookshelf-backend/CHANGELOG.md's 0.3.0 entry).
+# This check isn't wired up as a required status check yet (see root
+# CLAUDE.md's "Known gaps" — branch protection on main isn't enabled), so it
+# reports pass/fail but doesn't block merging on its own.
+
+on:
+  pull_request_target:
+    types: [opened, edited, reopened, synchronize]
+
+permissions:
+  pull-requests: write
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: amannn/action-semantic-pull-request@v6
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          types: |
+            feat
+            fix
+            refactor
+            test
+            chore
+            docs
+            perf
+          requireScope: false
+          subjectPattern: ^[A-Za-z].+$
+          subjectPatternError: |
+            The PR title's description must start with a letter and not be empty.
