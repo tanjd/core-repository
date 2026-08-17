@@ -1,3 +1,13 @@
+## 1.2.1 (2026-08-17)
+
+### 🩹 Fixes
+
+- **index-watch:** honor DB_PATH env var for the SQLite file location ([#32](https://github.com/tanjd/core-repository/pull/32))
+
+### ❤️ Thank You
+
+- Jeddy Tan @tanjd
+
 ## 1.2.0 (2026-08-16)
 
 This was a version bump only for index-watch to align it with other projects, there were no code changes.
