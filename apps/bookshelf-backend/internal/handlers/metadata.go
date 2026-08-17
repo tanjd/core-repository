@@ -12,7 +12,7 @@ import (
 	"time"
 
 	"github.com/danielgtaylor/huma/v2"
-	"github.com/rs/zerolog/log"
+	"github.com/rs/zerolog"
 
 	"github.com/tanjd/core-repository/apps/bookshelf-backend/internal/middleware"
 	"github.com/tanjd/core-repository/apps/bookshelf-backend/internal/repository"
@@ -112,11 +112,11 @@ func (h *MetadataHandler) searchMetadata(ctx context.Context, input *searchMetad
 		cacheKey += "|gbooks"
 	}
 	if cached, ok := h.cache.Get(cacheKey); ok {
-		log.Info().Str("query", q).Msg("metadata search cache hit")
+		zerolog.Ctx(ctx).Debug().Str("query", q).Msg("metadata search cache hit")
 		return &searchMetadataOutput{Body: cached}, nil
 	}
 
-	results := fetchAllSources(q, apiKey)
+	results := fetchAllSources(ctx, q, apiKey)
 
 	consolidated := consolidateResults(results)
 	h.cache.Set(cacheKey, consolidated)
@@ -139,7 +139,7 @@ func (h *MetadataHandler) resolveGoogleBooksAPIKey(ctx context.Context) string {
 	}
 	decrypted, err := decryptField(user.GoogleBooksAPIKey, h.encryptionSecret)
 	if err != nil {
-		log.Warn().Err(err).Uint("user_id", userID).Msg("could not decrypt user google books api key")
+		zerolog.Ctx(ctx).Warn().Err(err).Uint("user_id", userID).Msg("could not decrypt user google books api key")
 		return apiKey
 	}
 	return decrypted
@@ -148,7 +148,7 @@ func (h *MetadataHandler) resolveGoogleBooksAPIKey(ctx context.Context) string {
 // fetchAllSources queries Open Library, Google Books (if apiKey is set), and
 // BookBrainz concurrently, merging all results. A per-source failure is
 // logged and otherwise ignored.
-func fetchAllSources(q, apiKey string) []BookMetadataResult {
+func fetchAllSources(ctx context.Context, q, apiKey string) []BookMetadataResult {
 	var mu sync.Mutex
 	var results []BookMetadataResult
 	var wg sync.WaitGroup
@@ -157,7 +157,7 @@ func fetchAllSources(q, apiKey string) []BookMetadataResult {
 		defer wg.Done()
 		items, err := fn()
 		if err != nil {
-			log.Warn().Err(err).Msg(name + " search failed")
+			zerolog.Ctx(ctx).Warn().Err(err).Msg(name + " search failed")
 			return
 		}
 		mu.Lock()
@@ -166,15 +166,15 @@ func fetchAllSources(q, apiKey string) []BookMetadataResult {
 	}
 
 	wg.Add(1)
-	go fetch("open library", func() ([]BookMetadataResult, error) { return fetchOpenLibrary(q) })
+	go fetch("open library", func() ([]BookMetadataResult, error) { return fetchOpenLibrary(ctx, q) })
 
 	if apiKey != "" {
 		wg.Add(1)
-		go fetch("google books", func() ([]BookMetadataResult, error) { return fetchGoogleBooks(q, apiKey) })
+		go fetch("google books", func() ([]BookMetadataResult, error) { return fetchGoogleBooks(ctx, q, apiKey) })
 	}
 
 	wg.Add(1)
-	go fetch("bookbrainz", func() ([]BookMetadataResult, error) { return fetchBookBrainz(q) })
+	go fetch("bookbrainz", func() ([]BookMetadataResult, error) { return fetchBookBrainz(ctx, q) })
 
 	wg.Wait()
 	return results
@@ -223,8 +223,8 @@ func (h *MetadataHandler) getOLDescription(_ context.Context, input *olDescripti
 }
 
 // fetchOpenLibrary calls the OL search API and returns normalised results.
-func fetchOpenLibrary(q string) ([]BookMetadataResult, error) {
-	log.Info().Str("query", q).Msg("searching Open Library")
+func fetchOpenLibrary(ctx context.Context, q string) ([]BookMetadataResult, error) {
+	zerolog.Ctx(ctx).Debug().Str("query", q).Msg("searching Open Library")
 	apiURL := fmt.Sprintf(
 		"https://openlibrary.org/search.json?q=%s&fields=key,title,author_name,isbn,cover_i&limit=10",
 		url.QueryEscape(q),
@@ -257,7 +257,7 @@ func fetchOpenLibrary(q string) ([]BookMetadataResult, error) {
 		return nil, err
 	}
 
-	log.Info().Str("query", q).Int("results", len(payload.Docs)).Msg("Open Library search complete")
+	zerolog.Ctx(ctx).Debug().Str("query", q).Int("results", len(payload.Docs)).Msg("Open Library search complete")
 	results := make([]BookMetadataResult, 0, len(payload.Docs))
 	for _, doc := range payload.Docs {
 		r := BookMetadataResult{
@@ -365,8 +365,8 @@ func preferredISBN(ids []googleBooksIndustryIdentifier) string {
 }
 
 // fetchGoogleBooks calls the Google Books API and returns normalised results.
-func fetchGoogleBooks(q, apiKey string) ([]BookMetadataResult, error) {
-	log.Info().Str("query", q).Msg("searching Google Books")
+func fetchGoogleBooks(ctx context.Context, q, apiKey string) ([]BookMetadataResult, error) {
+	zerolog.Ctx(ctx).Debug().Str("query", q).Msg("searching Google Books")
 	apiURL := fmt.Sprintf(
 		"https://www.googleapis.com/books/v1/volumes?q=%s&key=%s&maxResults=10",
 		url.QueryEscape(q),
@@ -392,7 +392,7 @@ func fetchGoogleBooks(q, apiKey string) ([]BookMetadataResult, error) {
 		return nil, err
 	}
 
-	log.Info().Str("query", q).Int("results", len(payload.Items)).Msg("Google Books search complete")
+	zerolog.Ctx(ctx).Debug().Str("query", q).Int("results", len(payload.Items)).Msg("Google Books search complete")
 	results := make([]BookMetadataResult, 0, len(payload.Items))
 	for _, item := range payload.Items {
 		results = append(results, googleVolumeToResult(item))
@@ -402,8 +402,8 @@ func fetchGoogleBooks(q, apiKey string) ([]BookMetadataResult, error) {
 
 // fetchBookBrainz calls the BookBrainz search API and returns normalised results.
 // BookBrainz does not provide cover images.
-func fetchBookBrainz(q string) ([]BookMetadataResult, error) {
-	log.Debug().Str("query", q).Msg("searching BookBrainz")
+func fetchBookBrainz(ctx context.Context, q string) ([]BookMetadataResult, error) {
+	zerolog.Ctx(ctx).Debug().Str("query", q).Msg("searching BookBrainz")
 	apiURL := fmt.Sprintf(
 		"https://api.bookbrainz.org/1/search?q=%s&type=edition&size=10",
 		url.QueryEscape(q),
@@ -440,7 +440,7 @@ func fetchBookBrainz(q string) ([]BookMetadataResult, error) {
 		return nil, err
 	}
 
-	log.Debug().Str("query", q).Int("results", len(payload.Results)).Msg("BookBrainz search complete")
+	zerolog.Ctx(ctx).Debug().Str("query", q).Int("results", len(payload.Results)).Msg("BookBrainz search complete")
 	results := make([]BookMetadataResult, 0, len(payload.Results))
 	for _, item := range payload.Results {
 		if item.DefaultAlias.Name == "" {

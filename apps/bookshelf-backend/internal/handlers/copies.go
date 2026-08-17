@@ -7,7 +7,7 @@ import (
 
 	"github.com/danielgtaylor/huma/v2"
 
-	"github.com/rs/zerolog/log"
+	"github.com/rs/zerolog"
 
 	"github.com/tanjd/core-repository/apps/bookshelf-backend/internal/middleware"
 	"github.com/tanjd/core-repository/apps/bookshelf-backend/internal/models"
@@ -69,6 +69,12 @@ type deleteCopyInput struct {
 
 type listMyCopiesOutput struct{ Body []models.Copy }
 
+type listMyOwnedBookIDsOutput struct {
+	Body struct {
+		BookIDs []uint `json:"book_ids"`
+	}
+}
+
 type transferCopyInput struct {
 	ID   uint `path:"id" doc:"Copy ID"`
 	Body struct {
@@ -90,6 +96,15 @@ func (h *CopyHandler) RegisterRoutes(api huma.API) {
 		Summary:     "List all copies owned by the authenticated user (with book info)",
 		Security:    []map[string][]string{{"bearer": {}}},
 	}, h.listMyCopies)
+
+	huma.Register(api, huma.Operation{
+		OperationID: "list-my-owned-book-ids",
+		Method:      "GET",
+		Path:        "/copies/mine/book-ids",
+		Tags:        []string{"copies"},
+		Summary:     "List the distinct book IDs the authenticated user owns at least one copy of",
+		Security:    []map[string][]string{{"bearer": {}}},
+	}, h.listMyOwnedBookIDs)
 
 	huma.Register(api, huma.Operation{
 		OperationID:   "create-copy",
@@ -142,6 +157,20 @@ func (h *CopyHandler) listMyCopies(ctx context.Context, _ *struct{}) (*listMyCop
 		return nil, huma.Error500InternalServerError("could not fetch copies")
 	}
 	return &listMyCopiesOutput{Body: copies}, nil
+}
+
+func (h *CopyHandler) listMyOwnedBookIDs(ctx context.Context, _ *struct{}) (*listMyOwnedBookIDsOutput, error) {
+	ownerID, err := middleware.GetRequiredUserID(ctx)
+	if err != nil {
+		return nil, huma.Error401Unauthorized("authentication required")
+	}
+	bookIDs, err := h.copies.ListOwnedBookIDs(ownerID)
+	if err != nil {
+		return nil, huma.Error500InternalServerError("could not fetch owned book ids")
+	}
+	out := &listMyOwnedBookIDsOutput{}
+	out.Body.BookIDs = bookIDs
+	return out, nil
 }
 
 func (h *CopyHandler) createCopy(ctx context.Context, input *createCopyInput) (*createCopyOutput, error) {
@@ -317,7 +346,7 @@ func (h *CopyHandler) transferCopy(ctx context.Context, input *transferCopyInput
 		return nil, huma.Error500InternalServerError("could not transfer copy")
 	}
 
-	h.notifyTransfer(ownerID, target.ID)
+	h.notifyTransfer(ctx, ownerID, target.ID)
 
 	// Clear waitlist since ownership changed.
 	if h.waitlists != nil {
@@ -332,13 +361,13 @@ func (h *CopyHandler) transferCopy(ctx context.Context, input *transferCopyInput
 }
 
 // notifyTransfer sends (non-fatal) notifications to both parties of a copy transfer.
-func (h *CopyHandler) notifyTransfer(prevOwnerID, newOwnerID uint) {
+func (h *CopyHandler) notifyTransfer(ctx context.Context, prevOwnerID, newOwnerID uint) {
 	outN := models.Notification{RecipientID: prevOwnerID, Type: "copy_transferred_out"}
 	inN := models.Notification{RecipientID: newOwnerID, Type: "copy_transferred_in"}
 	if notifErr := h.notifs.Create(&outN); notifErr != nil {
-		log.Warn().Err(notifErr).Msg("transfer out notification failed")
+		zerolog.Ctx(ctx).Warn().Err(notifErr).Msg("transfer out notification failed")
 	}
 	if notifErr := h.notifs.Create(&inN); notifErr != nil {
-		log.Warn().Err(notifErr).Msg("transfer in notification failed")
+		zerolog.Ctx(ctx).Warn().Err(notifErr).Msg("transfer in notification failed")
 	}
 }

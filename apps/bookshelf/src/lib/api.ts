@@ -117,6 +117,11 @@ export const api = {
       method: "POST",
       body: JSON.stringify({ code }),
     }),
+  confirmEmailChange: (code: string) =>
+    request<User>("/auth/confirm-email-change", {
+      method: "POST",
+      body: JSON.stringify({ code }),
+    }),
   myVerificationStatus: () =>
     request<VerificationStatus>("/auth/me/verification-status"),
 
@@ -157,6 +162,8 @@ export const api = {
 
   // Copies
   getMyCopies: () => request<Copy[]>("/copies/mine"),
+  getMyOwnedBookIds: () =>
+    request<{ book_ids: number[] }>("/copies/mine/book-ids"),
   createCopy: (data: {
     book_id: number;
     condition: string;

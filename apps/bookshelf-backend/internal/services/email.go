@@ -2,11 +2,12 @@
 package services
 
 import (
+	"context"
 	"fmt"
 	"net"
 	"net/smtp"
 
-	"github.com/rs/zerolog/log"
+	"github.com/rs/zerolog"
 )
 
 // EmailService sends transactional emails over SMTP.
@@ -38,14 +39,15 @@ func NewEmailService(host, port, username, password, from, env, devEmailOverride
 // mainstream SMTP provider on port 587), so no manual TLS handling is
 // needed. If no host is configured the call is silently skipped — lets
 // email stay optional for local/internal testing.
-func (s *EmailService) SendEmail(recipient, subject, html string) error {
+func (s *EmailService) SendEmail(ctx context.Context, recipient, subject, html string) error {
 	to := recipient
 	if s.env == "dev" && s.devEmailOverride != "" {
-		log.Debug().Str("original", recipient).Str("override", s.devEmailOverride).Msg("email: dev override active")
+		zerolog.Ctx(ctx).Debug().Str("original", recipient).Str("override", s.devEmailOverride).Msg("email: dev override active")
 		to = s.devEmailOverride
 	}
 	if s.host == "" {
-		log.Warn().Str("to", to).Str("subject", subject).Msg("email skipped: SMTP_HOST not set")
+		zerolog.Ctx(ctx).Warn().Str("to", to).Str("subject", subject).Str("body", html).
+			Msg("email skipped: SMTP_HOST not set — printing body here so codes/links are still usable for local testing")
 		return nil
 	}
 
@@ -64,6 +66,19 @@ func (s *EmailService) SendEmail(recipient, subject, html string) error {
 		return fmt.Errorf("email: send: %w", err)
 	}
 
-	log.Debug().Str("to", to).Str("subject", subject).Msg("email sent")
+	zerolog.Ctx(ctx).Debug().Str("to", to).Str("subject", subject).Msg("email sent")
 	return nil
+}
+
+// SendEmailAsync sends an email in a background goroutine so callers on the
+// HTTP request path don't block on the SMTP round trip. Errors are logged
+// rather than returned — every call site already treats email delivery as
+// best-effort. ctx is only used for its logger (carried into the goroutine
+// for request correlation); the send itself isn't cancelled if ctx ends.
+func (s *EmailService) SendEmailAsync(ctx context.Context, recipient, subject, html string) {
+	go func() {
+		if err := s.SendEmail(ctx, recipient, subject, html); err != nil {
+			zerolog.Ctx(ctx).Error().Err(err).Str("to", recipient).Str("subject", subject).Msg("async email send failed")
+		}
+	}()
 }

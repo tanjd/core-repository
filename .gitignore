@@ -106,6 +106,8 @@ docs/specs/
 
 # Runtime SQLite DBs (mounted as volumes in app Dockerfiles) - never committed
 *.db
+*.db-shm
+*.db-wal
 *.sqlite
 *.sqlite3
 

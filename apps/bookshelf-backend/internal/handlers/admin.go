@@ -8,7 +8,7 @@ import (
 	"time"
 
 	"github.com/danielgtaylor/huma/v2"
-	"github.com/rs/zerolog/log"
+	"github.com/rs/zerolog"
 
 	"github.com/tanjd/core-repository/apps/bookshelf-backend/internal/middleware"
 	"github.com/tanjd/core-repository/apps/bookshelf-backend/internal/models"
@@ -417,7 +417,7 @@ func (h *AdminHandler) getMetadataStatus(ctx context.Context, _ *struct{}) (*met
 			if err != nil {
 				// Do not include the URL in the error — it may contain an API key.
 				s.Error = "connection error"
-				log.Warn().Err(err).Str("provider", p.name).Msg("metadata probe failed")
+				zerolog.Ctx(ctx).Warn().Err(err).Str("provider", p.name).Msg("metadata probe failed")
 			} else {
 				_ = resp.Body.Close()
 				if resp.StatusCode < 400 {

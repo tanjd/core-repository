@@ -12,6 +12,7 @@ import { CopyCard } from "@/components/CopyCard";
 import { WaitlistButton } from "@/components/WaitlistButton";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Skeleton } from "@/components/ui/skeleton";
 import {
   Dialog,
   DialogContent,
@@ -92,14 +93,14 @@ export default function BookDetailPage() {
 
   if (loading) {
     return (
-      <div className="flex flex-col gap-6 animate-pulse">
-        <div className="h-8 w-48 rounded bg-muted" />
+      <div className="flex flex-col gap-6">
+        <Skeleton className="h-8 w-48" />
         <div className="flex gap-6">
-          <div className="w-40 aspect-[2/3] rounded-lg bg-muted shrink-0" />
+          <Skeleton className="w-40 aspect-[2/3] rounded-lg shrink-0" />
           <div className="flex flex-col gap-3 flex-1">
-            <div className="h-6 w-3/4 rounded bg-muted" />
-            <div className="h-4 w-1/2 rounded bg-muted" />
-            <div className="h-24 rounded bg-muted" />
+            <Skeleton className="h-6 w-3/4" />
+            <Skeleton className="h-4 w-1/2" />
+            <Skeleton className="h-24" />
           </div>
         </div>
       </div>

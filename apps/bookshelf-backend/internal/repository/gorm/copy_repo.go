@@ -64,6 +64,17 @@ func (r *CopyRepository) ListByOwnerID(ownerID uint) ([]models.Copy, error) {
 	return copies, nil
 }
 
+func (r *CopyRepository) ListOwnedBookIDs(ownerID uint) ([]uint, error) {
+	var bookIDs []uint
+	if err := r.db.Model(&models.Copy{}).
+		Where("owner_id = ?", ownerID).
+		Distinct("book_id").
+		Pluck("book_id", &bookIDs).Error; err != nil {
+		return nil, err
+	}
+	return bookIDs, nil
+}
+
 func (r *CopyRepository) CountByOwnerID(ownerID uint) (int64, error) {
 	var count int64
 	if err := r.db.Model(&models.Copy{}).Where("owner_id = ?", ownerID).Count(&count).Error; err != nil {

@@ -5,20 +5,17 @@ import Link from "next/link";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import {
-  Plus,
-  Pencil,
-  Trash2,
-  X,
-  Check,
-  BookOpen,
-  ArrowRightLeft,
-} from "lucide-react";
+import { Plus, Pencil, Trash2, BookOpen, ArrowRightLeft } from "lucide-react";
 import { api } from "@/lib/api";
 import type { Copy } from "@/lib/types";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Checkbox } from "@/components/ui/checkbox";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
+import { Textarea } from "@/components/ui/textarea";
+import { Skeleton } from "@/components/ui/skeleton";
 import {
   Dialog,
   DialogContent,
@@ -44,6 +41,11 @@ interface BookGroup {
   copies: MyCopy[];
 }
 
+interface ActiveLoan {
+  borrowerName: string;
+  dueDate?: string;
+}
+
 const conditionVariant: Record<string, "default" | "secondary" | "outline"> = {
   good: "default",
   fair: "secondary",
@@ -66,6 +68,9 @@ export default function MyBooksPage() {
   const [pendingCounts, setPendingCounts] = useState<Record<number, number>>(
     {},
   );
+  const [activeLoans, setActiveLoans] = useState<Record<number, ActiveLoan>>(
+    {},
+  );
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
@@ -84,28 +89,38 @@ export default function MyBooksPage() {
   const [transferEmail, setTransferEmail] = useState("");
   const [transferSubmitting, setTransferSubmitting] = useState(false);
 
-  // Delete confirm
-  const [deletingId, setDeletingId] = useState<number | null>(null);
+  // Delete confirm dialog
+  const [deleteCopy, setDeleteCopy] = useState<MyCopy | null>(null);
+  const [deleteSubmitting, setDeleteSubmitting] = useState(false);
 
-  // Fetched separately, after the main copies list renders — a per-copy
-  // pending-request count isn't returned by GET /copies/mine, and this
-  // shouldn't block the page's primary loading state.
-  const loadPendingCounts = useCallback(async (copies: Copy[]) => {
+  // Fetched separately, after the main copies list renders — per-copy
+  // pending-request counts and active-loan details aren't returned by
+  // GET /copies/mine, and this shouldn't block the page's primary loading
+  // state.
+  const loadRequestInfo = useCallback(async (copies: Copy[]) => {
     const results = await Promise.all(
       copies.map((copy) =>
         api
           .getLoanRequestsByCopy(copy.id)
-          .then(
-            (reqs) =>
-              [
-                copy.id,
-                reqs.filter((r) => r.status === "pending").length,
-              ] as const,
-          )
-          .catch(() => [copy.id, 0] as const),
+          .then((reqs) => [copy.id, reqs] as const)
+          .catch(() => [copy.id, []] as const),
       ),
     );
-    setPendingCounts(Object.fromEntries(results));
+    const pending: Record<number, number> = {};
+    const active: Record<number, ActiveLoan> = {};
+    for (const [copyId, reqs] of results) {
+      pending[copyId] = reqs.filter((r) => r.status === "pending").length;
+      const accepted = reqs.find((r) => r.status === "accepted");
+      if (accepted) {
+        active[copyId] = {
+          borrowerName:
+            accepted.borrower?.name ?? `User #${accepted.borrower_id}`,
+          dueDate: accepted.expected_return_date,
+        };
+      }
+    }
+    setPendingCounts(pending);
+    setActiveLoans(active);
   }, []);
 
   const loadMyCopies = useCallback(async () => {
@@ -135,7 +150,7 @@ export default function MyBooksPage() {
         groupMap.get(book.id)!.copies.push(enriched);
       }
       setBookGroups([...groupMap.values()]);
-      loadPendingCounts(copies);
+      loadRequestInfo(copies);
     } catch (err) {
       setError(
         err instanceof Error ? err.message : "Failed to load your books",
@@ -143,7 +158,7 @@ export default function MyBooksPage() {
     } finally {
       setLoading(false);
     }
-  }, [loadPendingCounts]);
+  }, [loadRequestInfo]);
 
   useEffect(() => {
     const token = localStorage.getItem("bookshelf_token");
@@ -196,14 +211,18 @@ export default function MyBooksPage() {
     }
   }
 
-  async function handleDelete(copyId: number) {
+  async function handleDelete() {
+    if (!deleteCopy) return;
+    setDeleteSubmitting(true);
     try {
-      await api.deleteCopy(copyId);
+      await api.deleteCopy(deleteCopy.id);
       toast.success("Copy removed");
-      setDeletingId(null);
+      setDeleteCopy(null);
       loadMyCopies();
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Delete failed");
+    } finally {
+      setDeleteSubmitting(false);
     }
   }
 
@@ -224,13 +243,18 @@ export default function MyBooksPage() {
   }
 
   const totalCopies = bookGroups.reduce((n, g) => n + g.copies.length, 0);
+  const loanedCount = bookGroups.reduce(
+    (n, g) => n + g.copies.filter((c) => c.status === "loaned").length,
+    0,
+  );
+  const totalPending = Object.values(pendingCounts).reduce((n, c) => n + c, 0);
 
   if (loading) {
     return (
       <div className="flex flex-col gap-4">
-        <div className="h-8 w-40 rounded bg-muted animate-pulse" />
+        <Skeleton className="h-8 w-40" />
         {[1, 2, 3].map((i) => (
-          <div key={i} className="h-32 rounded-xl bg-muted animate-pulse" />
+          <Skeleton key={i} className="h-32 rounded-xl" />
         ))}
       </div>
     );
@@ -252,6 +276,16 @@ export default function MyBooksPage() {
           </Button>
         </Link>
       </div>
+
+      {totalCopies > 0 && (
+        <p className="text-sm text-muted-foreground -mt-4">
+          {bookGroups.length} {bookGroups.length === 1 ? "book" : "books"} ·{" "}
+          {totalCopies} {totalCopies === 1 ? "copy" : "copies"} shared
+          {loanedCount > 0 && ` · ${loanedCount} on loan`}
+          {totalPending > 0 &&
+            ` · ${totalPending} pending request${totalPending === 1 ? "" : "s"}`}
+        </p>
+      )}
 
       {error && <p className="text-sm text-destructive">{error}</p>}
 
@@ -275,7 +309,10 @@ export default function MyBooksPage() {
             >
               {/* Book header */}
               <div className="flex gap-4 p-4 border-b bg-muted/30">
-                <div className="w-14 shrink-0 self-start">
+                <Link
+                  href={`/catalog/${group.bookId}`}
+                  className="w-14 shrink-0 self-start"
+                >
                   {group.coverUrl ? (
                     <div className="relative w-14 aspect-[2/3] rounded overflow-hidden">
                       <Image
@@ -291,7 +328,7 @@ export default function MyBooksPage() {
                       <BookOpen className="size-5 text-muted-foreground" />
                     </div>
                   )}
-                </div>
+                </Link>
                 <div className="min-w-0">
                   <Link
                     href={`/catalog/${group.bookId}`}
@@ -318,9 +355,11 @@ export default function MyBooksPage() {
                     copy.status !== "loaned" && copy.status !== "requested";
                   const canTransfer =
                     copy.status !== "loaned" && copy.status !== "requested";
+                  const loan =
+                    copy.status === "loaned" ? activeLoans[copy.id] : null;
 
                   return (
-                    <div key={copy.id} className="p-4 flex flex-col gap-3">
+                    <div key={copy.id} className="p-4 flex flex-col gap-2">
                       <div className="flex flex-wrap items-center gap-2">
                         <Badge
                           variant={
@@ -336,14 +375,36 @@ export default function MyBooksPage() {
                         >
                           {copy.status}
                         </Badge>
-                        {copy.notes && (
-                          <span className="text-xs text-muted-foreground truncate max-w-[200px]">
-                            {copy.notes}
-                          </span>
-                        )}
                       </div>
 
-                      <div className="flex flex-wrap items-center gap-2">
+                      {loan && (
+                        <p className="text-xs text-muted-foreground">
+                          Loaned to{" "}
+                          <span className="font-medium text-foreground">
+                            {loan.borrowerName}
+                          </span>
+                          {loan.dueDate &&
+                            ` · due ${new Date(loan.dueDate).toLocaleDateString()}`}
+                        </p>
+                      )}
+
+                      {copy.notes && (
+                        <p className="text-xs text-muted-foreground line-clamp-1">
+                          {copy.notes}
+                        </p>
+                      )}
+
+                      <div className="flex flex-wrap items-center gap-2 mt-1">
+                        <Link href={`/my-books/${copy.id}/requests`}>
+                          <Button size="sm">
+                            Manage Requests
+                            {!!pendingCounts[copy.id] && (
+                              <Badge variant="secondary" className="px-1.5">
+                                {pendingCounts[copy.id]}
+                              </Badge>
+                            )}
+                          </Button>
+                        </Link>
                         <Button
                           size="sm"
                           variant="outline"
@@ -363,46 +424,16 @@ export default function MyBooksPage() {
                             <ArrowRightLeft className="size-3" /> Transfer
                           </Button>
                         )}
-                        {canDelete &&
-                          (deletingId === copy.id ? (
-                            <div className="flex items-center gap-1">
-                              <span className="text-xs text-muted-foreground">
-                                Confirm delete?
-                              </span>
-                              <Button
-                                size="sm"
-                                variant="destructive"
-                                onClick={() => handleDelete(copy.id)}
-                              >
-                                <Check className="size-3" /> Yes
-                              </Button>
-                              <Button
-                                size="sm"
-                                variant="ghost"
-                                onClick={() => setDeletingId(null)}
-                              >
-                                <X className="size-3" />
-                              </Button>
-                            </div>
-                          ) : (
-                            <Button
-                              size="sm"
-                              variant="ghost"
-                              onClick={() => setDeletingId(copy.id)}
-                            >
-                              <Trash2 className="size-3" /> Remove
-                            </Button>
-                          ))}
-                        <Link href={`/my-books/${copy.id}/requests`}>
-                          <Button size="sm" variant="secondary">
-                            Manage Requests
-                            {!!pendingCounts[copy.id] && (
-                              <Badge variant="destructive" className="px-1.5">
-                                {pendingCounts[copy.id]}
-                              </Badge>
-                            )}
+                        {canDelete && (
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            className="text-destructive hover:text-destructive hover:bg-destructive/10"
+                            onClick={() => setDeleteCopy(copy)}
+                          >
+                            <Trash2 className="size-3" /> Remove
                           </Button>
-                        </Link>
+                        )}
                       </div>
                     </div>
                   );
@@ -424,101 +455,108 @@ export default function MyBooksPage() {
           </DialogHeader>
           <div className="flex flex-col gap-4">
             <div className="flex flex-col gap-1.5">
-              <label className="text-sm font-medium">Condition</label>
-              <div className="flex gap-3">
+              <Label>Condition</Label>
+              <RadioGroup
+                value={editCondition}
+                onValueChange={(v) => setEditCondition(v as Condition)}
+                className="flex gap-4"
+              >
                 {(["good", "fair", "worn"] as Condition[]).map((c) => (
-                  <label
-                    key={c}
-                    className="flex items-center gap-1.5 cursor-pointer"
-                  >
-                    <input
-                      type="radio"
-                      name="edit-condition"
-                      value={c}
-                      checked={editCondition === c}
-                      onChange={() => setEditCondition(c)}
-                      className="accent-primary"
-                    />
-                    <span className="text-sm capitalize">{c}</span>
-                  </label>
+                  <div key={c} className="flex items-center gap-1.5">
+                    <RadioGroupItem value={c} id={`condition-${c}`} />
+                    <Label
+                      htmlFor={`condition-${c}`}
+                      className="text-sm font-normal capitalize cursor-pointer"
+                    >
+                      {c}
+                    </Label>
+                  </div>
                 ))}
-              </div>
+              </RadioGroup>
             </div>
 
             <div className="flex flex-col gap-1.5">
-              <label className="text-sm font-medium">Status</label>
-              <div className="flex flex-wrap gap-3">
+              <Label>Status</Label>
+              <RadioGroup
+                value={editStatus}
+                onValueChange={setEditStatus}
+                className="flex flex-wrap items-center gap-4"
+                disabled={
+                  editCopy?.status === "loaned" ||
+                  editCopy?.status === "requested"
+                }
+              >
                 {(["available", "unavailable"] as const).map((s) => (
-                  <label
-                    key={s}
-                    className="flex items-center gap-1.5 cursor-pointer"
-                  >
-                    <input
-                      type="radio"
-                      name="edit-status"
-                      value={s}
-                      checked={editStatus === s}
-                      onChange={() => setEditStatus(s)}
-                      className="accent-primary"
-                      disabled={
-                        editCopy?.status === "loaned" ||
-                        editCopy?.status === "requested"
-                      }
-                    />
-                    <span className="text-sm capitalize">{s}</span>
-                  </label>
+                  <div key={s} className="flex items-center gap-1.5">
+                    <RadioGroupItem value={s} id={`status-${s}`} />
+                    <Label
+                      htmlFor={`status-${s}`}
+                      className="text-sm font-normal capitalize cursor-pointer"
+                    >
+                      {s}
+                    </Label>
+                  </div>
                 ))}
                 {(editCopy?.status === "loaned" ||
                   editCopy?.status === "requested") && (
-                  <Badge variant="secondary" className="self-center">
+                  <Badge variant="secondary">
                     {editCopy.status} — cannot change
                   </Badge>
                 )}
-              </div>
+              </RadioGroup>
             </div>
 
             <div className="flex flex-col gap-1.5">
-              <label className="text-sm font-medium">Notes</label>
-              <textarea
-                className="flex min-h-[80px] w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm outline-none resize-none placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50"
+              <Label htmlFor="edit-notes">Notes</Label>
+              <Textarea
+                id="edit-notes"
+                className="resize-none"
                 value={editNotes}
                 onChange={(e) => setEditNotes(e.target.value)}
                 placeholder="Any notes about this copy…"
               />
             </div>
 
-            <div className="flex flex-col gap-2">
-              <label className="flex items-center gap-2 cursor-pointer">
-                <input
-                  type="checkbox"
+            <div className="flex flex-col gap-2.5">
+              <div className="flex items-center gap-2">
+                <Checkbox
+                  id="edit-auto-approve"
                   checked={editAutoApprove}
-                  onChange={(e) => setEditAutoApprove(e.target.checked)}
-                  className="accent-primary"
+                  onCheckedChange={(c) => setEditAutoApprove(c === true)}
                 />
-                <span className="text-sm">Auto-approve if available</span>
-              </label>
-              <label className="flex items-center gap-2 cursor-pointer">
-                <input
-                  type="checkbox"
+                <Label
+                  htmlFor="edit-auto-approve"
+                  className="text-sm font-normal cursor-pointer"
+                >
+                  Auto-approve if available
+                </Label>
+              </div>
+              <div className="flex items-center gap-2">
+                <Checkbox
+                  id="edit-return-date-required"
                   checked={editReturnDateRequired}
-                  onChange={(e) => setEditReturnDateRequired(e.target.checked)}
-                  className="accent-primary"
+                  onCheckedChange={(c) => setEditReturnDateRequired(c === true)}
                 />
-                <span className="text-sm">
+                <Label
+                  htmlFor="edit-return-date-required"
+                  className="text-sm font-normal cursor-pointer"
+                >
                   Require return date from borrower
-                </span>
-              </label>
-              <label className="flex items-center gap-2 cursor-pointer">
-                <input
-                  type="checkbox"
+                </Label>
+              </div>
+              <div className="flex items-center gap-2">
+                <Checkbox
+                  id="edit-hide-owner"
                   checked={editHideOwner}
-                  onChange={(e) => setEditHideOwner(e.target.checked)}
-                  className="accent-primary"
+                  onCheckedChange={(c) => setEditHideOwner(c === true)}
                 />
-                <span className="text-sm">
+                <Label
+                  htmlFor="edit-hide-owner"
+                  className="text-sm font-normal cursor-pointer"
+                >
                   Keep me anonymous (hide my name from borrowers)
-                </span>
-              </label>
+                </Label>
+              </div>
             </div>
           </div>
           <DialogFooter showCloseButton>
@@ -548,9 +586,9 @@ export default function MyBooksPage() {
             </DialogDescription>
           </DialogHeader>
           <div className="flex flex-col gap-2">
-            <label htmlFor="transfer-email" className="text-sm font-medium">
+            <Label htmlFor="transfer-email">
               Recipient&apos;s email address
-            </label>
+            </Label>
             <Input
               id="transfer-email"
               type="email"
@@ -566,6 +604,32 @@ export default function MyBooksPage() {
               disabled={transferSubmitting || !transferEmail.trim()}
             >
               {transferSubmitting ? "Transferring…" : "Transfer Copy"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete confirm dialog */}
+      <Dialog
+        open={!!deleteCopy}
+        onOpenChange={(open) => !open && setDeleteCopy(null)}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Remove this copy?</DialogTitle>
+            <DialogDescription>
+              {deleteCopy?.bookTitle
+                ? `This removes your copy of "${deleteCopy.bookTitle}" from the community catalog. This can't be undone.`
+                : "This removes the copy from the community catalog. This can't be undone."}
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter showCloseButton>
+            <Button
+              variant="destructive"
+              onClick={handleDelete}
+              disabled={deleteSubmitting}
+            >
+              {deleteSubmitting ? "Removing…" : "Remove copy"}
             </Button>
           </DialogFooter>
         </DialogContent>

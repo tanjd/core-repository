@@ -40,6 +40,10 @@ func main() {
 	if cfg.Env != "prd" {
 		log.Logger = log.Output(zerolog.ConsoleWriter{Out: os.Stderr, TimeFormat: time.RFC3339})
 	}
+	// zerolog.Ctx(ctx) falls back to this when ctx carries no request-scoped
+	// sub-logger (e.g. the scheduler's background ctx), instead of a disabled
+	// no-op logger.
+	zerolog.DefaultContextLogger = &log.Logger
 
 	// Log startup configuration — show intent without leaking secret values.
 	log.Info().
@@ -143,7 +147,7 @@ func main() {
 	jobsH.RegisterRoutes(api)
 	waitlistH.RegisterRoutes(api)
 
-	// Middleware chain: CORS → auth enrichment → mux
+	// Middleware chain: request logging → CORS → auth enrichment → mux
 	corsHandler := cors.New(cors.Options{
 		AllowedOrigins: cfg.CORSOrigins,
 		AllowedMethods: []string{
@@ -153,7 +157,7 @@ func main() {
 		AllowedHeaders: []string{"Origin", "Content-Type", "Accept", "Authorization"},
 	})
 
-	handler := corsHandler.Handler(appmiddleware.SetAuth(cfg.JWTSecret)(mux))
+	handler := appmiddleware.RequestLogger(corsHandler.Handler(appmiddleware.SetAuth(cfg.JWTSecret)(mux)))
 
 	srv := &http.Server{
 		Addr:         ":" + cfg.Port,

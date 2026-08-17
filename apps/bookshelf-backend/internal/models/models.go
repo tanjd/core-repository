@@ -17,6 +17,10 @@ type User struct {
 	OTPCode           string     `gorm:"column:otp_code" json:"-"`
 	OTPExpiry         *time.Time `gorm:"column:otp_expiry" json:"-"`
 	GoogleBooksAPIKey string     `gorm:"column:google_books_api_key" json:"-"`
+
+	PendingEmail          string     `gorm:"column:pending_email" json:"pending_email,omitempty"`
+	PendingEmailOTPCode   string     `gorm:"column:pending_email_otp_code" json:"-"`
+	PendingEmailOTPExpiry *time.Time `gorm:"column:pending_email_otp_expiry" json:"-"`
 }
 
 // AppSetting is a runtime-configurable key-value pair stored in the database.

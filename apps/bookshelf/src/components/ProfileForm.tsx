@@ -51,6 +51,12 @@ export function ProfileForm() {
   const [sendingOtp, setSendingOtp] = useState(false);
   const [verifyingOtp, setVerifyingOtp] = useState(false);
 
+  // Pending email change confirmation
+  const [emailChangePending, setEmailChangePending] = useState(false);
+  const [pendingEmailTarget, setPendingEmailTarget] = useState("");
+  const [emailChangeCode, setEmailChangeCode] = useState("");
+  const [confirmingEmailChange, setConfirmingEmailChange] = useState(false);
+
   useEffect(() => {
     const token = localStorage.getItem("bookshelf_token");
     if (!token) {
@@ -68,13 +74,17 @@ export function ProfileForm() {
             ? u.phone.slice(3).trim()
             : (u.phone ?? ""),
         );
+        if (u.pending_email) {
+          setEmailChangePending(true);
+          setPendingEmailTarget(u.pending_email);
+        }
       })
       .catch(() => router.push("/login"))
       .finally(() => setLoading(false));
   }, [router]);
 
-  async function handleSaveProfile(e: FormEvent) {
-    e.preventDefault();
+  async function handleSaveProfile(e?: FormEvent) {
+    e?.preventDefault();
     setSaving(true);
     try {
       const localPhone = phone.trim();
@@ -88,11 +98,18 @@ export function ProfileForm() {
         email: email.trim() || undefined,
         phone: fullPhone,
       });
-      const vs = await api.myVerificationStatus();
-      setUser(updated);
-      setVerificationStatus(vs);
-      localStorage.setItem("bookshelf_user", JSON.stringify(updated));
-      toast.success("Profile updated");
+      if (updated.pending_email) {
+        setUser(updated);
+        setEmailChangePending(true);
+        setPendingEmailTarget(updated.pending_email);
+        toast.success(`Confirmation code sent to ${updated.pending_email}`);
+      } else {
+        const vs = await api.myVerificationStatus();
+        setUser(updated);
+        setVerificationStatus(vs);
+        localStorage.setItem("bookshelf_user", JSON.stringify(updated));
+        toast.success("Profile updated");
+      }
     } catch (err) {
       toast.error(
         err instanceof Error ? err.message : "Failed to update profile",
@@ -218,6 +235,29 @@ export function ProfileForm() {
     }
   }
 
+  async function handleConfirmEmailChange(e: FormEvent) {
+    e.preventDefault();
+    setConfirmingEmailChange(true);
+    try {
+      const updated = await api.confirmEmailChange(emailChangeCode.trim());
+      const vs = await api.myVerificationStatus();
+      setUser(updated);
+      setVerificationStatus(vs);
+      localStorage.setItem("bookshelf_user", JSON.stringify(updated));
+      setEmailChangePending(false);
+      setPendingEmailTarget("");
+      setEmailChangeCode("");
+      setEmail(updated.email);
+      toast.success("Email address updated");
+    } catch (err) {
+      toast.error(
+        err instanceof Error ? err.message : "Invalid or expired code",
+      );
+    } finally {
+      setConfirmingEmailChange(false);
+    }
+  }
+
   if (loading) {
     return (
       <div className="flex flex-col gap-6 max-w-2xl mx-auto">
@@ -286,64 +326,127 @@ export function ProfileForm() {
               </CardDescription>
             </CardHeader>
             <CardContent>
-              <form
-                onSubmit={handleSaveProfile}
-                className="flex flex-col gap-4"
-              >
-                <div className="flex flex-col gap-1.5">
-                  <label htmlFor="profile-name" className="text-sm font-medium">
-                    Name
-                  </label>
-                  <Input
-                    id="profile-name"
-                    type="text"
-                    value={name}
-                    onChange={(e) => setName(e.target.value)}
-                    placeholder="Your name"
-                  />
-                </div>
-                <div className="flex flex-col gap-1.5">
-                  <label
-                    htmlFor="profile-email"
-                    className="text-sm font-medium"
-                  >
-                    Email
-                  </label>
-                  <Input
-                    id="profile-email"
-                    type="email"
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
-                    placeholder="you@example.com"
-                  />
-                </div>
-                <div className="flex flex-col gap-1.5">
-                  <label
-                    htmlFor="profile-phone"
-                    className="text-sm font-medium"
-                  >
-                    Phone
-                  </label>
-                  <div className="flex rounded-md border border-input overflow-hidden focus-within:ring-1 focus-within:ring-ring">
-                    <span className="flex items-center px-3 bg-muted text-muted-foreground text-sm border-r border-input select-none">
-                      +65
-                    </span>
-                    <input
-                      id="profile-phone"
-                      type="tel"
-                      className="flex-1 px-3 py-2 text-sm outline-none bg-background"
-                      value={phone}
-                      onChange={(e) => setPhone(e.target.value)}
-                      placeholder="9123 4567"
+              {emailChangePending ? (
+                <form
+                  onSubmit={handleConfirmEmailChange}
+                  className="flex flex-col gap-4"
+                >
+                  <p className="text-sm text-muted-foreground">
+                    A code was sent to <strong>{pendingEmailTarget}</strong>.
+                    Enter it below to confirm the change — your email won&apos;t
+                    update until you do.
+                  </p>
+                  <div className="flex flex-col gap-1.5">
+                    <label
+                      htmlFor="email-change-code"
+                      className="text-sm font-medium"
+                    >
+                      Confirmation code
+                    </label>
+                    <Input
+                      id="email-change-code"
+                      type="text"
+                      inputMode="numeric"
+                      maxLength={6}
+                      value={emailChangeCode}
+                      onChange={(e) => setEmailChangeCode(e.target.value)}
+                      placeholder="123456"
                     />
                   </div>
-                </div>
-                <div>
-                  <Button type="submit" disabled={saving}>
-                    {saving ? "Saving…" : "Save changes"}
-                  </Button>
-                </div>
-              </form>
+                  <div className="flex gap-2">
+                    <Button
+                      type="submit"
+                      disabled={
+                        confirmingEmailChange || emailChangeCode.length !== 6
+                      }
+                    >
+                      {confirmingEmailChange ? "Confirming…" : "Confirm"}
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      onClick={() => handleSaveProfile()}
+                      disabled={saving}
+                    >
+                      {saving ? "Resending…" : "Resend code"}
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      onClick={() => {
+                        setEmailChangePending(false);
+                        setPendingEmailTarget("");
+                        setEmailChangeCode("");
+                        setEmail(user.email);
+                      }}
+                    >
+                      Cancel
+                    </Button>
+                  </div>
+                </form>
+              ) : (
+                <form
+                  onSubmit={handleSaveProfile}
+                  className="flex flex-col gap-4"
+                >
+                  <div className="flex flex-col gap-1.5">
+                    <label
+                      htmlFor="profile-name"
+                      className="text-sm font-medium"
+                    >
+                      Name
+                    </label>
+                    <Input
+                      id="profile-name"
+                      type="text"
+                      value={name}
+                      onChange={(e) => setName(e.target.value)}
+                      placeholder="Your name"
+                    />
+                  </div>
+                  <div className="flex flex-col gap-1.5">
+                    <label
+                      htmlFor="profile-email"
+                      className="text-sm font-medium"
+                    >
+                      Email
+                    </label>
+                    <Input
+                      id="profile-email"
+                      type="email"
+                      value={email}
+                      onChange={(e) => setEmail(e.target.value)}
+                      placeholder="you@example.com"
+                    />
+                  </div>
+                  <div className="flex flex-col gap-1.5">
+                    <label
+                      htmlFor="profile-phone"
+                      className="text-sm font-medium"
+                    >
+                      Phone
+                    </label>
+                    <div className="flex rounded-md border border-input overflow-hidden focus-within:ring-1 focus-within:ring-ring">
+                      <span className="flex items-center px-3 bg-muted text-muted-foreground text-sm border-r border-input select-none">
+                        +65
+                      </span>
+                      <input
+                        id="profile-phone"
+                        type="tel"
+                        className="flex-1 px-3 py-2 text-sm outline-none bg-background"
+                        value={phone}
+                        onChange={(e) => setPhone(e.target.value)}
+                        placeholder="9123 4567"
+                      />
+                    </div>
+                  </div>
+                  <div>
+                    <Button type="submit" disabled={saving}>
+                      {saving ? "Saving…" : "Save changes"}
+                    </Button>
+                  </div>
+                </form>
+              )}
             </CardContent>
           </Card>
         </TabsContent>

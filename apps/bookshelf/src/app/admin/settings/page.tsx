@@ -42,6 +42,12 @@ const SETTING_LABELS: Record<
     description: "Maximum concurrent borrows per user (0 = unlimited)",
     type: "number",
   },
+  require_email_confirmation_on_change: {
+    label: "Confirm Email Changes via OTP",
+    description:
+      "Require users to verify ownership of a new email address (via a code sent to it) before it replaces their current one. Recommended to stay OFF until SMTP delivery is confirmed reliable in this deployment.",
+    type: "bool",
+  },
 };
 
 export default function AdminSettingsPage() {

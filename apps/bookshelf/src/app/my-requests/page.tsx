@@ -12,6 +12,7 @@ import { ContactReveal } from "@/components/ContactReveal";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Pagination } from "@/components/ui/Pagination";
+import { Skeleton } from "@/components/ui/skeleton";
 import {
   Table,
   TableBody,
@@ -107,9 +108,9 @@ export default function MyRequestsPage() {
   if (loading) {
     return (
       <div className="flex flex-col gap-4">
-        <div className="h-8 w-40 rounded bg-muted animate-pulse" />
+        <Skeleton className="h-8 w-40" />
         {[1, 2, 3].map((i) => (
-          <div key={i} className="h-12 rounded bg-muted animate-pulse" />
+          <Skeleton key={i} className="h-12" />
         ))}
       </div>
     );

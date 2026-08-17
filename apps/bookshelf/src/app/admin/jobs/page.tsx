@@ -8,6 +8,7 @@ import type { JobStatus } from "@/lib/types";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
+import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
 
 const JOB_META: Record<string, { label: string; description: string }> = {
@@ -61,8 +62,32 @@ export default function AdminJobsPage() {
 
   useEffect(() => {
     loadJobs();
-    const interval = setInterval(loadJobs, 3_000);
-    return () => clearInterval(interval);
+    let interval: ReturnType<typeof setInterval> | null = null;
+
+    function startPolling() {
+      if (interval !== null) return;
+      interval = setInterval(loadJobs, 3_000);
+    }
+    function stopPolling() {
+      if (interval === null) return;
+      clearInterval(interval);
+      interval = null;
+    }
+    function handleVisibilityChange() {
+      if (document.visibilityState === "visible") {
+        loadJobs();
+        startPolling();
+      } else {
+        stopPolling();
+      }
+    }
+
+    startPolling();
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+    return () => {
+      stopPolling();
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+    };
   }, [loadJobs]);
 
   async function handleRun(jobName: string) {
@@ -113,7 +138,7 @@ export default function AdminJobsPage() {
     return (
       <div className="flex flex-col gap-3 ">
         {[1].map((i) => (
-          <div key={i} className="h-36 rounded-lg bg-muted animate-pulse" />
+          <Skeleton key={i} className="h-36 rounded-lg" />
         ))}
       </div>
     );

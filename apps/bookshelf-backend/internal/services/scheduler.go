@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/rs/zerolog/log"
@@ -20,6 +21,11 @@ import (
 
 // defaultInterval is used when no valid interval is configured.
 const defaultInterval = 24 * time.Hour
+
+// coverRefreshConcurrency bounds how many cover downloads run in parallel,
+// so a large catalog doesn't run this job for a very long time while still
+// avoiding an unbounded burst of outbound requests.
+const coverRefreshConcurrency = 6
 
 // JobStatus describes the current state of a background job.
 type JobStatus struct {
@@ -154,20 +160,31 @@ func (s *Scheduler) refreshCovers(ctx context.Context) {
 		return
 	}
 
-	refreshed := 0
+	var refreshed atomic.Int64
+	var wg sync.WaitGroup
+	sem := make(chan struct{}, coverRefreshConcurrency)
+
+booksLoop:
 	for _, book := range books {
 		select {
 		case <-ctx.Done():
-			return
-		default:
+			break booksLoop
+		case sem <- struct{}{}:
 		}
-		if s.refreshBookCover(&book) {
-			refreshed++
-		}
-	}
 
-	result := fmt.Sprintf("refreshed %d of %d books", refreshed, len(books))
-	log.Info().Int("refreshed", refreshed).Int("total", len(books)).Msg("scheduler: cover refresh complete")
+		wg.Add(1)
+		go func(book models.Book) {
+			defer wg.Done()
+			defer func() { <-sem }()
+			if s.refreshBookCover(&book) {
+				refreshed.Add(1)
+			}
+		}(book)
+	}
+	wg.Wait()
+
+	result := fmt.Sprintf("refreshed %d of %d books", refreshed.Load(), len(books))
+	log.Info().Int64("refreshed", refreshed.Load()).Int("total", len(books)).Msg("scheduler: cover refresh complete")
 	s.setLastResult(result)
 }
 

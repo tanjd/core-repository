@@ -9,6 +9,7 @@ import type { Notification, PaginatedResult } from "@/lib/types";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Pagination } from "@/components/ui/Pagination";
+import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
 
 const typeLabel: Record<Notification["type"], string> = {
@@ -124,9 +125,9 @@ export default function NotificationsPage() {
   if (loading) {
     return (
       <div className="flex flex-col gap-4">
-        <div className="h-8 w-48 rounded bg-muted animate-pulse" />
+        <Skeleton className="h-8 w-48" />
         {[1, 2, 3].map((i) => (
-          <div key={i} className="h-16 rounded-lg bg-muted animate-pulse" />
+          <Skeleton key={i} className="h-16 rounded-lg" />
         ))}
       </div>
     );
