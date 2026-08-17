@@ -1,3 +1,13 @@
+## 0.2.1 (2026-08-17)
+
+### 🩹 Fixes
+
+- **docker:** serve standalone Next.js static assets from the correct path ([#34](https://github.com/tanjd/core-repository/pull/34))
+
+### ❤️ Thank You
+
+- Jeddy Tan @tanjd
+
 ## 0.2.0 (2026-08-16)
 
 ### 🚀 Features
