@@ -1,6 +1,7 @@
 """Database operations for subscribers and persistent alert state."""
 
 import logging
+import os
 import sqlite3
 from collections.abc import Iterator
 from contextlib import contextmanager
@@ -18,8 +19,14 @@ class SubscriberOverride(TypedDict, total=False):
 
 logger = logging.getLogger(__name__)
 
-# Database file location (inside Docker container: /app/data/)
-DB_PATH = Path(__file__).parent.parent.parent / "data" / "index_watch.db"
+# Database file location. Defaults to the app's own data/ dir (inside Docker:
+# /app/apps/index-watch/data/); override with the DB_PATH env var, e.g. to point at a
+# volume mounted at a different path. Config.from_env() parses DB_PATH too (for logging
+# purposes), but this is the module that actually opens the file, so it must read the
+# same env var itself rather than trusting a value handed to it.
+DB_PATH = Path(
+    os.getenv("DB_PATH", str(Path(__file__).parent.parent.parent / "data" / "index_watch.db"))
+)
 
 
 @contextmanager
