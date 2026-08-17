@@ -14,7 +14,7 @@ import (
 	"github.com/danielgtaylor/huma/v2"
 
 	"github.com/golang-jwt/jwt/v5"
-	"github.com/rs/zerolog/log"
+	"github.com/rs/zerolog"
 	"golang.org/x/crypto/bcrypt"
 
 	"github.com/tanjd/core-repository/apps/bookshelf-backend/internal/middleware"
@@ -142,6 +142,12 @@ type verifyOTPInput struct {
 	}
 }
 
+type confirmEmailChangeInput struct {
+	Body struct {
+		Code string `json:"code" required:"true" doc:"6-digit code sent to the new email address"`
+	}
+}
+
 type changePasswordInput struct {
 	Body struct {
 		CurrentPassword string `json:"current_password" required:"true" minLength:"1" doc:"Current password"`
@@ -239,6 +245,15 @@ func (h *AuthHandler) RegisterRoutes(api huma.API) {
 		Summary:     "Verify the OTP and mark the user as verified",
 		Security:    []map[string][]string{{"bearer": {}}},
 	}, h.verifyOTP)
+
+	huma.Register(api, huma.Operation{
+		OperationID: "confirm-email-change",
+		Method:      "POST",
+		Path:        "/auth/confirm-email-change",
+		Tags:        []string{"auth"},
+		Summary:     "Confirm a pending email change using the code sent to the new address",
+		Security:    []map[string][]string{{"bearer": {}}},
+	}, h.confirmEmailChange)
 
 	huma.Register(api, huma.Operation{
 		OperationID: "change-password",
@@ -370,8 +385,8 @@ func (h *AuthHandler) updateMe(ctx context.Context, input *updateMeInput) (*meOu
 	if input.Body.Phone != nil {
 		user.Phone = *input.Body.Phone
 	}
-	if input.Body.Email != nil && *input.Body.Email != user.Email {
-		if err := h.applyEmailUpdate(user, *input.Body.Email); err != nil {
+	if input.Body.Email != nil {
+		if err := h.handleEmailUpdateRequest(ctx, user, *input.Body.Email); err != nil {
 			return nil, err
 		}
 	}
@@ -388,6 +403,34 @@ func (h *AuthHandler) updateMe(ctx context.Context, input *updateMeInput) (*meOu
 	return &meOutput{Body: meBody{User: *user, GoogleBooksKeyConfigured: user.GoogleBooksAPIKey != ""}}, nil
 }
 
+// handleEmailUpdateRequest routes an email field on updateMe's input to the
+// right behavior: unchanged email with a pending change cancels it; a
+// changed email either applies immediately or stages a pending
+// confirmation, depending on the require_email_confirmation_on_change flag.
+//
+// TODO: the pending-confirmation branch (requestEmailChange) only runs when
+// that flag is "true". It defaults to "false" in db.Seed() because SMTP
+// delivery isn't guaranteed configured in every deployment — flip the
+// default once it is.
+func (h *AuthHandler) handleEmailUpdateRequest(ctx context.Context, user *models.User, newEmail string) error {
+	if newEmail == user.Email {
+		if user.PendingEmail != "" {
+			// User resubmitted their current (unchanged) email while a change
+			// was pending — treat as cancelling the pending change rather than
+			// leaving stale pending state.
+			user.PendingEmail = ""
+			user.PendingEmailOTPCode = ""
+			user.PendingEmailOTPExpiry = nil
+		}
+		return nil
+	}
+
+	if val, _ := h.admin.GetSetting("require_email_confirmation_on_change"); val == "true" {
+		return h.requestEmailChange(ctx, user, newEmail)
+	}
+	return h.applyEmailUpdate(user, newEmail)
+}
+
 // applyEmailUpdate changes the user's email, rejecting duplicates and
 // resetting verification state since a new email must be re-verified.
 func (h *AuthHandler) applyEmailUpdate(user *models.User, newEmail string) error {
@@ -399,6 +442,34 @@ func (h *AuthHandler) applyEmailUpdate(user *models.User, newEmail string) error
 	user.Verified = false
 	user.OTPCode = ""
 	user.OTPExpiry = nil
+	return nil
+}
+
+// requestEmailChange stages a pending email change and sends a confirmation
+// OTP to the *new* address; user.Email is left unchanged until
+// confirmEmailChange succeeds.
+func (h *AuthHandler) requestEmailChange(ctx context.Context, user *models.User, newEmail string) error {
+	existing, findErr := h.users.FindByEmail(newEmail)
+	if findErr == nil && existing.ID != user.ID {
+		return huma.Error400BadRequest("email already in use")
+	}
+
+	n, err := rand.Int(rand.Reader, big.NewInt(1_000_000))
+	if err != nil {
+		return huma.Error500InternalServerError("could not generate OTP")
+	}
+	code := fmt.Sprintf("%06d", n.Int64())
+	expiry := time.Now().Add(15 * time.Minute)
+
+	user.PendingEmail = newEmail
+	user.PendingEmailOTPCode = code
+	user.PendingEmailOTPExpiry = &expiry
+
+	html := fmt.Sprintf(
+		"<p>Hi %s,</p><p>You requested to change your Bookshelf account email to this address. Your confirmation code is: <strong>%s</strong></p><p>This code expires in 15 minutes. If you didn't request this change, you can safely ignore this email.</p>",
+		user.Name, code,
+	)
+	h.email.SendEmailAsync(ctx, newEmail, "Confirm your new Bookshelf email address", html)
 	return nil
 }
 
@@ -529,10 +600,7 @@ func (h *AuthHandler) sendOTP(ctx context.Context, _ *sendOTPInput) (*struct{}, 
 		"<p>Hi %s,</p><p>Your Bookshelf verification code is: <strong>%s</strong></p><p>This code expires in 15 minutes.</p>",
 		user.Name, code,
 	)
-	if err := h.email.SendEmail(user.Email, "Your Bookshelf verification code", html); err != nil {
-		// Log but don't fail — user can retry.
-		log.Warn().Err(err).Uint("user_id", userID).Msg("sendOTP: email delivery failed")
-	}
+	h.email.SendEmailAsync(ctx, user.Email, "Your Bookshelf verification code", html)
 
 	return nil, nil
 }
@@ -568,6 +636,60 @@ func (h *AuthHandler) verifyOTP(ctx context.Context, input *verifyOTPInput) (*me
 	}
 
 	user.Verified = true
+	user.OTPCode = ""
+	user.OTPExpiry = nil
+	if err := h.users.Save(user); err != nil {
+		return nil, huma.Error500InternalServerError("could not update user")
+	}
+
+	return &meOutput{Body: meBody{User: *user, GoogleBooksKeyConfigured: user.GoogleBooksAPIKey != ""}}, nil
+}
+
+func (h *AuthHandler) confirmEmailChange(ctx context.Context, input *confirmEmailChangeInput) (*meOutput, error) {
+	userID, err := middleware.GetRequiredUserID(ctx)
+	if err != nil {
+		return nil, huma.Error401Unauthorized("authentication required")
+	}
+
+	user, err := h.users.FindByID(userID)
+	if err != nil {
+		return nil, huma.Error500InternalServerError("could not fetch user")
+	}
+
+	if user.Suspended {
+		return nil, huma.Error403Forbidden("this account has been suspended")
+	}
+
+	if user.PendingEmail == "" || user.PendingEmailOTPCode == "" || user.PendingEmailOTPExpiry == nil {
+		return nil, huma.Error400BadRequest("no pending email change")
+	}
+	if time.Now().After(*user.PendingEmailOTPExpiry) {
+		return nil, huma.Error400BadRequest("confirmation code has expired")
+	}
+	if subtle.ConstantTimeCompare([]byte(user.PendingEmailOTPCode), []byte(input.Body.Code)) != 1 {
+		user.PendingEmailOTPCode = ""
+		user.PendingEmailOTPExpiry = nil
+		_ = h.users.Save(user) //nolint:errcheck
+		return nil, huma.Error400BadRequest("invalid confirmation code — please request a new one")
+	}
+
+	// Re-check for a race: someone else may have claimed this email between
+	// the original request and this confirmation.
+	if existing, findErr := h.users.FindByEmail(user.PendingEmail); findErr == nil && existing.ID != user.ID {
+		user.PendingEmail = ""
+		user.PendingEmailOTPCode = ""
+		user.PendingEmailOTPExpiry = nil
+		_ = h.users.Save(user) //nolint:errcheck
+		return nil, huma.Error400BadRequest("email already in use")
+	}
+
+	user.Email = user.PendingEmail
+	user.Verified = true
+	user.PendingEmail = ""
+	user.PendingEmailOTPCode = ""
+	user.PendingEmailOTPExpiry = nil
+	// Clear any unrelated leftover signup-verification OTP state too, since
+	// verification is now settled by this confirmation.
 	user.OTPCode = ""
 	user.OTPExpiry = nil
 	if err := h.users.Save(user); err != nil {
@@ -617,7 +739,7 @@ func (h *AuthHandler) changePassword(ctx context.Context, input *changePasswordI
 		return nil, huma.Error500InternalServerError("could not update password")
 	}
 
-	log.Info().Uint("user_id", userID).Msg("password changed")
+	zerolog.Ctx(ctx).Info().Uint("user_id", userID).Msg("password changed")
 	return nil, nil
 }
 

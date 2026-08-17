@@ -6,7 +6,7 @@ import (
 
 	"github.com/danielgtaylor/huma/v2"
 
-	"github.com/rs/zerolog/log"
+	"github.com/rs/zerolog"
 
 	"github.com/tanjd/core-repository/apps/bookshelf-backend/internal/middleware"
 	"github.com/tanjd/core-repository/apps/bookshelf-backend/internal/models"
@@ -236,8 +236,8 @@ func (h *BookHandler) createBook(ctx context.Context, input *createBookInput) (*
 
 	coverURL := input.Body.CoverURL
 	if h.coversDir != "" && coverURL != "" {
-		if local, err := downloadCover(coverURL, h.coversDir); err != nil {
-			log.Warn().Err(err).Msg("cover download failed, keeping external url")
+		if local, err := downloadCover(ctx, coverURL, h.coversDir); err != nil {
+			zerolog.Ctx(ctx).Warn().Err(err).Msg("cover download failed, keeping external url")
 		} else if local != "" {
 			coverURL = local
 		}

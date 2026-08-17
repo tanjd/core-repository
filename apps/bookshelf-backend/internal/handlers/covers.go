@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"context"
 	"crypto/sha256"
 	"fmt"
 	"io"
@@ -11,7 +12,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/rs/zerolog/log"
+	"github.com/rs/zerolog"
 )
 
 // coverMaxBytes is the maximum size accepted for a downloaded cover image (10 MiB).
@@ -49,7 +50,7 @@ func isCoverURLAllowed(rawURL string) bool {
 // Returns the proxy-accessible path (/api/covers/<filename>) on success.
 // Returns ("", nil) if externalURL is empty or already a local path (skip).
 // On failure, returns ("", err); callers should log and keep the original URL.
-func downloadCover(externalURL, destDir string) (string, error) {
+func downloadCover(ctx context.Context, externalURL, destDir string) (string, error) {
 	if externalURL == "" {
 		return "", nil
 	}
@@ -108,6 +109,6 @@ func downloadCover(externalURL, destDir string) (string, error) {
 		return "", err
 	}
 
-	log.Info().Str("filename", filename).Msg("cover cached")
+	zerolog.Ctx(ctx).Info().Str("filename", filename).Msg("cover cached")
 	return "/api/covers/" + filename, nil
 }

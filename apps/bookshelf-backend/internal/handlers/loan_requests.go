@@ -9,7 +9,7 @@ import (
 
 	"github.com/danielgtaylor/huma/v2"
 
-	"github.com/rs/zerolog/log"
+	"github.com/rs/zerolog"
 
 	"github.com/tanjd/core-repository/apps/bookshelf-backend/internal/middleware"
 	"github.com/tanjd/core-repository/apps/bookshelf-backend/internal/models"
@@ -337,7 +337,7 @@ func (h *LoanRequestHandler) createLoanRequest(ctx context.Context, input *creat
 		lr = *loaded
 	}
 
-	h.finalizeLoanRequest(&lr, bookCopy)
+	h.finalizeLoanRequest(ctx, &lr, bookCopy)
 
 	return &createLoanRequestOutput{Body: lr}, nil
 }
@@ -479,12 +479,12 @@ func buildLoanRequest(borrowerID uint, input *createLoanRequestInput) (models.Lo
 
 // finalizeLoanRequest runs the post-create workflow: notify the owner, or
 // auto-approve immediately if the copy has auto-approve enabled.
-func (h *LoanRequestHandler) finalizeLoanRequest(lr *models.LoanRequest, bookCopy *models.Copy) {
+func (h *LoanRequestHandler) finalizeLoanRequest(ctx context.Context, lr *models.LoanRequest, bookCopy *models.Copy) {
 	// Skip OnRequested when auto-approving to avoid sending a redundant
 	// "someone wants to borrow your book" email that is immediately superseded.
 	if !bookCopy.AutoApprove {
-		if err := h.workflow.OnRequested(lr); err != nil {
-			log.Error().Err(err).Msg("workflow.OnRequested failed")
+		if err := h.workflow.OnRequested(ctx, lr); err != nil {
+			zerolog.Ctx(ctx).Error().Err(err).Msg("workflow.OnRequested failed")
 		}
 		return
 	}
@@ -493,11 +493,11 @@ func (h *LoanRequestHandler) finalizeLoanRequest(lr *models.LoanRequest, bookCop
 	lr.Status = "accepted"
 	lr.RespondedAt = &now
 	if saveErr := h.loanReqs.Save(lr); saveErr != nil {
-		log.Error().Err(saveErr).Msg("auto-approve save failed")
+		zerolog.Ctx(ctx).Error().Err(saveErr).Msg("auto-approve save failed")
 		return
 	}
-	if wErr := h.workflow.OnAccepted(lr); wErr != nil {
-		log.Error().Err(wErr).Msg("workflow.OnAccepted failed for auto-approve")
+	if wErr := h.workflow.OnAccepted(ctx, lr); wErr != nil {
+		zerolog.Ctx(ctx).Error().Err(wErr).Msg("workflow.OnAccepted failed for auto-approve")
 	}
 	if reloaded, relErr := h.loanReqs.GetByIDWithCopyOwnerAndBorrower(lr.ID); relErr == nil {
 		*lr = *reloaded
@@ -583,7 +583,7 @@ func (h *LoanRequestHandler) updateLoanRequest(ctx context.Context, input *updat
 	case "accepted", "rejected":
 		transitionErr = h.acceptOrRejectLoan(lr, callerID, ownerID, input.Body.Status, now)
 	case "returned":
-		transitionErr = h.returnLoan(lr, callerID, ownerID, now, input.Body.NewCondition)
+		transitionErr = h.returnLoan(ctx, lr, callerID, ownerID, now, input.Body.NewCondition)
 	case "cancelled":
 		transitionErr = h.cancelLoan(lr, callerID)
 	default:
@@ -597,7 +597,7 @@ func (h *LoanRequestHandler) updateLoanRequest(ctx context.Context, input *updat
 		return nil, huma.Error500InternalServerError("could not update loan request")
 	}
 
-	h.runLoanWorkflowSideEffect(lr)
+	h.runLoanWorkflowSideEffect(ctx, lr)
 
 	return &updateLoanRequestOutput{Body: *lr}, nil
 }
@@ -618,7 +618,9 @@ func (h *LoanRequestHandler) acceptOrRejectLoan(lr *models.LoanRequest, callerID
 
 // returnLoan validates and applies a return transition, optionally updating
 // the copy's condition; only the copy owner may act, and only on an accepted loan.
-func (h *LoanRequestHandler) returnLoan(lr *models.LoanRequest, callerID, ownerID uint, now time.Time, newCondition string) error {
+func (h *LoanRequestHandler) returnLoan(
+	ctx context.Context, lr *models.LoanRequest, callerID, ownerID uint, now time.Time, newCondition string,
+) error {
 	if callerID != ownerID {
 		return huma.Error403Forbidden("only the copy owner can mark as returned")
 	}
@@ -637,7 +639,7 @@ func (h *LoanRequestHandler) returnLoan(lr *models.LoanRequest, callerID, ownerI
 	}
 	lr.Copy.Condition = newCondition
 	if saveErr := h.copies.Save(&lr.Copy); saveErr != nil {
-		log.Error().Err(saveErr).Msg("failed to update copy condition on return")
+		zerolog.Ctx(ctx).Error().Err(saveErr).Msg("failed to update copy condition on return")
 	}
 	return nil
 }
@@ -657,19 +659,19 @@ func (h *LoanRequestHandler) cancelLoan(lr *models.LoanRequest, callerID uint) e
 
 // runLoanWorkflowSideEffect fires the workflow callback matching lr's new
 // status (non-fatal — failures are logged, not returned).
-func (h *LoanRequestHandler) runLoanWorkflowSideEffect(lr *models.LoanRequest) {
+func (h *LoanRequestHandler) runLoanWorkflowSideEffect(ctx context.Context, lr *models.LoanRequest) {
 	var workflowErr error
 	switch lr.Status {
 	case "accepted":
-		workflowErr = h.workflow.OnAccepted(lr)
+		workflowErr = h.workflow.OnAccepted(ctx, lr)
 	case "rejected":
-		workflowErr = h.workflow.OnRejected(lr)
+		workflowErr = h.workflow.OnRejected(ctx, lr)
 	case "cancelled":
-		workflowErr = h.workflow.OnCancelled(lr)
+		workflowErr = h.workflow.OnCancelled(ctx, lr)
 	case "returned":
-		workflowErr = h.workflow.OnReturned(lr)
+		workflowErr = h.workflow.OnReturned(ctx, lr)
 	}
 	if workflowErr != nil {
-		log.Error().Err(workflowErr).Str("status", lr.Status).Msg("workflow side-effect failed")
+		zerolog.Ctx(ctx).Error().Err(workflowErr).Str("status", lr.Status).Msg("workflow side-effect failed")
 	}
 }

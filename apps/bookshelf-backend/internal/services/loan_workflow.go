@@ -1,9 +1,10 @@
 package services
 
 import (
+	"context"
 	"fmt"
 
-	"github.com/rs/zerolog/log"
+	"github.com/rs/zerolog"
 
 	"github.com/tanjd/core-repository/apps/bookshelf-backend/internal/models"
 	"github.com/tanjd/core-repository/apps/bookshelf-backend/internal/repository"
@@ -41,7 +42,7 @@ func NewLoanWorkflow(
 
 // OnRequested fires when a borrower creates a new loan request.
 // It notifies the copy owner.
-func (w *LoanWorkflow) OnRequested(lr *models.LoanRequest) error {
+func (w *LoanWorkflow) OnRequested(ctx context.Context, lr *models.LoanRequest) error {
 	bookCopy, err := w.copies.GetByIDWithOwner(lr.CopyID)
 	if err != nil {
 		return fmt.Errorf("OnRequested: load copy: %w", err)
@@ -53,12 +54,12 @@ func (w *LoanWorkflow) OnRequested(lr *models.LoanRequest) error {
 		LoanRequestID: &lr.ID,
 	}
 	if err := w.notifs.Create(&n); err != nil {
-		log.Warn().Err(err).Msg("OnRequested: create notification")
+		zerolog.Ctx(ctx).Warn().Err(err).Msg("OnRequested: create notification")
 	}
 
 	borrower, err := w.users.FindByID(lr.BorrowerID)
 	if err != nil {
-		log.Warn().Err(err).Uint("borrower_id", lr.BorrowerID).Msg("OnRequested: load borrower")
+		zerolog.Ctx(ctx).Warn().Err(err).Uint("borrower_id", lr.BorrowerID).Msg("OnRequested: load borrower")
 		return nil // email is best-effort; don't fail the request
 	}
 
@@ -67,7 +68,8 @@ func (w *LoanWorkflow) OnRequested(lr *models.LoanRequest) error {
 		"<p>Hi %s,</p><p><strong>%s</strong> has requested to borrow your copy of <em>%s</em>.</p>",
 		bookCopy.Owner.Name, borrower.Name, bookCopy.Book.Title,
 	)
-	return w.email.SendEmail(bookCopy.Owner.Email, subject, html)
+	w.email.SendEmailAsync(ctx, bookCopy.Owner.Email, subject, html)
+	return nil
 }
 
 // OnAccepted fires when the owner accepts a loan request.
@@ -77,7 +79,7 @@ func (w *LoanWorkflow) OnRequested(lr *models.LoanRequest) error {
 //   - Updates the copy status to "loaned".
 //
 // Then it notifies the accepted borrower.
-func (w *LoanWorkflow) OnAccepted(lr *models.LoanRequest) error {
+func (w *LoanWorkflow) OnAccepted(ctx context.Context, lr *models.LoanRequest) error {
 	if err := w.loanReqs.RejectCompetingAndUpdateCopy(lr.CopyID, lr.ID); err != nil {
 		return fmt.Errorf("OnAccepted: transaction: %w", err)
 	}
@@ -89,13 +91,13 @@ func (w *LoanWorkflow) OnAccepted(lr *models.LoanRequest) error {
 		LoanRequestID: &lr.ID,
 	}
 	if err := w.notifs.Create(&n); err != nil {
-		log.Warn().Err(err).Msg("OnAccepted: create notification")
+		zerolog.Ctx(ctx).Warn().Err(err).Msg("OnAccepted: create notification")
 	}
 
 	// Send email to borrower.
 	borrower, err := w.users.FindByID(lr.BorrowerID)
 	if err != nil {
-		log.Warn().Err(err).Uint("borrower_id", lr.BorrowerID).Msg("OnAccepted: load borrower")
+		zerolog.Ctx(ctx).Warn().Err(err).Uint("borrower_id", lr.BorrowerID).Msg("OnAccepted: load borrower")
 		return nil // email is best-effort
 	}
 
@@ -110,13 +112,14 @@ func (w *LoanWorkflow) OnAccepted(lr *models.LoanRequest) error {
 			"Please get in touch to arrange collection.</p>",
 		borrower.Name, bookCopy.Book.Title, bookCopy.Owner.Name,
 	)
-	return w.email.SendEmail(borrower.Email, subject, html)
+	w.email.SendEmailAsync(ctx, borrower.Email, subject, html)
+	return nil
 }
 
 // OnRejected fires when the owner rejects a loan request.
 // If no other pending requests exist for the copy, the copy is set back to
 // "available".
-func (w *LoanWorkflow) OnRejected(lr *models.LoanRequest) error {
+func (w *LoanWorkflow) OnRejected(ctx context.Context, lr *models.LoanRequest) error {
 	pendingCount, _ := w.loanReqs.CountPendingForCopyExcluding(lr.CopyID, lr.ID)
 	if pendingCount == 0 {
 		w.copies.UpdateStatus(lr.CopyID, "available") //nolint:errcheck,gosec
@@ -128,7 +131,7 @@ func (w *LoanWorkflow) OnRejected(lr *models.LoanRequest) error {
 		LoanRequestID: &lr.ID,
 	}
 	if err := w.notifs.Create(&n); err != nil {
-		log.Warn().Err(err).Msg("OnRejected: create notification")
+		zerolog.Ctx(ctx).Warn().Err(err).Msg("OnRejected: create notification")
 	}
 
 	return nil
@@ -137,7 +140,7 @@ func (w *LoanWorkflow) OnRejected(lr *models.LoanRequest) error {
 // OnCancelled fires when the borrower cancels a pending request.
 // If no other pending requests exist for the copy, the copy is set back to
 // "available".
-func (w *LoanWorkflow) OnCancelled(lr *models.LoanRequest) error {
+func (w *LoanWorkflow) OnCancelled(_ context.Context, lr *models.LoanRequest) error {
 	pendingCount, _ := w.loanReqs.CountPendingForCopyExcluding(lr.CopyID, lr.ID)
 	if pendingCount == 0 {
 		w.copies.UpdateStatus(lr.CopyID, "available") //nolint:errcheck,gosec
@@ -149,7 +152,7 @@ func (w *LoanWorkflow) OnCancelled(lr *models.LoanRequest) error {
 // OnReturned fires when the owner marks a loan as returned.
 // The copy is set back to "available", the borrower is notified, and any
 // waitlisted users are notified that the copy is now available.
-func (w *LoanWorkflow) OnReturned(lr *models.LoanRequest) error {
+func (w *LoanWorkflow) OnReturned(ctx context.Context, lr *models.LoanRequest) error {
 	w.copies.UpdateStatus(lr.CopyID, "available") //nolint:errcheck,gosec
 
 	n := models.Notification{
@@ -158,12 +161,12 @@ func (w *LoanWorkflow) OnReturned(lr *models.LoanRequest) error {
 		LoanRequestID: &lr.ID,
 	}
 	if err := w.notifs.Create(&n); err != nil {
-		log.Warn().Err(err).Msg("OnReturned: create notification")
+		zerolog.Ctx(ctx).Warn().Err(err).Msg("OnReturned: create notification")
 	}
 
 	borrower, err := w.users.FindByID(lr.BorrowerID)
 	if err != nil {
-		log.Warn().Err(err).Uint("borrower_id", lr.BorrowerID).Msg("OnReturned: load borrower")
+		zerolog.Ctx(ctx).Warn().Err(err).Uint("borrower_id", lr.BorrowerID).Msg("OnReturned: load borrower")
 		return nil // email is best-effort
 	}
 
@@ -183,7 +186,7 @@ func (w *LoanWorkflow) OnReturned(lr *models.LoanRequest) error {
 					LoanRequestID: &lr.ID,
 				}
 				if nErr := w.notifs.Create(&wn); nErr != nil {
-					log.Warn().Err(nErr).Msg("OnReturned: waitlist notification")
+					zerolog.Ctx(ctx).Warn().Err(nErr).Msg("OnReturned: waitlist notification")
 				}
 			}
 			w.waitlists.DeleteByCopyID(lr.CopyID) //nolint:errcheck,gosec
@@ -195,5 +198,6 @@ func (w *LoanWorkflow) OnReturned(lr *models.LoanRequest) error {
 		"<p>Hi %s,</p><p>Your loan of <em>%s</em> has been marked as returned. Thank you!</p>",
 		borrower.Name, bookCopy.Book.Title,
 	)
-	return w.email.SendEmail(borrower.Email, subject, html)
+	w.email.SendEmailAsync(ctx, borrower.Email, subject, html)
+	return nil
 }

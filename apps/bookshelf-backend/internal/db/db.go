@@ -29,7 +29,9 @@ func Open(dbPath string) (*gorm.DB, error) {
 		return nil, err
 	}
 
-	db, err := gorm.Open(gormsqlite.Open(dbPath), &gorm.Config{})
+	// busy_timeout is set via the DSN (rather than a PRAGMA after open) so it
+	// applies to the very first connection, before WAL mode is enabled below.
+	db, err := gorm.Open(gormsqlite.Open(dbPath+"?_busy_timeout=5000"), &gorm.Config{})
 	if err != nil {
 		return nil, err
 	}
@@ -37,6 +39,17 @@ func Open(dbPath string) (*gorm.DB, error) {
 	sqlDB, err := db.DB()
 	if err != nil {
 		return nil, err
+	}
+
+	// mattn/go-sqlite3 (cgo) serializes writes at the driver level, so capping
+	// the pool at one connection avoids "database is locked" errors that a
+	// larger pool would otherwise surface as write contention.
+	sqlDB.SetMaxOpenConns(1)
+
+	// WAL lets readers proceed without blocking on an in-progress writer
+	// (SQLite's default rollback-journal mode blocks readers on writes).
+	if _, err := sqlDB.ExecContext(context.Background(), "PRAGMA journal_mode=WAL"); err != nil {
+		return nil, fmt.Errorf("enable WAL mode: %w", err)
 	}
 
 	if err := runMigrations(sqlDB); err != nil {
@@ -121,6 +134,12 @@ func Seed(database *gorm.DB) {
 		{Key: "cover_refresh_interval", Value: "24h"},
 		{Key: "verification_requires_phone", Value: "false"},
 		{Key: "verification_min_books_shared", Value: "0"},
+		// TODO: defaults to "false" because SMTP delivery is not guaranteed
+		// configured in every deployment yet (services/email.go's SendEmail
+		// silently no-ops when SMTP_HOST is unset). Flip to "true" once SMTP
+		// delivery is confirmed reliable across all deployments — until then,
+		// admins can opt in per-deployment via /admin/settings.
+		{Key: "require_email_confirmation_on_change", Value: "false"},
 	}
 	for _, s := range defaults {
 		database.Where(models.AppSetting{Key: s.Key}).FirstOrCreate(&s)
