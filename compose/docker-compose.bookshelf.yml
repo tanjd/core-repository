@@ -1,24 +1,28 @@
 services:
-  backend:
+  bookshelf-backend:
+    user: "568:568"
     image: ghcr.io/tanjd/bookshelf-backend:latest
     container_name: bookshelf-backend
     restart: unless-stopped
-    # Port 8000 is only needed if you want direct API access for debugging.
-    # ports:
-    #   - "8000:8000"
+    ports:
+      - "8000:8000"
     volumes:
-      # TrueNAS: use an absolute dataset path, e.g. /mnt/tank/bookshelf
-      # Local:   ./data works fine
-      - /mnt/tank/bookshelf:/app/data
+      - /mnt/apps/bookshelf:/app/data
     environment:
-      - ENV=prd
-      - PORT=8000
-      - DB_PATH=/app/data/bookshelf.db
+      - ENV=${ENV}
+      - PORT=${PORT:-8000}
+      - DB_PATH=${DB_PATH}
       - JWT_SECRET=${JWT_SECRET}
       - CORS_ORIGINS=https://${DOMAIN}
-      - RESEND_API_KEY=${RESEND_API_KEY:-}
+      - SMTP_HOST=
+      - SMTP_PORT=587
+      - SMTP_USERNAME=
+      - SMTP_PASSWORD=
       - EMAIL_FROM=${EMAIL_FROM:-noreply@yourdomain.com}
       - GOOGLE_BOOKS_API_KEY=${GOOGLE_BOOKS_API_KEY:-}
+      - METADATA_REFRESH_INTERVAL=${METADATA_REFRESH_INTERVAL:-}
+    networks:
+      - bookshelf
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://localhost:8000/health"]
       interval: 30s
@@ -31,7 +35,7 @@ services:
         max-size: "10m"
         max-file: "3"
 
-  frontend:
+  bookshelf-frontend:
     image: ghcr.io/tanjd/bookshelf:latest
     container_name: bookshelf-frontend
     restart: unless-stopped
@@ -40,9 +44,19 @@ services:
     environment:
       # The Next.js server (inside Docker) proxies /api/* to this URL.
       # Uses the Docker Compose service name — no changes needed here.
-      - BACKEND_URL=http://backend:8000
+      - BACKEND_URL=${BACKEND_URL}
+    networks:
+      - proxy
+      - bookshelf
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.bookshelf.rule=Host(`bookshelf.tanjd.com`)"
+      - "traefik.http.routers.bookshelf.entrypoints=websecure"
+      - "traefik.http.routers.bookshelf.tls.certresolver=cloudflare"
+      - "traefik.http.services.bookshelf.loadbalancer.server.port=3000"
+      - "traefik.docker.network=proxy"
     depends_on:
-      backend:
+      bookshelf-backend:
         condition: service_healthy
     healthcheck:
       test:
@@ -61,3 +75,10 @@ services:
       options:
         max-size: "10m"
         max-file: "3"
+
+networks:
+  bookshelf:
+    driver: bridge
+    enable_ipv6: false
+  proxy:
+    external: true
