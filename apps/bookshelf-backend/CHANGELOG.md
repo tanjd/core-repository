@@ -1,3 +1,13 @@
+## 0.4.0 (2026-08-18)
+
+### 🚀 Features
+
+- **bookshelf-backend:** rate-limit registration and OTP-send endpoints ([#41](https://github.com/tanjd/core-repository/pull/41))
+
+### ❤️ Thank You
+
+- Jeddy Tan @tanjd
+
 ## 0.3.2 (2026-08-18)
 
 ### 🩹 Fixes
