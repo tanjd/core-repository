@@ -126,3 +126,5 @@ apps/bookshelf/.env.local
 apps/bookshelf-backend/data/covers/
 
 .nx/polygraph
+
+.nx/self-healing

@@ -155,10 +155,12 @@ merge can land changes the hook never saw.
 
 ## Known gaps / deferred work
 
-- Nx is capped at 22.2.2, not latest — see `apps/food-maps-backend/CLAUDE.md`
-  for why (its Go plugin blocks the upgrade). Before running `make upgrade-nx`
-  (or `nx migrate latest`) again, check `npm view @nx-go/nx-go dependencies`
-  for its `@nx/devkit` range first.
+- Nx is capped below 23.0.0 (currently 22.7.8), not latest — see
+  `apps/food-maps-backend/CLAUDE.md` for why (its Go plugin blocks the
+  upgrade). Before running `make upgrade-nx` (or `nx migrate latest`) again,
+  check `npm view @nx-go/nx-go dependencies` for its `@nx/devkit` range
+  first, and pin the migration to a specific 22.x version rather than
+  `latest`, which may already be 23+.
 - GitHub branch protection on `main` (requiring the CI check before merge)
   hasn't been enabled — it's a repo-settings change, not a code change.
 - Module boundary tags/`depConstraints` are documented as a convention (see
