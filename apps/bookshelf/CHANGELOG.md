@@ -1,3 +1,13 @@
+## 0.4.1 (2026-08-18)
+
+### 🩹 Fixes
+
+- **bookshelf:** close SMTP injection, setup race, missing headers ([#45](https://github.com/tanjd/core-repository/pull/45))
+
+### ❤️ Thank You
+
+- Jeddy Tan @tanjd
+
 ## 0.4.0 (2026-08-18)
 
 ### 🚀 Features
