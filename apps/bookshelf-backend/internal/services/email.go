@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net"
 	"net/smtp"
+	"strings"
 
 	"github.com/rs/zerolog"
 )
@@ -44,6 +45,9 @@ func (s *EmailService) SendEmail(ctx context.Context, recipient, subject, html s
 	if s.env == "dev" && s.devEmailOverride != "" {
 		zerolog.Ctx(ctx).Debug().Str("original", recipient).Str("override", s.devEmailOverride).Msg("email: dev override active")
 		to = s.devEmailOverride
+	}
+	if strings.ContainsAny(to, "\r\n") || strings.ContainsAny(subject, "\r\n") {
+		return fmt.Errorf("email: recipient or subject contains invalid control characters")
 	}
 	if s.host == "" {
 		zerolog.Ctx(ctx).Warn().Str("to", to).Str("subject", subject).Str("body", html).

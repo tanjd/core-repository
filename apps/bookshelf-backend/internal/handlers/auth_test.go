@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"context"
+	"sync"
 	"testing"
 	"time"
 
@@ -330,6 +331,47 @@ func TestSetup(t *testing.T) {
 		require.Error(t, err)
 		assertStatus(t, err, 403)
 	})
+}
+
+// TestSetup_ConcurrentRace exercises CreateAdminIfNoneExists under real
+// goroutine contention, closing the TOCTOU window between the HasAdmin
+// check and the admin Create — the sequential subtests in TestSetup call
+// setup() one at a time and wouldn't catch a regression back to a plain
+// check-then-act.
+func TestSetup_ConcurrentRace(t *testing.T) {
+	h, users, _ := newAuthHandler()
+
+	var wg sync.WaitGroup
+	errs := make([]error, 2)
+	emails := []string{"admin-a@example.com", "admin-b@example.com"}
+	for i := range 2 {
+		wg.Add(1)
+		go func(i int) {
+			defer wg.Done()
+			input := &setupInput{}
+			input.Body.Name = "Root Admin"
+			input.Body.Email = emails[i]
+			input.Body.Password = "Passw0rd1234"
+			_, errs[i] = h.setup(context.Background(), input)
+		}(i)
+	}
+	wg.Wait()
+
+	successes, failures := 0, 0
+	for _, err := range errs {
+		if err == nil {
+			successes++
+			continue
+		}
+		failures++
+		assertStatus(t, err, 403)
+	}
+	assert.Equal(t, 1, successes)
+	assert.Equal(t, 1, failures)
+
+	hasAdmin, err := users.HasAdmin()
+	require.NoError(t, err)
+	assert.True(t, hasAdmin)
 }
 
 func TestSetupStatus(t *testing.T) {

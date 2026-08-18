@@ -161,7 +161,7 @@ func main() {
 	jobsH.RegisterRoutes(api)
 	waitlistH.RegisterRoutes(api)
 
-	// Middleware chain: request logging → CORS → auth enrichment → mux
+	// Middleware chain: security headers → request logging → CORS → auth enrichment → mux
 	corsHandler := cors.New(cors.Options{
 		AllowedOrigins: cfg.CORSOrigins,
 		AllowedMethods: []string{
@@ -171,7 +171,7 @@ func main() {
 		AllowedHeaders: []string{"Origin", "Content-Type", "Accept", "Authorization"},
 	})
 
-	handler := appmiddleware.RequestLogger(corsHandler.Handler(appmiddleware.SetAuth(cfg.JWTSecret)(appmiddleware.RequireActiveUser(userRepo)(mux))))
+	handler := appmiddleware.SecurityHeaders(appmiddleware.RequestLogger(corsHandler.Handler(appmiddleware.SetAuth(cfg.JWTSecret)(appmiddleware.RequireActiveUser(userRepo)(mux)))))
 
 	srv := &http.Server{
 		Addr:         ":" + cfg.Port,

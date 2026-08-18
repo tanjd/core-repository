@@ -54,3 +54,19 @@ func (r *UserRepository) HasAdmin() (bool, error) {
 	err := r.db.Model(&models.User{}).Where("role = ?", "admin").Count(&count).Error
 	return count > 0, err
 }
+
+// CreateAdminIfNoneExists atomically inserts user (with role "admin") only
+// if no admin currently exists, preventing two concurrent /auth/setup calls
+// from both succeeding.
+func (r *UserRepository) CreateAdminIfNoneExists(user *models.User) error {
+	return r.db.Transaction(func(tx *gorm.DB) error {
+		var count int64
+		if err := tx.Model(&models.User{}).Where("role = ?", "admin").Count(&count).Error; err != nil {
+			return err
+		}
+		if count > 0 {
+			return repository.ErrConflict
+		}
+		return tx.Create(user).Error
+	})
+}

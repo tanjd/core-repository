@@ -1045,7 +1045,10 @@ func (h *AuthHandler) setup(_ context.Context, input *setupInput) (*authOutput, 
 		Role:     "admin",
 		Verified: true,
 	}
-	if err := h.users.Create(&user); err != nil {
+	if err := h.users.CreateAdminIfNoneExists(&user); err != nil {
+		if errors.Is(err, repository.ErrConflict) {
+			return nil, huma.Error403Forbidden("setup already complete")
+		}
 		return nil, huma.Error400BadRequest("email already registered")
 	}
 

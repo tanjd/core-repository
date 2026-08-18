@@ -8,9 +8,8 @@ testing setup `apps/bookshelf-backend/docker-compose.example.yml` still document
 ## Security — from the 2026-08-18 audit
 
 Full audit covered every route's auth/ownership check, JWT/crypto/email code, and the
-production compose file. Two findings were fixed immediately (low-risk, self-contained);
-the rest need a deliberate follow-up since they touch infra or have UX trade-offs
-(rate-limit thresholds, etc.).
+production compose file. All findings except the JWT-storage trade-off below have since
+been fixed.
 
 **Fixed:**
 
@@ -22,43 +21,51 @@ the rest need a deliberate follow-up since they touch infra or have UX trade-off
 - ~~Directory listing on `/covers/`~~ — `cmd/server/main.go`'s cover static handler now
   404s any request path ending in `/` instead of falling through to
   `http.FileServer`'s default listing.
+- ~~No rate limiting on `/auth/login`, `/auth/register`, `/auth/send-otp`~~ — `/auth/login`
+  already had its own email-keyed limiter (`internal/ratelimit`, `loginLimiter`, 5 attempts/
+  15min, predates this audit); `/auth/register` and `/auth/send-otp` were fixed in #41 with a
+  separate token-bucket limiter (`internal/middleware/ratelimit.go`; register keyed by IP at
+  5 burst/10min refill, send-otp keyed by user ID at 3 burst/5min refill).
+- ~~Backend (8000) and frontend (3000) ports published directly to the host~~ — both
+  `ports:` blocks dropped from `compose/docker-compose.bookshelf.yml`; Traefik already
+  routed to the frontend via the `proxy` network without them, and the backend was never
+  reachable from outside the `bookshelf` network to begin with.
+- ~~Possible SMTP header injection via the new-email field~~ — `EmailService.SendEmail`
+  (`internal/services/email.go`) now rejects any `recipient`/`subject` containing `\r`/`\n`
+  before building the raw MIME header block, unconditionally (even when SMTP delivery
+  itself is a local no-op) — a single defense-in-depth guard at the one funnel point every
+  email in the app goes through.
+- ~~`/auth/setup` TOCTOU race~~ — `UserRepository.CreateAdminIfNoneExists` wraps the
+  admin-existence check and the `Create` in one `db.Transaction` (same idiom as
+  `LoanRequestRepository.CreateAndMarkRequested`), re-checking on the transactional handle
+  and returning `ErrConflict` if an admin already exists. The handler keeps a cheap
+  `HasAdmin()` fast-path check up front (avoids paying bcrypt cost-12 hashing on every hit
+  to an already-closed endpoint) but the transaction is the authoritative guard closing the
+  actual race window.
+- ~~No CSP/HSTS/X-Frame-Options/X-Content-Type-Options anywhere~~ — headers are now split by
+  layer to avoid duplicate/conflicting sources of truth: the backend gets
+  `X-Content-Type-Options`, `X-Frame-Options`, and `Referrer-Policy` from a new Go middleware
+  (`internal/middleware/security_headers.go`), since it has no Traefik labels of its own. The
+  frontend route gets the same three headers plus HSTS from Traefik labels on
+  `bookshelf-frontend` in `compose/docker-compose.bookshelf.yml` (`stsSeconds=31536000`,
+  `stsIncludeSubdomains=true`, `stsPreload=false`, `contentTypeNosniff`,
+  `customFrameOptionsValue=SAMEORIGIN`, `referrerPolicy`) — Traefik sits downstream of the
+  origin in the response path, so it's the effective source of truth there regardless of
+  what the app sets. `next.config.ts`'s `headers()` carries only the `Content-Security-Policy`
+  (no Traefik equivalent), verified empirically against the production standalone build with
+  Playwright across `/`, `/login`, `/setup`, `/catalog`, `/register` — `script-src` and
+  `style-src` both needed `'unsafe-inline'` since App Router embeds per-page inline
+  RSC-hydration `<script>` tags (a different hash every build) and Tailwind/Next inject
+  inline `<style>`.
 
-**Still open, ranked by severity:**
+**Still open:**
 
-1. **No rate limiting on `/auth/login`, `/auth/register`, `/auth/send-otp`.** No throttle
-   at the app or Traefik layer. bcrypt slows brute force but there's no lockout — open to
-   credential stuffing and OTP-inbox-flooding now that the URL is public, not just on
-   Tailscale. (This supersedes the old "Later" bullet below — now urgent.) Add per-IP/
-   per-account rate limiting, e.g. `chi`'s `httprate` in the Go app, or a Traefik
-   `rateLimit` middleware label on the compose file.
-2. **Backend (8000) and frontend (3000) ports are both published directly to the host**
-   in `compose/docker-compose.bookshelf.yml`, on top of the Traefik `proxy` network
-   wiring. If the NAS/router forwards or LAN-exposes those ports, requests bypass
-   Traefik's TLS termination — the Go API would serve plaintext HTTP with JWTs in the
-   `Authorization` header. Drop the `ports:` blocks for both services; only the `proxy`/
-   `bookshelf` networks should need to reach them.
-3. **Possible SMTP header injection via the new-email field.** `requestEmailChange`
-   (`internal/handlers/auth.go`) passes client-supplied `newEmail` straight into the `To:`
-   header of a raw MIME message built with `fmt.Sprintf` (`internal/services/email.go`).
-   Go's `net/smtp` blocks CRLF in the SMTP envelope command but not in this header-string
-   construction. Explicitly reject any value containing `\r`/`\n` before it's used in a
-   header line, regardless of huma's `format:"email"` validation.
-4. **`/auth/setup` has a TOCTOU race** — `HasAdmin()` is checked, then an admin is
-   created, with no transaction tying the two together
-   (`internal/handlers/auth.go:556-563`). Two concurrent requests in the window between
-   deploy and the real admin's first setup call could both succeed. Narrow window, cheap
-   fix (wrap in a transaction / unique constraint check).
-5. **No CSP/HSTS/X-Frame-Options/X-Content-Type-Options anywhere** — not in
-   `next.config.ts`, not in the Go backend, not in the Traefik labels. Likely relying on
-   Cloudflare's proxy defaults for HSTS, but there's no CSP at all, and the app renders
-   book descriptions from three external metadata sources (Open Library, Google Books,
-   BookBrainz).
-6. **JWT stored in `localStorage`** (`src/lib/api.ts`) rather than an httpOnly cookie.
-   Standard trade-off for a Bearer-token SPA (and it buys CSRF immunity), but means any
-   future XSS bug becomes full account takeover. No XSS found in this audit — React's
-   default escaping is used consistently, no `dangerouslySetInnerHTML` anywhere — just
-   flagging the blast radius so it's weighed if templating ever changes (e.g. rendering
-   book descriptions as raw HTML).
+- **JWT stored in `localStorage`** (`src/lib/api.ts`) rather than an httpOnly cookie.
+  Standard trade-off for a Bearer-token SPA (and it buys CSRF immunity), but means any
+  future XSS bug becomes full account takeover. No XSS found in this audit — React's
+  default escaping is used consistently, no `dangerouslySetInnerHTML` anywhere — just
+  flagging the blast radius so it's weighed if templating ever changes (e.g. rendering
+  book descriptions as raw HTML). Accepted trade-off, not an actionable fix right now.
 
 ## Next — before opening to real community members
 
@@ -88,8 +95,6 @@ the rest need a deliberate follow-up since they touch infra or have UX trade-off
   borrower/owner via the existing `Notification` + `EmailService`. Highest-value cheap add —
   "silently overdue forever" is the most obvious failure mode once real people use this.
 - A backup story for `data/bookshelf.db` + `data/covers` — needed now the URL is public.
-  (Rate limiting on `/register`/`/auth/send-otp`, previously noted here, moved to the
-  "Security" section above as urgent — it's now open item #1 there.)
 
 ## Someday / hold — don't build until there's proven demand
 
