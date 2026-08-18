@@ -1,3 +1,13 @@
+## 0.4.3 (2026-08-18)
+
+### 🩹 Fixes
+
+- **bookshelf:** harden backend, fix admin UI and notification bugs ([#46](https://github.com/tanjd/core-repository/pull/46))
+
+### ❤️ Thank You
+
+- Jeddy Tan @tanjd
+
 ## 0.4.2 (2026-08-18)
 
 ### 🩹 Fixes
