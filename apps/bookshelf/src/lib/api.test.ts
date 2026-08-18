@@ -137,7 +137,9 @@ describe("api request wrapper", () => {
     (global.fetch as jest.Mock).mockResolvedValue({
       ok: false,
       statusText: "Bad Request",
-      json: async () => ({ error: "invalid credentials" }),
+      // huma's ErrorModel puts the message in `detail`, not `error` — see
+      // e.g. auth.go's huma.Error400BadRequest calls.
+      json: async () => ({ detail: "invalid credentials" }),
     });
 
     await expect(

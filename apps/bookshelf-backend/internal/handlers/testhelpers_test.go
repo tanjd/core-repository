@@ -27,6 +27,12 @@ func noopEmail() *services.EmailService {
 	return services.NewEmailService("", "", "", "", "", "", "")
 }
 
+// noopSMS returns the same MockSMSService production uses — there's no real
+// SMS provider yet, so this is already the correct fake, not a test-only stub.
+func noopSMS() *services.MockSMSService {
+	return services.NewMockSMSService()
+}
+
 // fakeAuthedCtx returns a context carrying userID/role exactly as
 // middleware.SetAuth would attach them for a valid request, by
 // round-tripping a signed JWT through the real middleware — this avoids

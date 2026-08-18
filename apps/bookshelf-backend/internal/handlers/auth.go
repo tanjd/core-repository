@@ -40,6 +40,35 @@ const (
 	loginRateLimitWindow   = 15 * time.Minute
 )
 
+// registrationOTPRateLimitAttempts/Window cap send-otp requests during
+// registration per identifier (email or phone) — see loginRateLimit's
+// comment above for why this is identifier-keyed rather than IP-keyed.
+const (
+	registrationOTPRateLimitAttempts = 3
+	registrationOTPRateLimitWindow   = 5 * time.Minute
+)
+
+// registrationOTPExpiry is how long a pre-registration email/phone OTP code
+// stays valid.
+const registrationOTPExpiry = 15 * time.Minute
+
+// registrationVerificationTokenTTL is how long a verify-email-otp/
+// verify-phone-otp success token remains valid for the subsequent register
+// call — long enough to fill out the rest of the signup form.
+const registrationVerificationTokenTTL = 30 * time.Minute
+
+// Verification token purposes — embedded as a claim so a token minted for
+// one channel (or a session JWT) can't be replayed as the other.
+const (
+	registrationPurposeEmail = "email_verify"
+	registrationPurposePhone = "phone_verify"
+)
+
+const (
+	registrationChannelEmail = "email"
+	registrationChannelPhone = "phone"
+)
+
 // minPasswordLength follows OWASP ASVS / NIST SP 800-63B guidance to favor
 // length over arbitrary composition rules — 12 is the commonly cited floor
 // for a system with no other compensating controls (rate limiting, MFA).
@@ -152,29 +181,64 @@ func emailLocalPart(email string) string {
 	return email
 }
 
+// normalizeEmail lowercases and trims an email address so send/verify/
+// register all key OTP state and token claims off the same identifier
+// regardless of the casing a user happened to type.
+func normalizeEmail(email string) string {
+	return strings.ToLower(strings.TrimSpace(email))
+}
+
+// generateOTPCode returns a cryptographically random 6-digit numeric code.
+func generateOTPCode() (string, error) {
+	n, err := rand.Int(rand.Reader, big.NewInt(1_000_000))
+	if err != nil {
+		return "", err
+	}
+	return fmt.Sprintf("%06d", n.Int64()), nil
+}
+
 // AuthHandler holds dependencies for authentication routes.
 type AuthHandler struct {
-	users            repository.UserRepository
-	admin            repository.AdminRepository
-	copies           repository.CopyRepository
-	jwtSecret        string
-	encryptionSecret string
-	email            *services.EmailService
-	loginLimiter     *ratelimit.Limiter
-	registerLimiter  *middleware.RateLimiter
-	otpLimiter       *middleware.RateLimiter
+	users                     repository.UserRepository
+	admin                     repository.AdminRepository
+	copies                    repository.CopyRepository
+	registrationVerifications repository.RegistrationVerificationRepository
+	jwtSecret                 string
+	encryptionSecret          string
+	email                     *services.EmailService
+	sms                       services.SMSService
+	env                       string
+	loginLimiter              *ratelimit.Limiter
+	emailOTPLimiter           *ratelimit.Limiter
+	phoneOTPLimiter           *ratelimit.Limiter
+	registerLimiter           *middleware.RateLimiter
+	otpLimiter                *middleware.RateLimiter
 }
 
 // NewAuthHandler creates a new AuthHandler.
-func NewAuthHandler(users repository.UserRepository, admin repository.AdminRepository, copies repository.CopyRepository, jwtSecret, encryptionSecret string, email *services.EmailService) *AuthHandler {
+func NewAuthHandler(
+	users repository.UserRepository,
+	admin repository.AdminRepository,
+	copies repository.CopyRepository,
+	registrationVerifications repository.RegistrationVerificationRepository,
+	jwtSecret, encryptionSecret string,
+	email *services.EmailService,
+	sms services.SMSService,
+	env string,
+) *AuthHandler {
 	return &AuthHandler{
-		users:            users,
-		admin:            admin,
-		copies:           copies,
-		jwtSecret:        jwtSecret,
-		encryptionSecret: encryptionSecret,
-		email:            email,
-		loginLimiter:     ratelimit.New(loginRateLimitAttempts, loginRateLimitWindow),
+		users:                     users,
+		admin:                     admin,
+		copies:                    copies,
+		registrationVerifications: registrationVerifications,
+		jwtSecret:                 jwtSecret,
+		encryptionSecret:          encryptionSecret,
+		email:                     email,
+		sms:                       sms,
+		env:                       env,
+		loginLimiter:              ratelimit.New(loginRateLimitAttempts, loginRateLimitWindow),
+		emailOTPLimiter:           ratelimit.New(registrationOTPRateLimitAttempts, registrationOTPRateLimitWindow),
+		phoneOTPLimiter:           ratelimit.New(registrationOTPRateLimitAttempts, registrationOTPRateLimitWindow),
 		// 5 immediately, refilling one every 10min (~11/hr steady-state) —
 		// enough headroom for a real user retrying a rejected password, tight
 		// enough to block registration spam. Keyed by IP; see ClientIP's doc
@@ -191,10 +255,73 @@ func NewAuthHandler(users repository.UserRepository, admin repository.AdminRepos
 
 type registerInput struct {
 	Body struct {
-		Name     string `json:"name" required:"true" minLength:"1" doc:"Display name"`
-		Email    string `json:"email" required:"true" format:"email" doc:"Email address"`
-		Password string `json:"password" required:"true" minLength:"12" doc:"Password (min 12 chars)"`
+		Name                   string  `json:"name" required:"true" minLength:"1" doc:"Display name"`
+		Email                  string  `json:"email" required:"true" format:"email" doc:"Email address"`
+		Password               string  `json:"password" required:"true" minLength:"12" doc:"Password (min 12 chars)"`
+		Phone                  *string `json:"phone,omitempty" doc:"Contact phone number (optional)"`
+		EmailVerificationToken string  `json:"email_verification_token" required:"true" doc:"Token returned by verify-email-otp, proving control of the email address"`
+		PhoneVerificationToken *string `json:"phone_verification_token,omitempty" doc:"Token returned by verify-phone-otp; required when phone is set"`
 	}
+}
+
+type sendRegisterEmailOTPInput struct {
+	Body struct {
+		Email string `json:"email" required:"true" format:"email" doc:"Email address to verify"`
+	}
+}
+
+type sendRegisterEmailOTPOutput struct {
+	Body struct {
+		DebugCode string `json:"debug_code,omitempty" doc:"Only present when ENV=dev: the code, so local development doesn't require SMTP"`
+	}
+}
+
+type verifyRegisterEmailOTPInput struct {
+	Body struct {
+		Email string `json:"email" required:"true" format:"email" doc:"Email address being verified"`
+		Code  string `json:"code" required:"true" doc:"6-digit code"`
+	}
+}
+
+type verifyRegisterEmailOTPOutput struct {
+	Body struct {
+		VerificationToken string `json:"verification_token" doc:"Pass this as email_verification_token to /auth/register"`
+	}
+}
+
+type sendRegisterPhoneOTPInput struct {
+	Body struct {
+		Phone string `json:"phone" required:"true" doc:"Phone number to verify"`
+	}
+}
+
+type sendRegisterPhoneOTPOutput struct {
+	Body struct {
+		MockCode string `json:"mock_code" doc:"Phone verification is mocked — no SMS provider is configured, so the code is returned directly instead of being texted"`
+	}
+}
+
+type verifyRegisterPhoneOTPInput struct {
+	Body struct {
+		Phone string `json:"phone" required:"true" doc:"Phone number being verified"`
+		Code  string `json:"code" required:"true" doc:"6-digit code"`
+	}
+}
+
+type verifyRegisterPhoneOTPOutput struct {
+	Body struct {
+		VerificationToken string `json:"verification_token" doc:"Pass this as phone_verification_token to /auth/register"`
+	}
+}
+
+// registrationVerificationClaims is the JWT payload minted by verify-email-otp
+// and verify-phone-otp, and re-validated by register(). Stateless by design —
+// unlike the OTP code itself (DB-backed, see registrationOTPExpiry), this
+// token needs no storage; validating it later is just a signature/claims check.
+type registrationVerificationClaims struct {
+	Purpose    string `json:"purpose"`
+	Identifier string `json:"identifier"`
+	jwt.RegisteredClaims
 }
 
 type loginInput struct {
@@ -305,6 +432,38 @@ func (h *AuthHandler) RegisterRoutes(api huma.API) {
 		DefaultStatus: 201,
 		Middlewares:   huma.Middlewares{middleware.RateLimit(api, h.registerLimiter, middleware.ClientIP)},
 	}, h.register)
+
+	huma.Register(api, huma.Operation{
+		OperationID: "send-register-email-otp",
+		Method:      "POST",
+		Path:        "/auth/register/send-email-otp",
+		Tags:        []string{"auth"},
+		Summary:     "Send a 6-digit OTP to an email address, to be verified before registration",
+	}, h.sendRegisterEmailOTP)
+
+	huma.Register(api, huma.Operation{
+		OperationID: "verify-register-email-otp",
+		Method:      "POST",
+		Path:        "/auth/register/verify-email-otp",
+		Tags:        []string{"auth"},
+		Summary:     "Verify an email OTP and receive a token to pass to /auth/register",
+	}, h.verifyRegisterEmailOTP)
+
+	huma.Register(api, huma.Operation{
+		OperationID: "send-register-phone-otp",
+		Method:      "POST",
+		Path:        "/auth/register/send-phone-otp",
+		Tags:        []string{"auth"},
+		Summary:     "Send a 6-digit OTP to a phone number, to be verified before registration. No SMS provider is configured yet — this is mocked and returns the code directly.",
+	}, h.sendRegisterPhoneOTP)
+
+	huma.Register(api, huma.Operation{
+		OperationID: "verify-register-phone-otp",
+		Method:      "POST",
+		Path:        "/auth/register/verify-phone-otp",
+		Tags:        []string{"auth"},
+		Summary:     "Verify a phone OTP and receive a token to pass to /auth/register",
+	}, h.verifyRegisterPhoneOTP)
 
 	huma.Register(api, huma.Operation{
 		OperationID: "login",
@@ -418,15 +577,31 @@ func (h *AuthHandler) register(_ context.Context, input *registerInput) (*authOu
 		return nil, huma.Error400BadRequest(msg)
 	}
 
+	if err := h.verifyRegistrationVerificationToken(
+		input.Body.EmailVerificationToken, registrationPurposeEmail, normalizeEmail(input.Body.Email),
+	); err != nil {
+		return nil, huma.Error400BadRequest("email must be verified before registering: " + err.Error())
+	}
+
+	phone, phoneVerified, err := h.resolveVerifiedPhone(input)
+	if err != nil {
+		return nil, err
+	}
+
 	hash, err := bcrypt.GenerateFromPassword([]byte(input.Body.Password), 12)
 	if err != nil {
 		return nil, huma.Error500InternalServerError("could not hash password")
 	}
 
 	user := models.User{
-		Name:     input.Body.Name,
-		Email:    input.Body.Email,
-		Password: string(hash),
+		Name: input.Body.Name,
+		// Preserve the casing the user typed rather than the lowercased form
+		// used to match the verification token above.
+		Email:         input.Body.Email,
+		Phone:         phone,
+		Password:      string(hash),
+		Verified:      true,
+		PhoneVerified: phoneVerified,
 	}
 	if val, _ := h.admin.GetSetting("require_registration_approval"); val == "true" {
 		user.PendingApproval = true
@@ -447,6 +622,173 @@ func (h *AuthHandler) register(_ context.Context, input *registerInput) (*authOu
 	}
 
 	return &authOutput{Body: authResponse{Token: token, User: user}}, nil
+}
+
+// resolveVerifiedPhone validates registerInput's optional phone and its
+// verification token. Phone is optional — an absent or blank one returns
+// ("", false, nil) rather than an error. A present phone must carry a token
+// that verifyRegistrationVerificationToken accepts for it.
+func (h *AuthHandler) resolveVerifiedPhone(input *registerInput) (phone string, verified bool, err error) {
+	if input.Body.Phone == nil || strings.TrimSpace(*input.Body.Phone) == "" {
+		return "", false, nil
+	}
+	phone = strings.TrimSpace(*input.Body.Phone)
+	if input.Body.PhoneVerificationToken == nil {
+		return "", false, huma.Error400BadRequest("phone must be verified before registering")
+	}
+	if err := h.verifyRegistrationVerificationToken(
+		*input.Body.PhoneVerificationToken, registrationPurposePhone, phone,
+	); err != nil {
+		return "", false, huma.Error400BadRequest("phone must be verified before registering: " + err.Error())
+	}
+	return phone, true, nil
+}
+
+// sendRegisterEmailOTP sends a 6-digit code to an email address that hasn't
+// registered yet, so it can be proven before /auth/register accepts it. See
+// EmailService.SendEmail for why this no-ops (but still logs the code) when
+// SMTP isn't configured.
+func (h *AuthHandler) sendRegisterEmailOTP(ctx context.Context, input *sendRegisterEmailOTPInput) (*sendRegisterEmailOTPOutput, error) {
+	email := normalizeEmail(input.Body.Email)
+	if !h.emailOTPLimiter.Allow(email) {
+		return nil, huma.Error429TooManyRequests("too many verification requests — try again later")
+	}
+	if _, err := h.users.FindByEmail(input.Body.Email); err == nil {
+		return nil, huma.Error400BadRequest("email already registered")
+	}
+
+	code, err := generateOTPCode()
+	if err != nil {
+		return nil, huma.Error500InternalServerError("could not generate OTP")
+	}
+	if err := h.registrationVerifications.Upsert(registrationChannelEmail, email, code, time.Now().Add(registrationOTPExpiry)); err != nil {
+		return nil, huma.Error500InternalServerError("could not save verification code")
+	}
+
+	body := fmt.Sprintf(
+		"<p>Your Bookshelf email verification code is: <strong>%s</strong></p><p>This code expires in 15 minutes.</p>",
+		code,
+	)
+	h.email.SendEmailAsync(ctx, input.Body.Email, "Verify your email for Bookshelf", body)
+
+	out := &sendRegisterEmailOTPOutput{}
+	if h.env == "dev" {
+		out.Body.DebugCode = code
+	}
+	return out, nil
+}
+
+func (h *AuthHandler) verifyRegisterEmailOTP(_ context.Context, input *verifyRegisterEmailOTPInput) (*verifyRegisterEmailOTPOutput, error) {
+	email := normalizeEmail(input.Body.Email)
+	token, err := h.checkRegistrationOTP(registrationChannelEmail, email, input.Body.Code)
+	if err != nil {
+		return nil, err
+	}
+	out := &verifyRegisterEmailOTPOutput{}
+	out.Body.VerificationToken = token
+	return out, nil
+}
+
+// sendRegisterPhoneOTP "sends" a 6-digit code to a phone number. No SMS
+// provider is wired up yet (see services.MockSMSService), so the code is
+// always returned directly in the response rather than actually texted —
+// the frontend shows it inline with a note that phone verification is
+// mocked, regardless of ENV (unlike email, which only exposes debug_code in
+// dev, because email has a real delivery path in prod).
+func (h *AuthHandler) sendRegisterPhoneOTP(ctx context.Context, input *sendRegisterPhoneOTPInput) (*sendRegisterPhoneOTPOutput, error) {
+	phone := strings.TrimSpace(input.Body.Phone)
+	if phone == "" {
+		return nil, huma.Error400BadRequest("phone number is required")
+	}
+	if !h.phoneOTPLimiter.Allow(phone) {
+		return nil, huma.Error429TooManyRequests("too many verification requests — try again later")
+	}
+
+	code, err := generateOTPCode()
+	if err != nil {
+		return nil, huma.Error500InternalServerError("could not generate OTP")
+	}
+	if err := h.registrationVerifications.Upsert(registrationChannelPhone, phone, code, time.Now().Add(registrationOTPExpiry)); err != nil {
+		return nil, huma.Error500InternalServerError("could not save verification code")
+	}
+	_ = h.sms.SendOTP(ctx, phone, code) //nolint:errcheck // best-effort; the code is also returned below
+
+	out := &sendRegisterPhoneOTPOutput{}
+	out.Body.MockCode = code
+	return out, nil
+}
+
+func (h *AuthHandler) verifyRegisterPhoneOTP(_ context.Context, input *verifyRegisterPhoneOTPInput) (*verifyRegisterPhoneOTPOutput, error) {
+	phone := strings.TrimSpace(input.Body.Phone)
+	token, err := h.checkRegistrationOTP(registrationChannelPhone, phone, input.Body.Code)
+	if err != nil {
+		return nil, err
+	}
+	out := &verifyRegisterPhoneOTPOutput{}
+	out.Body.VerificationToken = token
+	return out, nil
+}
+
+// checkRegistrationOTP validates a submitted code against the stored
+// registration_verifications row for (channel, identifier) — constant-time
+// compare, invalidate-on-wrong-attempt, same anti-enumeration shape as
+// verifyOTP — and on success mints the hand-off token for register().
+func (h *AuthHandler) checkRegistrationOTP(channel, identifier, code string) (string, error) {
+	v, err := h.registrationVerifications.Find(channel, identifier)
+	if err != nil {
+		return "", huma.Error400BadRequest("no verification code was sent — please request one first")
+	}
+	if time.Now().After(v.ExpiresAt) {
+		_ = h.registrationVerifications.Delete(channel, identifier) //nolint:errcheck
+		return "", huma.Error400BadRequest("verification code has expired — please request a new one")
+	}
+	if subtle.ConstantTimeCompare([]byte(v.Code), []byte(code)) != 1 {
+		_ = h.registrationVerifications.Delete(channel, identifier) //nolint:errcheck
+		return "", huma.Error400BadRequest("invalid verification code — please request a new one")
+	}
+	_ = h.registrationVerifications.Delete(channel, identifier) //nolint:errcheck
+
+	purpose := registrationPurposeEmail
+	if channel == registrationChannelPhone {
+		purpose = registrationPurposePhone
+	}
+	token, err := h.issueRegistrationVerificationToken(purpose, identifier)
+	if err != nil {
+		return "", huma.Error500InternalServerError("could not issue verification token")
+	}
+	return token, nil
+}
+
+// issueRegistrationVerificationToken mints a short-lived, stateless JWT
+// proving identifier was verified over channel's purpose. register() checks
+// it via verifyRegistrationVerificationToken instead of a DB lookup.
+func (h *AuthHandler) issueRegistrationVerificationToken(purpose, identifier string) (string, error) {
+	claims := registrationVerificationClaims{
+		Purpose:    purpose,
+		Identifier: identifier,
+		RegisteredClaims: jwt.RegisteredClaims{
+			ExpiresAt: jwt.NewNumericDate(time.Now().Add(registrationVerificationTokenTTL)),
+			IssuedAt:  jwt.NewNumericDate(time.Now()),
+		},
+	}
+	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
+	return token.SignedString([]byte(h.jwtSecret))
+}
+
+// verifyRegistrationVerificationToken checks tokenStr's signature, expiry,
+// purpose, and that it was minted for exactly expectedIdentifier.
+func (h *AuthHandler) verifyRegistrationVerificationToken(tokenStr, expectedPurpose, expectedIdentifier string) error {
+	var claims registrationVerificationClaims
+	token, err := jwt.ParseWithClaims(tokenStr, &claims, func(*jwt.Token) (any, error) {
+		return []byte(h.jwtSecret), nil
+	})
+	if err != nil || !token.Valid {
+		return errors.New("invalid or expired verification token")
+	}
+	if claims.Purpose != expectedPurpose || claims.Identifier != expectedIdentifier {
+		return errors.New("verification token does not match")
+	}
+	return nil
 }
 
 func (h *AuthHandler) login(_ context.Context, input *loginInput) (*authOutput, error) {
@@ -602,11 +944,10 @@ func (h *AuthHandler) requestEmailChange(ctx context.Context, user *models.User,
 		return huma.Error400BadRequest("email already in use")
 	}
 
-	n, err := rand.Int(rand.Reader, big.NewInt(1_000_000))
+	code, err := generateOTPCode()
 	if err != nil {
 		return huma.Error500InternalServerError("could not generate OTP")
 	}
-	code := fmt.Sprintf("%06d", n.Int64())
 	expiry := time.Now().Add(15 * time.Minute)
 
 	user.PendingEmail = newEmail
@@ -735,11 +1076,10 @@ func (h *AuthHandler) sendOTP(ctx context.Context, _ *sendOTPInput) (*struct{}, 
 		return nil, huma.Error403Forbidden("this account is pending admin approval")
 	}
 
-	n, err := rand.Int(rand.Reader, big.NewInt(1_000_000))
+	code, err := generateOTPCode()
 	if err != nil {
 		return nil, huma.Error500InternalServerError("could not generate OTP")
 	}
-	code := fmt.Sprintf("%06d", n.Int64())
 	expiry := time.Now().Add(15 * time.Minute)
 
 	user.OTPCode = code
@@ -958,17 +1298,19 @@ func (h *AuthHandler) emailVerifiedFactor(user *models.User) *verificationFactor
 	}
 }
 
-// phoneOnFileFactor returns the "phone on file" factor if that requirement is
-// enabled, or nil if the setting is off.
+// phoneOnFileFactor returns the "verified phone" factor if that requirement is
+// enabled, or nil if the setting is off. Checks PhoneVerified rather than
+// Phone != "" — a phone that was never verified (e.g. set via ProfileForm's
+// unverified phone-edit field) doesn't satisfy this.
 func (h *AuthHandler) phoneOnFileFactor(user *models.User) *verificationFactor {
 	if val, _ := h.admin.GetSetting("verification_requires_phone"); val != "true" {
 		return nil
 	}
 	return &verificationFactor{
 		Key:       "phone",
-		Label:     "Phone number on file",
+		Label:     "Verified phone number",
 		Required:  true,
-		Satisfied: user.Phone != "",
+		Satisfied: user.PhoneVerified,
 	}
 }
 

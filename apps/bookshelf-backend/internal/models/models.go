@@ -11,6 +11,7 @@ type User struct {
 	Phone             string     `json:"phone"`
 	Password          string     `gorm:"not null" json:"-"`
 	Verified          bool       `gorm:"default:false" json:"verified"`
+	PhoneVerified     bool       `gorm:"column:phone_verified;default:false" json:"phone_verified"`
 	Suspended         bool       `gorm:"default:false" json:"suspended"`
 	PendingApproval   bool       `gorm:"column:pending_approval;default:false" json:"pending_approval"`
 	Role              string     `gorm:"default:'user';not null" json:"role"`
@@ -22,6 +23,19 @@ type User struct {
 	PendingEmail          string     `gorm:"column:pending_email" json:"pending_email,omitempty"`
 	PendingEmailOTPCode   string     `gorm:"column:pending_email_otp_code" json:"-"`
 	PendingEmailOTPExpiry *time.Time `gorm:"column:pending_email_otp_expiry" json:"-"`
+}
+
+// RegistrationVerification holds a short-lived OTP code proving control of an
+// email address or phone number before a User row exists to attach it to
+// (unlike User.OTPCode, which verifies an already-registered account). One
+// row per (channel, identifier) pair — a resend overwrites the existing row
+// rather than accumulating history.
+type RegistrationVerification struct {
+	ID         uint      `gorm:"primarykey" json:"-"`
+	Channel    string    `gorm:"not null;uniqueIndex:idx_registration_verifications_channel_identifier" json:"-"`
+	Identifier string    `gorm:"not null;uniqueIndex:idx_registration_verifications_channel_identifier" json:"-"`
+	Code       string    `gorm:"not null" json:"-"`
+	ExpiresAt  time.Time `gorm:"column:expires_at;not null" json:"-"`
 }
 
 // AppSetting is a runtime-configurable key-value pair stored in the database.

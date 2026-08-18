@@ -84,9 +84,11 @@ func main() {
 	notifRepo := gormrepo.NewNotificationRepository(database)
 	adminRepo := gormrepo.NewAdminRepository(database)
 	waitlistRepo := gormrepo.NewWaitlistRepository(database)
+	regVerificationRepo := gormrepo.NewRegistrationVerificationRepository(database)
 
 	// Services
 	emailSvc := services.NewEmailService(cfg.SMTPHost, cfg.SMTPPort, cfg.SMTPUsername, cfg.SMTPPassword, cfg.EmailFrom, cfg.Env, cfg.DevEmailOverride)
+	smsSvc := services.NewMockSMSService()
 	workflow := services.NewLoanWorkflow(copyRepo, loanRepo, notifRepo, userRepo, waitlistRepo, emailSvc)
 	scheduler := services.NewScheduler(bookRepo, adminRepo, coversDir, cfg.MetadataRefreshInterval)
 
@@ -104,7 +106,7 @@ func main() {
 	}
 
 	// Handlers
-	authH := handlers.NewAuthHandler(userRepo, adminRepo, copyRepo, cfg.JWTSecret, encryptionSecret, emailSvc)
+	authH := handlers.NewAuthHandler(userRepo, adminRepo, copyRepo, regVerificationRepo, cfg.JWTSecret, encryptionSecret, emailSvc, smsSvc, cfg.Env)
 	metadataH := handlers.NewMetadataHandler(ctx, cfg.GoogleBooksAPIKey, encryptionSecret, userRepo)
 	bookH := handlers.NewBookHandler(bookRepo, userRepo, coversDir)
 	copyH := handlers.NewCopyHandler(copyRepo, userRepo, notifRepo, waitlistRepo, adminRepo)
