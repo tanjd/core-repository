@@ -78,7 +78,10 @@ push beats failing in CI, even with no remote cache to offset it
 repeat commits that don't touch a given project. CI (`.github/workflows/ci.yml`,
 triggered on `push`/`pull_request` to `main`) still runs the same
 `nx affected -t lint test` as the authoritative gate, since `--no-verify` or a
-merge can land changes the hook never saw.
+merge can land changes the hook never saw. Branch protection on `main`
+requires the `main`, `docker-build`, and `validate` (PR Title) checks to pass
+and the PR branch to be up to date before merging — `enforce_admins` is off,
+so this can still be bypassed manually if needed.
 
 ## Nx conventions
 
@@ -161,8 +164,6 @@ merge can land changes the hook never saw.
   check `npm view @nx-go/nx-go dependencies` for its `@nx/devkit` range
   first, and pin the migration to a specific 22.x version rather than
   `latest`, which may already be 23+.
-- GitHub branch protection on `main` (requiring the CI check before merge)
-  hasn't been enabled — it's a repo-settings change, not a code change.
 - Module boundary tags/`depConstraints` are documented as a convention (see
   "Nx conventions") but not applied to any `project.json` yet — adopt when
   the first cross-domain project (e.g. a migrated bot) makes enforcement

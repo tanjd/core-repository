@@ -9,7 +9,11 @@ on:
       - main
 
 concurrency:
-  group: ${{ github.head_ref || github.run_id }}
+  # github.head_ref is only set for pull_request events - on push (how merges
+  # to main trigger CI), it's empty, so this must use github.ref or the
+  # fallback silently becomes github.run_id (unique per run), making
+  # cancel-in-progress a no-op for back-to-back pushes to main.
+  group: ci-${{ github.ref }}
   cancel-in-progress: true
 
 permissions:
