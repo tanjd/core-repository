@@ -135,12 +135,7 @@ func Seed(database *gorm.DB) {
 		{Key: "cover_refresh_interval", Value: "24h"},
 		{Key: "verification_requires_phone", Value: "false"},
 		{Key: "verification_min_books_shared", Value: "0"},
-		// TODO: defaults to "false" because SMTP delivery is not guaranteed
-		// configured in every deployment yet (services/email.go's SendEmail
-		// silently no-ops when SMTP_HOST is unset). Flip to "true" once SMTP
-		// delivery is confirmed reliable across all deployments — until then,
-		// admins can opt in per-deployment via /admin/settings.
-		{Key: "require_email_confirmation_on_change", Value: "false"},
+		{Key: "require_email_confirmation_on_change", Value: "true"},
 	}
 	for _, s := range defaults {
 		database.Where(models.AppSetting{Key: s.Key}).FirstOrCreate(&s)

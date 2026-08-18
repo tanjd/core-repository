@@ -12,11 +12,8 @@ export function useUnreadNotifications() {
     const token = localStorage.getItem("bookshelf_token");
     if (!token) return;
     try {
-      const result = await api.getNotifications({
-        unread: true,
-        page_size: 100,
-      });
-      setUnreadCount(result.items.filter((n) => !n.read).length);
+      const result = await api.getNotifications({ unread: true, page_size: 1 });
+      setUnreadCount(result.total);
     } catch {
       // silently ignore — user may not be logged in
     }

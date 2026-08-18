@@ -495,7 +495,7 @@ func TestVerifyOTP(t *testing.T) {
 }
 
 func TestUpdateMeEmailChange(t *testing.T) {
-	t.Run("immediately applies email change when flag is off (default)", func(t *testing.T) {
+	t.Run("immediately applies email change when flag is off", func(t *testing.T) {
 		h, users, _ := newAuthHandler()
 		user := &models.User{Name: "Ada", Email: "ada@example.com", Password: "x"}
 		require.NoError(t, users.Create(user))
@@ -550,6 +550,39 @@ func TestUpdateMeEmailChange(t *testing.T) {
 
 		require.Error(t, err)
 		assertStatus(t, err, 400)
+	})
+}
+
+func TestUpdateMePhoneChange(t *testing.T) {
+	t.Run("resets PhoneVerified when phone number changes", func(t *testing.T) {
+		h, users, _ := newAuthHandler()
+		user := &models.User{Name: "Ada", Email: "ada@example.com", Password: "x", Phone: "+15550100", PhoneVerified: true}
+		require.NoError(t, users.Create(user))
+
+		input := &updateMeInput{}
+		newPhone := "+15550199"
+		input.Body.Phone = &newPhone
+
+		out, err := h.updateMe(fakeAuthedCtx(t, user.ID, "user"), input)
+
+		require.NoError(t, err)
+		assert.Equal(t, "+15550199", out.Body.Phone)
+		assert.False(t, out.Body.PhoneVerified, "changing the phone number must clear the stale verified flag")
+	})
+
+	t.Run("leaves PhoneVerified untouched when phone is resubmitted unchanged", func(t *testing.T) {
+		h, users, _ := newAuthHandler()
+		user := &models.User{Name: "Ada", Email: "ada@example.com", Password: "x", Phone: "+15550100", PhoneVerified: true}
+		require.NoError(t, users.Create(user))
+
+		input := &updateMeInput{}
+		samePhone := "+15550100"
+		input.Body.Phone = &samePhone
+
+		out, err := h.updateMe(fakeAuthedCtx(t, user.ID, "user"), input)
+
+		require.NoError(t, err)
+		assert.True(t, out.Body.PhoneVerified)
 	})
 }
 

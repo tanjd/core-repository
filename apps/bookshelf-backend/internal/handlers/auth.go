@@ -873,7 +873,7 @@ func (h *AuthHandler) updateMe(ctx context.Context, input *updateMeInput) (*meOu
 		user.Name = *input.Body.Name
 	}
 	if input.Body.Phone != nil {
-		user.Phone = *input.Body.Phone
+		applyPhoneUpdate(user, *input.Body.Phone)
 	}
 	if input.Body.Email != nil {
 		if err := h.handleEmailUpdateRequest(ctx, user, *input.Body.Email); err != nil {
@@ -893,15 +893,22 @@ func (h *AuthHandler) updateMe(ctx context.Context, input *updateMeInput) (*meOu
 	return &meOutput{Body: meBody{User: *user, GoogleBooksKeyConfigured: user.GoogleBooksAPIKey != ""}}, nil
 }
 
+// applyPhoneUpdate sets the user's phone number, clearing PhoneVerified when
+// it actually changes — a new number hasn't been verified even if the old
+// one was, and leaving the flag set would let it lie about the new number.
+func applyPhoneUpdate(user *models.User, newPhone string) {
+	if newPhone == user.Phone {
+		return
+	}
+	user.Phone = newPhone
+	user.PhoneVerified = false
+}
+
 // handleEmailUpdateRequest routes an email field on updateMe's input to the
 // right behavior: unchanged email with a pending change cancels it; a
 // changed email either applies immediately or stages a pending
-// confirmation, depending on the require_email_confirmation_on_change flag.
-//
-// TODO: the pending-confirmation branch (requestEmailChange) only runs when
-// that flag is "true". It defaults to "false" in db.Seed() because SMTP
-// delivery isn't guaranteed configured in every deployment — flip the
-// default once it is.
+// confirmation, depending on the require_email_confirmation_on_change flag
+// (defaults to "true" in db.Seed() — see the comment there for why).
 func (h *AuthHandler) handleEmailUpdateRequest(ctx context.Context, user *models.User, newEmail string) error {
 	if newEmail == user.Email {
 		if user.PendingEmail != "" {

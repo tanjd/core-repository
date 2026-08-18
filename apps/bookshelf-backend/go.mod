@@ -3,6 +3,7 @@ module github.com/tanjd/core-repository/apps/bookshelf-backend
 go 1.25.0
 
 require (
+	github.com/caarlos0/env/v11 v11.4.1
 	github.com/danielgtaylor/huma/v2 v2.37.2
 	github.com/golang-jwt/jwt/v5 v5.2.2
 	github.com/golang-migrate/migrate/v4 v4.19.1

@@ -12,7 +12,13 @@
       }
     },
     "docker-build": {},
-    "docker-push": {},
+    "docker-push": {
+      "cache": false,
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "docker buildx build -f apps/$NX_TASK_TARGET_PROJECT/Dockerfile -t ghcr.io/tanjd/$NX_TASK_TARGET_PROJECT:latest -t ghcr.io/tanjd/$NX_TASK_TARGET_PROJECT:${GITHUB_SHA:-$(git rev-parse HEAD)} -t ghcr.io/tanjd/$NX_TASK_TARGET_PROJECT:v$(jq -r .version apps/$NX_TASK_TARGET_PROJECT/package.json) --build-arg VERSION=v$(jq -r .version apps/$NX_TASK_TARGET_PROJECT/package.json) --cache-from type=gha,scope=$NX_TASK_TARGET_PROJECT --cache-to type=gha,mode=max,scope=$NX_TASK_TARGET_PROJECT --push ."
+      }
+    },
     "golangci-lint": {
       "executor": "nx:run-commands",
       "options": {
