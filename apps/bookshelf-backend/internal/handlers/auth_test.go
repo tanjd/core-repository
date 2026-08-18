@@ -27,7 +27,7 @@ func TestRegister(t *testing.T) {
 		input := &registerInput{}
 		input.Body.Name = "Ada Lovelace"
 		input.Body.Email = "ada@example.com"
-		input.Body.Password = "Passw0rd"
+		input.Body.Password = "Passw0rd1234"
 
 		out, err := h.register(context.Background(), input)
 
@@ -38,7 +38,7 @@ func TestRegister(t *testing.T) {
 
 		stored, err := users.FindByEmail("ada@example.com")
 		require.NoError(t, err)
-		assert.NoError(t, bcrypt.CompareHashAndPassword([]byte(stored.Password), []byte("Passw0rd")))
+		assert.NoError(t, bcrypt.CompareHashAndPassword([]byte(stored.Password), []byte("Passw0rd1234")))
 	})
 
 	t.Run("rejects weak passwords", func(t *testing.T) {
@@ -59,7 +59,7 @@ func TestRegister(t *testing.T) {
 		input := &registerInput{}
 		input.Body.Name = "Ada"
 		input.Body.Email = "dup@example.com"
-		input.Body.Password = "Passw0rd"
+		input.Body.Password = "Passw0rd1234"
 		_, err := h.register(context.Background(), input)
 		require.NoError(t, err)
 
@@ -75,7 +75,7 @@ func TestRegister(t *testing.T) {
 		input := &registerInput{}
 		input.Body.Name = "Ada"
 		input.Body.Email = "ada3@example.com"
-		input.Body.Password = "Passw0rd"
+		input.Body.Password = "Passw0rd1234"
 
 		_, err := h.register(context.Background(), input)
 
@@ -90,7 +90,7 @@ func TestRegister(t *testing.T) {
 		input := &registerInput{}
 		input.Body.Name = "Ada"
 		input.Body.Email = "ada4@example.com"
-		input.Body.Password = "Passw0rd"
+		input.Body.Password = "Passw0rd1234"
 
 		out, err := h.register(context.Background(), input)
 
@@ -106,14 +106,14 @@ func TestRegister(t *testing.T) {
 
 func TestLogin(t *testing.T) {
 	h, users, _ := newAuthHandler()
-	hash, err := bcrypt.GenerateFromPassword([]byte("Passw0rd"), 12)
+	hash, err := bcrypt.GenerateFromPassword([]byte("Passw0rd1234"), 12)
 	require.NoError(t, err)
 	require.NoError(t, users.Create(&models.User{Name: "Ada", Email: "ada@example.com", Password: string(hash)}))
 
 	t.Run("valid credentials issue a token", func(t *testing.T) {
 		input := &loginInput{}
 		input.Body.Email = "ada@example.com"
-		input.Body.Password = "Passw0rd"
+		input.Body.Password = "Passw0rd1234"
 
 		out, err := h.login(context.Background(), input)
 
@@ -135,7 +135,7 @@ func TestLogin(t *testing.T) {
 	t.Run("unknown email is rejected", func(t *testing.T) {
 		input := &loginInput{}
 		input.Body.Email = "nobody@example.com"
-		input.Body.Password = "Passw0rd"
+		input.Body.Password = "Passw0rd1234"
 
 		_, err := h.login(context.Background(), input)
 
@@ -144,7 +144,7 @@ func TestLogin(t *testing.T) {
 	})
 
 	t.Run("suspended account is rejected", func(t *testing.T) {
-		hash, err := bcrypt.GenerateFromPassword([]byte("Passw0rd"), 12)
+		hash, err := bcrypt.GenerateFromPassword([]byte("Passw0rd1234"), 12)
 		require.NoError(t, err)
 		require.NoError(t, users.Create(&models.User{
 			Name: "Suspended", Email: "suspended@example.com", Password: string(hash), Suspended: true,
@@ -152,7 +152,7 @@ func TestLogin(t *testing.T) {
 
 		input := &loginInput{}
 		input.Body.Email = "suspended@example.com"
-		input.Body.Password = "Passw0rd"
+		input.Body.Password = "Passw0rd1234"
 
 		_, err = h.login(context.Background(), input)
 
@@ -161,7 +161,7 @@ func TestLogin(t *testing.T) {
 	})
 
 	t.Run("account pending approval is rejected", func(t *testing.T) {
-		hash, err := bcrypt.GenerateFromPassword([]byte("Passw0rd"), 12)
+		hash, err := bcrypt.GenerateFromPassword([]byte("Passw0rd1234"), 12)
 		require.NoError(t, err)
 		require.NoError(t, users.Create(&models.User{
 			Name: "Pending", Email: "pending@example.com", Password: string(hash), PendingApproval: true,
@@ -169,12 +169,35 @@ func TestLogin(t *testing.T) {
 
 		input := &loginInput{}
 		input.Body.Email = "pending@example.com"
-		input.Body.Password = "Passw0rd"
+		input.Body.Password = "Passw0rd1234"
 
 		_, err = h.login(context.Background(), input)
 
 		require.Error(t, err)
 		assertStatus(t, err, 403)
+	})
+
+	t.Run("rate limits repeated attempts for the same email", func(t *testing.T) {
+		h, users, _ := newAuthHandler()
+		hash, err := bcrypt.GenerateFromPassword([]byte("Passw0rd1234"), 12)
+		require.NoError(t, err)
+		require.NoError(t, users.Create(&models.User{Name: "Rate", Email: "rate@example.com", Password: string(hash)}))
+
+		input := &loginInput{}
+		input.Body.Email = "rate@example.com"
+		input.Body.Password = "wrong"
+
+		for range loginRateLimitAttempts {
+			_, err := h.login(context.Background(), input)
+			require.Error(t, err)
+			assertStatus(t, err, 401)
+		}
+
+		// The next attempt is throttled even with the correct password.
+		input.Body.Password = "Passw0rd1234"
+		_, err = h.login(context.Background(), input)
+		require.Error(t, err)
+		assertStatus(t, err, 429)
 	})
 }
 
@@ -184,7 +207,7 @@ func TestSetup(t *testing.T) {
 		input := &setupInput{}
 		input.Body.Name = "Root Admin"
 		input.Body.Email = "admin@example.com"
-		input.Body.Password = "Passw0rd"
+		input.Body.Password = "Passw0rd1234"
 
 		out, err := h.setup(context.Background(), input)
 
@@ -202,14 +225,14 @@ func TestSetup(t *testing.T) {
 		input := &setupInput{}
 		input.Body.Name = "Root Admin"
 		input.Body.Email = "admin@example.com"
-		input.Body.Password = "Passw0rd"
+		input.Body.Password = "Passw0rd1234"
 		_, err := h.setup(context.Background(), input)
 		require.NoError(t, err)
 
 		input2 := &setupInput{}
 		input2.Body.Name = "Second Admin"
 		input2.Body.Email = "admin2@example.com"
-		input2.Body.Password = "Passw0rd"
+		input2.Body.Password = "Passw0rd1234"
 		_, err = h.setup(context.Background(), input2)
 
 		require.Error(t, err)
@@ -234,7 +257,7 @@ func TestSetupStatus(t *testing.T) {
 func TestChangePassword(t *testing.T) {
 	setup := func(t *testing.T) (*AuthHandler, *models.User) {
 		h, users, _ := newAuthHandler()
-		hash, err := bcrypt.GenerateFromPassword([]byte("OldPassw0rd"), 12)
+		hash, err := bcrypt.GenerateFromPassword([]byte("OldPassw0rd1"), 12)
 		require.NoError(t, err)
 		user := &models.User{Name: "Ada", Email: "ada@example.com", Password: string(hash)}
 		require.NoError(t, users.Create(user))
@@ -244,9 +267,9 @@ func TestChangePassword(t *testing.T) {
 	t.Run("changes the password with correct current password", func(t *testing.T) {
 		h, user := setup(t)
 		input := &changePasswordInput{}
-		input.Body.CurrentPassword = "OldPassw0rd"
-		input.Body.NewPassword = "NewPassw0rd"
-		input.Body.ConfirmPassword = "NewPassw0rd"
+		input.Body.CurrentPassword = "OldPassw0rd1"
+		input.Body.NewPassword = "NewPassw0rd1"
+		input.Body.ConfirmPassword = "NewPassw0rd1"
 
 		_, err := h.changePassword(fakeAuthedCtx(t, user.ID, "user"), input)
 
@@ -257,8 +280,8 @@ func TestChangePassword(t *testing.T) {
 		h, user := setup(t)
 		input := &changePasswordInput{}
 		input.Body.CurrentPassword = "wrong"
-		input.Body.NewPassword = "NewPassw0rd"
-		input.Body.ConfirmPassword = "NewPassw0rd"
+		input.Body.NewPassword = "NewPassw0rd1"
+		input.Body.ConfirmPassword = "NewPassw0rd1"
 
 		_, err := h.changePassword(fakeAuthedCtx(t, user.ID, "user"), input)
 
@@ -269,8 +292,8 @@ func TestChangePassword(t *testing.T) {
 	t.Run("rejects mismatched confirmation", func(t *testing.T) {
 		h, user := setup(t)
 		input := &changePasswordInput{}
-		input.Body.CurrentPassword = "OldPassw0rd"
-		input.Body.NewPassword = "NewPassw0rd"
+		input.Body.CurrentPassword = "OldPassw0rd1"
+		input.Body.NewPassword = "NewPassw0rd1"
 		input.Body.ConfirmPassword = "Different1"
 
 		_, err := h.changePassword(fakeAuthedCtx(t, user.ID, "user"), input)
@@ -282,9 +305,9 @@ func TestChangePassword(t *testing.T) {
 	t.Run("requires authentication", func(t *testing.T) {
 		h, _ := setup(t)
 		input := &changePasswordInput{}
-		input.Body.CurrentPassword = "OldPassw0rd"
-		input.Body.NewPassword = "NewPassw0rd"
-		input.Body.ConfirmPassword = "NewPassw0rd"
+		input.Body.CurrentPassword = "OldPassw0rd1"
+		input.Body.NewPassword = "NewPassw0rd1"
+		input.Body.ConfirmPassword = "NewPassw0rd1"
 
 		_, err := h.changePassword(context.Background(), input)
 

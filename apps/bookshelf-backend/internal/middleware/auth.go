@@ -8,6 +8,8 @@ import (
 	"strings"
 
 	"github.com/golang-jwt/jwt/v5"
+
+	"github.com/tanjd/core-repository/apps/bookshelf-backend/internal/repository"
 )
 
 type contextKey string
@@ -94,3 +96,45 @@ func RequireAdmin(ctx context.Context) error {
 // ErrForbidden is returned by RequireAdmin when the user is authenticated but
 // lacks admin privileges.
 var ErrForbidden = errors.New("forbidden")
+
+// RequireActiveUser returns middleware that re-checks the authenticated
+// user's live database state on every request. SetAuth only verifies the
+// JWT's signature and expiry — its role/user_id claims are baked in at
+// issuance time and stay valid for the token's full 24h lifetime even after
+// an admin suspends the account, revokes approval, or demotes the user's
+// role. This closes that gap by looking the user up on each request and
+// rejecting (or downgrading) stale sessions immediately. Requests with no
+// authenticated user pass through unchanged, since many routes are public.
+func RequireActiveUser(users repository.UserRepository) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			userID := GetUserID(r.Context())
+			if userID == 0 {
+				next.ServeHTTP(w, r)
+				return
+			}
+
+			user, err := users.FindByID(userID)
+			if err != nil {
+				writeSessionError(w, http.StatusUnauthorized, "this session is no longer valid")
+				return
+			}
+			if user.Suspended || user.PendingApproval {
+				writeSessionError(w, http.StatusForbidden, "this session is no longer valid")
+				return
+			}
+
+			// Use the live DB role rather than the one baked into the JWT at
+			// issuance time, so a demoted admin loses admin access immediately
+			// instead of waiting out the token's expiry.
+			ctx := context.WithValue(r.Context(), roleKey, user.Role)
+			next.ServeHTTP(w, r.WithContext(ctx))
+		})
+	}
+}
+
+func writeSessionError(w http.ResponseWriter, status int, detail string) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(status)
+	_, _ = w.Write([]byte(`{"detail":"` + detail + `"}`))
+}

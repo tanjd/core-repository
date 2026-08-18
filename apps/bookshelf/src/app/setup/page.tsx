@@ -3,7 +3,8 @@
 import { useState, useEffect, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
 import { BookOpen } from "lucide-react";
-import { api } from "@/lib/api";
+import { api, emailLocalPart, validatePassword } from "@/lib/api";
+import { PasswordStrengthMeter } from "@/components/PasswordStrengthMeter";
 import {
   Card,
   CardHeader,
@@ -37,6 +38,14 @@ export default function SetupPage() {
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
     setError("");
+    const passwordError = validatePassword(password, [
+      name,
+      emailLocalPart(email),
+    ]);
+    if (passwordError) {
+      setError(passwordError);
+      return;
+    }
     if (password !== confirmPassword) {
       setError("Passwords do not match");
       return;
@@ -108,10 +117,14 @@ export default function SetupPage() {
                 type="password"
                 autoComplete="new-password"
                 required
-                minLength={8}
+                minLength={12}
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                placeholder="At least 8 characters"
+                placeholder="At least 12 characters"
+              />
+              <PasswordStrengthMeter
+                password={password}
+                disallowed={[name, emailLocalPart(email)]}
               />
             </div>
             <div className="flex flex-col gap-1.5">
@@ -123,7 +136,7 @@ export default function SetupPage() {
                 type="password"
                 autoComplete="new-password"
                 required
-                minLength={8}
+                minLength={12}
                 value={confirmPassword}
                 onChange={(e) => setConfirmPassword(e.target.value)}
                 placeholder="Re-enter your password"

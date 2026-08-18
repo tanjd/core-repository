@@ -5,7 +5,8 @@ import Link from "next/link";
 import { CheckCircle2, XCircle } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { api, validatePassword } from "@/lib/api";
+import { api, emailLocalPart, validatePassword } from "@/lib/api";
+import { PasswordStrengthMeter } from "@/components/PasswordStrengthMeter";
 import type { User, VerificationStatus } from "@/lib/types";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -122,7 +123,10 @@ export function ProfileForm() {
   async function handleChangePassword(e: FormEvent) {
     e.preventDefault();
     setPwError("");
-    const validationError = validatePassword(newPassword);
+    const validationError = validatePassword(newPassword, [
+      user?.name ?? "",
+      emailLocalPart(user?.email ?? ""),
+    ]);
     if (validationError) {
       setPwError(validationError);
       return;
@@ -492,12 +496,15 @@ export function ProfileForm() {
                     autoComplete="new-password"
                     value={newPassword}
                     onChange={(e) => setNewPassword(e.target.value)}
-                    placeholder="At least 8 characters"
+                    placeholder="At least 12 characters"
                   />
-                  <p className="text-xs text-muted-foreground">
-                    At least 8 characters with uppercase, lowercase, and a
-                    number.
-                  </p>
+                  <PasswordStrengthMeter
+                    password={newPassword}
+                    disallowed={[
+                      user?.name ?? "",
+                      emailLocalPart(user?.email ?? ""),
+                    ]}
+                  />
                 </div>
                 <div className="flex flex-col gap-1.5">
                   <label

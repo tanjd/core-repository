@@ -4,7 +4,8 @@ import { useState, type FormEvent } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { api, validatePassword } from "@/lib/api";
+import { api, emailLocalPart, validatePassword } from "@/lib/api";
+import { PasswordStrengthMeter } from "@/components/PasswordStrengthMeter";
 import {
   Card,
   CardHeader,
@@ -28,7 +29,10 @@ export default function RegisterPage() {
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
     setError("");
-    const passwordError = validatePassword(password);
+    const passwordError = validatePassword(password, [
+      name,
+      emailLocalPart(email),
+    ]);
     if (passwordError) {
       setError(passwordError);
       return;
@@ -108,11 +112,12 @@ export default function RegisterPage() {
                 required
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                placeholder="At least 8 characters"
+                placeholder="At least 12 characters"
               />
-              <p className="text-xs text-muted-foreground">
-                At least 8 characters with uppercase, lowercase, and a number.
-              </p>
+              <PasswordStrengthMeter
+                password={password}
+                disallowed={[name, emailLocalPart(email)]}
+              />
             </div>
             <div className="flex flex-col gap-1.5">
               <label htmlFor="confirm-password" className="text-sm font-medium">

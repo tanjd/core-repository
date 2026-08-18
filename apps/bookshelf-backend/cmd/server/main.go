@@ -58,6 +58,9 @@ func main() {
 		Str("metadata_refresh_interval", cfg.MetadataRefreshInterval).
 		Msg("bookshelf starting")
 	if cfg.JWTSecret == "dev-secret-change-me" {
+		if cfg.Env != "dev" {
+			log.Fatal().Msg("JWT_SECRET must be set to a non-default value when ENV is not \"dev\" — anyone who reads this public repo knows the default and can forge admin tokens")
+		}
 		log.Warn().Msg("JWT_SECRET is set to the default value — change it before deploying to production")
 	}
 
@@ -166,7 +169,7 @@ func main() {
 		AllowedHeaders: []string{"Origin", "Content-Type", "Accept", "Authorization"},
 	})
 
-	handler := appmiddleware.RequestLogger(corsHandler.Handler(appmiddleware.SetAuth(cfg.JWTSecret)(mux)))
+	handler := appmiddleware.RequestLogger(corsHandler.Handler(appmiddleware.SetAuth(cfg.JWTSecret)(appmiddleware.RequireActiveUser(userRepo)(mux))))
 
 	srv := &http.Server{
 		Addr:         ":" + cfg.Port,

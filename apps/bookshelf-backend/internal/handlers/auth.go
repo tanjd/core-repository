@@ -10,6 +10,7 @@ import (
 	"html"
 
 	"math/big"
+	"strings"
 	"time"
 
 	"github.com/danielgtaylor/huma/v2"
@@ -20,16 +21,85 @@ import (
 
 	"github.com/tanjd/core-repository/apps/bookshelf-backend/internal/middleware"
 	"github.com/tanjd/core-repository/apps/bookshelf-backend/internal/models"
+	"github.com/tanjd/core-repository/apps/bookshelf-backend/internal/ratelimit"
 	"github.com/tanjd/core-repository/apps/bookshelf-backend/internal/repository"
 	"github.com/tanjd/core-repository/apps/bookshelf-backend/internal/services"
 )
 
-// validatePasswordComplexity checks that p meets minimum complexity requirements.
+// loginRateLimit caps failed-and-successful /auth/login attempts per email
+// address, so a known account's bcrypt password can't be brute-forced over
+// the network. Keyed by email rather than client IP: this backend sits
+// behind the frontend's server-side proxy (apps/bookshelf's
+// src/app/api/[...path]/route.ts), so every request arrives from the same
+// container IP regardless of which browser originated it — an IP-keyed
+// limiter would either do nothing (limit never reached) or lock out every
+// user at once (one shared bucket), whichever number was picked.
+const (
+	loginRateLimitAttempts = 5
+	loginRateLimitWindow   = 15 * time.Minute
+)
+
+// minPasswordLength follows OWASP ASVS / NIST SP 800-63B guidance to favor
+// length over arbitrary composition rules — 12 is the commonly cited floor
+// for a system with no other compensating controls (rate limiting, MFA).
+const minPasswordLength = 12
+
+// maxPasswordLength guards against bcrypt's silent truncation at 72 bytes:
+// golang.org/x/crypto/bcrypt ignores everything past byte 72, so without
+// this check "the first 72 bytes of X" and "X" would hash identically for
+// any longer X, silently weakening (not lengthening) the effective secret.
+const maxPasswordLength = 72
+
+// commonPasswords is a small denylist of passwords that appear at the top
+// of nearly every breach corpus (SplashData/NordPass "worst passwords"
+// lists) and dictionary/keyboard-walk patterns. It's not a substitute for a
+// real breached-password database (e.g. HaveIBeenPwned's k-anonymity API),
+// which would add an external network dependency this NAS-hosted app can't
+// rely on being reachable — this catches the most trivially guessable
+// passwords for free.
+var commonPasswords = map[string]struct{}{
+	"123456": {}, "123456789": {}, "12345678": {}, "1234567890": {}, "1234567": {},
+	"1234": {}, "12345": {}, "111111": {}, "000000": {}, "123123": {},
+	"password": {}, "password1": {}, "password123": {}, "passw0rd": {}, "iloveyou": {},
+	"qwerty": {}, "qwerty123": {}, "qwertyuiop": {}, "qazwsx": {}, "azerty": {},
+	"abc123": {}, "letmein": {}, "letmein1": {}, "welcome": {}, "welcome1": {},
+	"monkey": {}, "dragon": {}, "master": {}, "shadow": {}, "superman": {},
+	"batman": {}, "football": {}, "baseball": {}, "starwars": {}, "sunshine": {},
+	"princess": {}, "flower": {}, "freedom": {}, "whatever": {}, "trustno1": {},
+	"admin": {}, "admin123": {}, "administrator": {}, "root": {}, "toor": {},
+	"guest": {}, "guest123": {}, "test": {}, "test123": {}, "temp123": {},
+	"changeme": {}, "changeme123": {}, "hunter2": {}, "michael": {}, "ashley": {},
+	"bailey": {}, "jennifer": {}, "jordan": {}, "michelle": {}, "mustang": {},
+	"ninja": {}, "121212": {}, "123321": {}, "654321": {}, "1q2w3e4r": {},
+	"zaq1zaq1": {}, "1qaz2wsx": {}, "aa123456": {}, "google": {}, "bookshelf": {},
+	"bookshelf1": {}, "bookshelf123": {},
+}
+
+// validatePasswordComplexity checks that p meets minimum complexity
+// requirements. disallowed is a set of user-identifying strings (e.g. name,
+// email local part) that must not appear (case-insensitively) within p.
 // Returns a human-readable error string, or "" if valid.
-func validatePasswordComplexity(p string) string {
-	if len(p) < 8 {
-		return "password must be at least 8 characters"
+func validatePasswordComplexity(p string, disallowed ...string) string {
+	if msg := validatePasswordLength(p); msg != "" {
+		return msg
 	}
+	if msg := validatePasswordCharacterClasses(p); msg != "" {
+		return msg
+	}
+	return validatePasswordNotGuessable(p, disallowed...)
+}
+
+func validatePasswordLength(p string) string {
+	if len(p) < minPasswordLength {
+		return fmt.Sprintf("password must be at least %d characters", minPasswordLength)
+	}
+	if len(p) > maxPasswordLength {
+		return fmt.Sprintf("password must be at most %d characters", maxPasswordLength)
+	}
+	return ""
+}
+
+func validatePasswordCharacterClasses(p string) string {
 	var hasUpper, hasLower, hasDigit bool
 	for _, c := range p {
 		switch {
@@ -53,6 +123,34 @@ func validatePasswordComplexity(p string) string {
 	return ""
 }
 
+// validatePasswordNotGuessable rejects passwords pulled straight from a
+// common-password denylist, or that embed one of the caller-supplied
+// user-identifying strings (name, email local part).
+func validatePasswordNotGuessable(p string, disallowed ...string) string {
+	lower := strings.ToLower(p)
+	if _, common := commonPasswords[lower]; common {
+		return "this password is too common — please choose a stronger one"
+	}
+	for _, d := range disallowed {
+		d = strings.ToLower(strings.TrimSpace(d))
+		if d != "" && len(d) >= 3 && strings.Contains(lower, d) {
+			return "password must not contain your name or email"
+		}
+	}
+	return ""
+}
+
+// emailLocalPart returns the portion of email before "@", for use as a
+// disallowed substring in validatePasswordComplexity — checking the local
+// part rather than the full address so "j.tan@..." still catches a password
+// containing "j.tan".
+func emailLocalPart(email string) string {
+	if i := strings.Index(email, "@"); i > 0 {
+		return email[:i]
+	}
+	return email
+}
+
 // AuthHandler holds dependencies for authentication routes.
 type AuthHandler struct {
 	users            repository.UserRepository
@@ -61,11 +159,20 @@ type AuthHandler struct {
 	jwtSecret        string
 	encryptionSecret string
 	email            *services.EmailService
+	loginLimiter     *ratelimit.Limiter
 }
 
 // NewAuthHandler creates a new AuthHandler.
 func NewAuthHandler(users repository.UserRepository, admin repository.AdminRepository, copies repository.CopyRepository, jwtSecret, encryptionSecret string, email *services.EmailService) *AuthHandler {
-	return &AuthHandler{users: users, admin: admin, copies: copies, jwtSecret: jwtSecret, encryptionSecret: encryptionSecret, email: email}
+	return &AuthHandler{
+		users:            users,
+		admin:            admin,
+		copies:           copies,
+		jwtSecret:        jwtSecret,
+		encryptionSecret: encryptionSecret,
+		email:            email,
+		loginLimiter:     ratelimit.New(loginRateLimitAttempts, loginRateLimitWindow),
+	}
 }
 
 // --- Input / Output types ---
@@ -74,7 +181,7 @@ type registerInput struct {
 	Body struct {
 		Name     string `json:"name" required:"true" minLength:"1" doc:"Display name"`
 		Email    string `json:"email" required:"true" format:"email" doc:"Email address"`
-		Password string `json:"password" required:"true" minLength:"8" doc:"Password (min 8 chars)"`
+		Password string `json:"password" required:"true" minLength:"12" doc:"Password (min 12 chars)"`
 	}
 }
 
@@ -131,7 +238,7 @@ type setupInput struct {
 	Body struct {
 		Name     string `json:"name" required:"true" minLength:"1" doc:"Admin display name"`
 		Email    string `json:"email" required:"true" format:"email" doc:"Admin email address"`
-		Password string `json:"password" required:"true" minLength:"8" doc:"Admin password (min 8 chars)"`
+		Password string `json:"password" required:"true" minLength:"12" doc:"Admin password (min 12 chars)"`
 	}
 }
 
@@ -152,7 +259,7 @@ type confirmEmailChangeInput struct {
 type changePasswordInput struct {
 	Body struct {
 		CurrentPassword string `json:"current_password" required:"true" minLength:"1" doc:"Current password"`
-		NewPassword     string `json:"new_password" required:"true" minLength:"8" doc:"New password (min 8 chars, mixed case + digit)"`
+		NewPassword     string `json:"new_password" required:"true" minLength:"12" doc:"New password (min 12 chars, mixed case + digit)"`
 		ConfirmPassword string `json:"confirm_password" required:"true" minLength:"1" doc:"Must match new_password"`
 	}
 }
@@ -293,7 +400,7 @@ func (h *AuthHandler) register(_ context.Context, input *registerInput) (*authOu
 	if input.Body.Name == "" || input.Body.Email == "" || input.Body.Password == "" {
 		return nil, huma.Error400BadRequest("name, email and password are required")
 	}
-	if msg := validatePasswordComplexity(input.Body.Password); msg != "" {
+	if msg := validatePasswordComplexity(input.Body.Password, input.Body.Name, emailLocalPart(input.Body.Email)); msg != "" {
 		return nil, huma.Error400BadRequest(msg)
 	}
 
@@ -329,6 +436,11 @@ func (h *AuthHandler) register(_ context.Context, input *registerInput) (*authOu
 }
 
 func (h *AuthHandler) login(_ context.Context, input *loginInput) (*authOutput, error) {
+	limiterKey := strings.ToLower(strings.TrimSpace(input.Body.Email))
+	if !h.loginLimiter.Allow(limiterKey) {
+		return nil, huma.Error429TooManyRequests("too many login attempts — try again later")
+	}
+
 	user, err := h.users.FindByEmail(input.Body.Email)
 	if err != nil {
 		return nil, huma.Error401Unauthorized("invalid credentials")
@@ -562,7 +674,7 @@ func (h *AuthHandler) setup(_ context.Context, input *setupInput) (*authOutput, 
 	if hasAdmin {
 		return nil, huma.Error403Forbidden("setup already complete")
 	}
-	if msg := validatePasswordComplexity(input.Body.Password); msg != "" {
+	if msg := validatePasswordComplexity(input.Body.Password, input.Body.Name, emailLocalPart(input.Body.Email)); msg != "" {
 		return nil, huma.Error400BadRequest(msg)
 	}
 
@@ -763,7 +875,7 @@ func (h *AuthHandler) changePassword(ctx context.Context, input *changePasswordI
 		return nil, huma.Error400BadRequest("new passwords do not match")
 	}
 
-	if msg := validatePasswordComplexity(input.Body.NewPassword); msg != "" {
+	if msg := validatePasswordComplexity(input.Body.NewPassword, user.Name, emailLocalPart(user.Email)); msg != "" {
 		return nil, huma.Error400BadRequest(msg)
 	}
 
