@@ -5,6 +5,7 @@ export interface User {
   phone: string;
   verified: boolean;
   suspended: boolean;
+  pending_approval: boolean;
   role: "user" | "admin";
   created_at: string;
   google_books_key_configured: boolean;

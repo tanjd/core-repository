@@ -307,8 +307,17 @@ func (h *AuthHandler) register(_ context.Context, input *registerInput) (*authOu
 		Email:    input.Body.Email,
 		Password: string(hash),
 	}
+	if val, _ := h.admin.GetSetting("require_registration_approval"); val == "true" {
+		user.PendingApproval = true
+	}
 	if err := h.users.Create(&user); err != nil {
 		return nil, huma.Error400BadRequest("email already registered")
+	}
+
+	// An account awaiting admin approval gets no session — the frontend shows
+	// a pending-approval message instead of logging the user straight in.
+	if user.PendingApproval {
+		return &authOutput{Body: authResponse{User: user}}, nil
 	}
 
 	token, err := h.issueToken(user.ID, user.Role)
@@ -331,6 +340,10 @@ func (h *AuthHandler) login(_ context.Context, input *loginInput) (*authOutput, 
 
 	if user.Suspended {
 		return nil, huma.Error403Forbidden("this account has been suspended")
+	}
+
+	if user.PendingApproval {
+		return nil, huma.Error403Forbidden("this account is pending admin approval")
 	}
 
 	token, err := h.issueToken(user.ID, user.Role)
@@ -359,6 +372,10 @@ func (h *AuthHandler) me(ctx context.Context, _ *struct{}) (*meOutput, error) {
 		return nil, huma.Error403Forbidden("this account has been suspended")
 	}
 
+	if user.PendingApproval {
+		return nil, huma.Error403Forbidden("this account is pending admin approval")
+	}
+
 	return &meOutput{Body: meBody{User: *user, GoogleBooksKeyConfigured: user.GoogleBooksAPIKey != ""}}, nil
 }
 
@@ -378,6 +395,10 @@ func (h *AuthHandler) updateMe(ctx context.Context, input *updateMeInput) (*meOu
 
 	if user.Suspended {
 		return nil, huma.Error403Forbidden("this account has been suspended")
+	}
+
+	if user.PendingApproval {
+		return nil, huma.Error403Forbidden("this account is pending admin approval")
 	}
 
 	if input.Body.Name != nil {
@@ -584,6 +605,10 @@ func (h *AuthHandler) sendOTP(ctx context.Context, _ *sendOTPInput) (*struct{}, 
 		return nil, huma.Error403Forbidden("this account has been suspended")
 	}
 
+	if user.PendingApproval {
+		return nil, huma.Error403Forbidden("this account is pending admin approval")
+	}
+
 	n, err := rand.Int(rand.Reader, big.NewInt(1_000_000))
 	if err != nil {
 		return nil, huma.Error500InternalServerError("could not generate OTP")
@@ -619,6 +644,10 @@ func (h *AuthHandler) verifyOTP(ctx context.Context, input *verifyOTPInput) (*me
 
 	if user.Suspended {
 		return nil, huma.Error403Forbidden("this account has been suspended")
+	}
+
+	if user.PendingApproval {
+		return nil, huma.Error403Forbidden("this account is pending admin approval")
 	}
 
 	if user.OTPCode == "" || user.OTPExpiry == nil {
@@ -659,6 +688,10 @@ func (h *AuthHandler) confirmEmailChange(ctx context.Context, input *confirmEmai
 
 	if user.Suspended {
 		return nil, huma.Error403Forbidden("this account has been suspended")
+	}
+
+	if user.PendingApproval {
+		return nil, huma.Error403Forbidden("this account is pending admin approval")
 	}
 
 	if user.PendingEmail == "" || user.PendingEmailOTPCode == "" || user.PendingEmailOTPExpiry == nil {
@@ -716,6 +749,10 @@ func (h *AuthHandler) changePassword(ctx context.Context, input *changePasswordI
 
 	if user.Suspended {
 		return nil, huma.Error403Forbidden("this account has been suspended")
+	}
+
+	if user.PendingApproval {
+		return nil, huma.Error403Forbidden("this account is pending admin approval")
 	}
 
 	if err := bcrypt.CompareHashAndPassword([]byte(user.Password), []byte(input.Body.CurrentPassword)); err != nil {

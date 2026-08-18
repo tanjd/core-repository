@@ -15,6 +15,12 @@ const SETTING_LABELS: Record<
     description: "Whether new users can sign up",
     type: "bool",
   },
+  require_registration_approval: {
+    label: "Require Admin Approval for New Members",
+    description:
+      "New sign-ups are created but can't log in until an admin approves them from the Users page. Useful while running in beta.",
+    type: "bool",
+  },
   max_copies_per_user: {
     label: "Max Copies Per User",
     description:

@@ -56,8 +56,9 @@ type adminUserIDInput struct {
 type updateAdminUserInput struct {
 	ID   uint `path:"id" doc:"User ID"`
 	Body struct {
-		Role      *string `json:"role,omitempty" doc:"Role: user or admin"`
-		Suspended *bool   `json:"suspended,omitempty" doc:"Whether the user is suspended (cannot log in)"`
+		Role            *string `json:"role,omitempty" doc:"Role: user or admin"`
+		Suspended       *bool   `json:"suspended,omitempty" doc:"Whether the user is suspended (cannot log in)"`
+		PendingApproval *bool   `json:"pending_approval,omitempty" doc:"Whether the user is still awaiting admin approval (cannot log in until cleared)"`
 	}
 }
 
@@ -238,6 +239,11 @@ func (h *AdminHandler) updateUser(ctx context.Context, input *updateAdminUserInp
 			return nil, err
 		}
 	}
+	if input.Body.PendingApproval != nil {
+		if err := h.applyPendingApprovalUpdate(user, callerID, *input.Body.PendingApproval); err != nil {
+			return nil, err
+		}
+	}
 
 	if err := h.admin.SaveUser(user); err != nil {
 		return nil, huma.Error500InternalServerError("could not update user")
@@ -277,6 +283,16 @@ func (h *AdminHandler) applySuspendedUpdate(user *models.User, callerID uint, su
 		return huma.Error400BadRequest("cannot suspend yourself")
 	}
 	user.Suspended = suspended
+	return nil
+}
+
+// applyPendingApprovalUpdate validates and applies an approval-status change,
+// preventing an admin from placing themselves back into pending approval.
+func (h *AdminHandler) applyPendingApprovalUpdate(user *models.User, callerID uint, pending bool) error {
+	if user.ID == callerID && pending {
+		return huma.Error400BadRequest("cannot set your own account back to pending approval")
+	}
+	user.PendingApproval = pending
 	return nil
 }
 

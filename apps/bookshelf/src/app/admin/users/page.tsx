@@ -55,6 +55,13 @@ export default function AdminUsersPage() {
     setUsers((prev) => prev.map((u) => (u.id === updated.id ? updated : u)));
   }
 
+  async function toggleApproval(user: User) {
+    const updated = await api.adminUpdateUser(user.id, {
+      pending_approval: !user.pending_approval,
+    });
+    setUsers((prev) => prev.map((u) => (u.id === updated.id ? updated : u)));
+  }
+
   async function deleteUser(user: User) {
     if (!confirm(`Delete user "${user.name}"? This cannot be undone.`)) return;
     await api.adminDeleteUser(user.id);
@@ -102,6 +109,9 @@ export default function AdminUsersPage() {
                     <Badge variant={user.verified ? "success" : "outline"}>
                       {user.verified ? "verified" : "unverified"}
                     </Badge>
+                    {user.pending_approval && (
+                      <Badge variant="secondary">pending approval</Badge>
+                    )}
                     {user.suspended && (
                       <Badge variant="destructive">suspended</Badge>
                     )}
@@ -114,6 +124,14 @@ export default function AdminUsersPage() {
                   <div className="flex gap-2 justify-end flex-wrap">
                     {user.id !== currentUserId && (
                       <>
+                        {user.pending_approval && (
+                          <Button
+                            size="sm"
+                            onClick={() => toggleApproval(user)}
+                          >
+                            Approve
+                          </Button>
+                        )}
                         <Button
                           size="sm"
                           variant="outline"
