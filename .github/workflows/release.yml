@@ -95,7 +95,31 @@ jobs:
         # `release: published` event for publish.yml to react to. A PAT
         # acts like a real user, so the release this creates triggers
         # publish.yml normally - no explicit bridging step needed.
-        run: npx nx release --skip-publish
+        # Retries on failure: nx release computes versions from git history
+        # then does a plain `git push` (no rebase/force) at the end, so if
+        # main moved between this job's checkout and that push - another
+        # release run, or a direct push - it fails non-fast-forward. Resync
+        # to origin/main and recompute rather than leaving a whole release
+        # cycle stuck on a transient race. Local tags must be cleared before
+        # retrying: nx release creates them locally before the failed push,
+        # and would collide with itself recreating the same tag names.
+        run: |
+          for attempt in 1 2 3; do
+            if npx nx release --skip-publish; then
+              exit 0
+            fi
+
+            if [ "$attempt" -eq 3 ]; then
+              echo "nx release failed after $attempt attempts" >&2
+              exit 1
+            fi
+
+            echo "nx release failed (attempt $attempt/3) - resyncing with origin/main and retrying" >&2
+            git tag -d $(git tag -l) 2>/dev/null || true
+            git fetch origin main --tags --force
+            git reset --hard origin/main
+            sleep $((attempt * 5))
+          done
         env:
           GITHUB_TOKEN: ${{ secrets.GHA_TRIGGER_TOKEN }}
           # nx release performs its own `git commit` internally for the
