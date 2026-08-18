@@ -26,11 +26,9 @@ describe("useUnreadNotifications", () => {
     expect(api.getNotifications).not.toHaveBeenCalled();
   });
 
-  it("counts unread notifications from the fetched page", async () => {
+  it("uses the total from the response", async () => {
     localStorage.setItem("bookshelf_token", "abc123");
-    (api.getNotifications as jest.Mock).mockResolvedValue({
-      items: [{ read: false }, { read: false }, { read: true }],
-    });
+    (api.getNotifications as jest.Mock).mockResolvedValue({ total: 2 });
 
     const { result } = renderHook(() => useUnreadNotifications());
 
@@ -39,7 +37,7 @@ describe("useUnreadNotifications", () => {
 
   it("polls again after the interval elapses", async () => {
     localStorage.setItem("bookshelf_token", "abc123");
-    (api.getNotifications as jest.Mock).mockResolvedValue({ items: [] });
+    (api.getNotifications as jest.Mock).mockResolvedValue({ total: 0 });
 
     renderHook(() => useUnreadNotifications());
     await waitFor(() => expect(api.getNotifications).toHaveBeenCalledTimes(1));
@@ -50,7 +48,7 @@ describe("useUnreadNotifications", () => {
 
   it("clears the polling interval on unmount", async () => {
     localStorage.setItem("bookshelf_token", "abc123");
-    (api.getNotifications as jest.Mock).mockResolvedValue({ items: [] });
+    (api.getNotifications as jest.Mock).mockResolvedValue({ total: 0 });
 
     const { unmount } = renderHook(() => useUnreadNotifications());
     await waitFor(() => expect(api.getNotifications).toHaveBeenCalledTimes(1));

@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { Loader2 } from "lucide-react";
 import { api } from "@/lib/api";
 import type { User } from "@/lib/api";
 import { Button } from "@/components/ui/button";
@@ -9,6 +10,8 @@ import { Pagination } from "@/components/ui/Pagination";
 
 const PAGE_SIZE = 20;
 
+type UserAction = "approve" | "role" | "suspend" | "delete";
+
 export default function AdminUsersPage() {
   const [users, setUsers] = useState<User[]>([]);
   const [page, setPage] = useState(1);
@@ -16,6 +19,9 @@ export default function AdminUsersPage() {
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
   const [currentUserId, setCurrentUserId] = useState<number | null>(null);
+  const [actionLoading, setActionLoading] = useState<
+    Record<number, UserAction | undefined>
+  >({});
 
   useEffect(() => {
     const stored = localStorage.getItem("bookshelf_user");
@@ -42,30 +48,51 @@ export default function AdminUsersPage() {
     }
   }
 
-  async function toggleRole(user: User) {
-    const newRole = user.role === "admin" ? "user" : "admin";
-    const updated = await api.adminUpdateUser(user.id, { role: newRole });
-    setUsers((prev) => prev.map((u) => (u.id === updated.id ? updated : u)));
+  async function runAction(
+    user: User,
+    action: UserAction,
+    fn: () => Promise<void>,
+  ) {
+    setActionLoading((prev) => ({ ...prev, [user.id]: action }));
+    try {
+      await fn();
+    } finally {
+      setActionLoading((prev) => ({ ...prev, [user.id]: undefined }));
+    }
   }
 
-  async function toggleSuspended(user: User) {
-    const updated = await api.adminUpdateUser(user.id, {
-      suspended: !user.suspended,
+  function toggleRole(user: User) {
+    return runAction(user, "role", async () => {
+      const newRole = user.role === "admin" ? "user" : "admin";
+      const updated = await api.adminUpdateUser(user.id, { role: newRole });
+      setUsers((prev) => prev.map((u) => (u.id === updated.id ? updated : u)));
     });
-    setUsers((prev) => prev.map((u) => (u.id === updated.id ? updated : u)));
   }
 
-  async function toggleApproval(user: User) {
-    const updated = await api.adminUpdateUser(user.id, {
-      pending_approval: !user.pending_approval,
+  function toggleSuspended(user: User) {
+    return runAction(user, "suspend", async () => {
+      const updated = await api.adminUpdateUser(user.id, {
+        suspended: !user.suspended,
+      });
+      setUsers((prev) => prev.map((u) => (u.id === updated.id ? updated : u)));
     });
-    setUsers((prev) => prev.map((u) => (u.id === updated.id ? updated : u)));
   }
 
-  async function deleteUser(user: User) {
+  function toggleApproval(user: User) {
+    return runAction(user, "approve", async () => {
+      const updated = await api.adminUpdateUser(user.id, {
+        pending_approval: !user.pending_approval,
+      });
+      setUsers((prev) => prev.map((u) => (u.id === updated.id ? updated : u)));
+    });
+  }
+
+  function deleteUser(user: User) {
     if (!confirm(`Delete user "${user.name}"? This cannot be undone.`)) return;
-    await api.adminDeleteUser(user.id);
-    await loadUsers(page);
+    return runAction(user, "delete", async () => {
+      await api.adminDeleteUser(user.id);
+      await loadUsers(page);
+    });
   }
 
   if (loading) return <p className="text-muted-foreground">Loading users…</p>;
@@ -122,40 +149,61 @@ export default function AdminUsersPage() {
                 </td>
                 <td className="px-4 py-3">
                   <div className="flex gap-2 justify-end flex-wrap">
-                    {user.id !== currentUserId && (
-                      <>
-                        {user.pending_approval && (
-                          <Button
-                            size="sm"
-                            onClick={() => toggleApproval(user)}
-                          >
-                            Approve
-                          </Button>
-                        )}
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          onClick={() => toggleRole(user)}
-                        >
-                          {user.role === "admin" ? "Demote" : "Promote"}
-                        </Button>
-                        <Button
-                          size="sm"
-                          variant={user.suspended ? "outline" : "secondary"}
-                          onClick={() => toggleSuspended(user)}
-                        >
-                          {user.suspended ? "Unsuspend" : "Suspend"}
-                        </Button>
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          className="text-destructive hover:text-destructive hover:bg-destructive/10"
-                          onClick={() => deleteUser(user)}
-                        >
-                          Delete
-                        </Button>
-                      </>
-                    )}
+                    {user.id !== currentUserId &&
+                      (() => {
+                        const busyAction = actionLoading[user.id];
+                        const isBusy = busyAction !== undefined;
+                        return (
+                          <>
+                            {user.pending_approval && (
+                              <Button
+                                size="sm"
+                                disabled={isBusy}
+                                onClick={() => toggleApproval(user)}
+                              >
+                                {busyAction === "approve" && (
+                                  <Loader2 className="size-3.5 animate-spin" />
+                                )}
+                                Approve
+                              </Button>
+                            )}
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              disabled={isBusy}
+                              onClick={() => toggleRole(user)}
+                            >
+                              {busyAction === "role" && (
+                                <Loader2 className="size-3.5 animate-spin" />
+                              )}
+                              {user.role === "admin" ? "Demote" : "Promote"}
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant={user.suspended ? "outline" : "secondary"}
+                              disabled={isBusy}
+                              onClick={() => toggleSuspended(user)}
+                            >
+                              {busyAction === "suspend" && (
+                                <Loader2 className="size-3.5 animate-spin" />
+                              )}
+                              {user.suspended ? "Unsuspend" : "Suspend"}
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              className="text-destructive hover:text-destructive hover:bg-destructive/10"
+                              disabled={isBusy}
+                              onClick={() => deleteUser(user)}
+                            >
+                              {busyAction === "delete" && (
+                                <Loader2 className="size-3.5 animate-spin" />
+                              )}
+                              Delete
+                            </Button>
+                          </>
+                        );
+                      })()}
                   </div>
                 </td>
               </tr>

@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/signal"
 	"strings"
+	"sync"
 	"syscall"
 	"time"
 
@@ -16,6 +17,7 @@ import (
 	"github.com/rs/cors"
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
+	"gorm.io/gorm"
 
 	"github.com/tanjd/core-repository/apps/bookshelf-backend/internal/config"
 	"github.com/tanjd/core-repository/apps/bookshelf-backend/internal/db"
@@ -33,7 +35,10 @@ func main() {
 	// Load .env if present. No-op in production where vars are injected by the runtime.
 	_ = godotenv.Load()
 
-	cfg := config.Load()
+	cfg, err := config.Load()
+	if err != nil {
+		log.Fatal().Err(err).Msg("failed to load configuration")
+	}
 
 	// Configure logger: pretty console output in dev, structured JSON in production.
 	zerolog.TimeFieldFormat = zerolog.TimeFormatUnix
@@ -45,17 +50,11 @@ func main() {
 	// no-op logger.
 	zerolog.DefaultContextLogger = &log.Logger
 
-	// Log startup configuration — show intent without leaking secret values.
+	// Log the full startup config — LogFields redacts anything tagged
+	// sensitive:"true" on Config, so this never leaks a secret.
 	log.Info().
 		Str("version", version).
-		Str("env", cfg.Env).
-		Str("port", cfg.Port).
-		Str("db_path", cfg.DBPath).
-		Str("cors_origins", strings.Join(cfg.CORSOrigins, ", ")).
-		Bool("email_enabled", cfg.SMTPHost != "").
-		Str("email_from", cfg.EmailFrom).
-		Bool("google_books_enabled", cfg.GoogleBooksAPIKey != "").
-		Str("metadata_refresh_interval", cfg.MetadataRefreshInterval).
+		Fields(cfg.LogFields()).
 		Msg("bookshelf starting")
 	if cfg.JWTSecret == "dev-secret-change-me" {
 		if cfg.Env != "dev" {
@@ -128,6 +127,9 @@ func main() {
 			http.NotFound(w, r)
 			return
 		}
+		// Filenames are content-addressed (SHA-256 of the source URL), so a
+		// given path's content never changes — safe to cache indefinitely.
+		w.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
 		coverFS.ServeHTTP(w, r)
 	}))
 
@@ -182,16 +184,19 @@ func main() {
 	}
 
 	// Start the background scheduler.
-	go scheduler.Start(ctx)
+	var wg sync.WaitGroup
+	wg.Go(func() { scheduler.Start(ctx) })
 
 	// Graceful shutdown on SIGINT/SIGTERM.
-	go waitForShutdownSignal(cancel, srv)
+	done := make(chan struct{})
+	go waitForShutdownSignal(cancel, srv, database, &wg, done)
 
 	log.Info().Str("port", cfg.Port).Msg("listening")
 	if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 		cancel()
 		log.Fatal().Err(err).Msg("server failed")
 	}
+	<-done
 }
 
 // seedYAMLConfig seeds settings from bookshelf.yaml if it exists (YAML values override DB defaults).
@@ -212,8 +217,12 @@ func seedYAMLConfig(path string, adminRepo repository.AdminRepository) {
 	log.Info().Str("path", path).Int("keys", len(kvs)).Msg("seeded settings from YAML")
 }
 
-// waitForShutdownSignal blocks until SIGINT/SIGTERM, then gracefully shuts down srv.
-func waitForShutdownSignal(cancel context.CancelFunc, srv *http.Server) {
+// waitForShutdownSignal blocks until SIGINT/SIGTERM, then gracefully shuts down
+// srv, waits for background goroutines tracked by wg to exit, and closes database.
+// Closes done as its last step so the caller can block until shutdown is complete.
+func waitForShutdownSignal(cancel context.CancelFunc, srv *http.Server, database *gorm.DB, wg *sync.WaitGroup, done chan<- struct{}) {
+	defer close(done)
+
 	quit := make(chan os.Signal, 1)
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
 	<-quit
@@ -223,5 +232,16 @@ func waitForShutdownSignal(cancel context.CancelFunc, srv *http.Server) {
 	defer shutCancel()
 	if shutErr := srv.Shutdown(shutCtx); shutErr != nil {
 		log.Error().Err(shutErr).Msg("server shutdown error")
+	}
+
+	wg.Wait()
+
+	sqlDB, err := database.DB()
+	if err != nil {
+		log.Error().Err(err).Msg("failed to get underlying sql.DB for shutdown")
+		return
+	}
+	if err := sqlDB.Close(); err != nil {
+		log.Error().Err(err).Msg("database close error")
 	}
 }
