@@ -1,32 +1,76 @@
-import { validatePassword, api } from "./api";
+import { validatePassword, scorePasswordStrength, api } from "./api";
 
 describe("validatePassword", () => {
   it("accepts a password meeting all complexity rules", () => {
-    expect(validatePassword("Passw0rd")).toBeNull();
+    expect(validatePassword("Passw0rd1234")).toBeNull();
   });
 
-  it("rejects passwords under 8 characters", () => {
+  it("rejects passwords under 12 characters", () => {
     expect(validatePassword("Aa1")).toBe(
-      "Password must be at least 8 characters",
+      "Password must be at least 12 characters",
+    );
+  });
+
+  it("rejects passwords over 72 characters", () => {
+    expect(validatePassword("Aa1" + "b".repeat(70))).toBe(
+      "Password must be at most 72 characters",
     );
   });
 
   it("rejects passwords without an uppercase letter", () => {
-    expect(validatePassword("password1")).toBe(
+    expect(validatePassword("password12345")).toBe(
       "Password must contain at least one uppercase letter",
     );
   });
 
   it("rejects passwords without a lowercase letter", () => {
-    expect(validatePassword("PASSWORD1")).toBe(
+    expect(validatePassword("PASSWORD12345")).toBe(
       "Password must contain at least one lowercase letter",
     );
   });
 
   it("rejects passwords without a digit", () => {
-    expect(validatePassword("Password")).toBe(
+    expect(validatePassword("PasswordLetters")).toBe(
       "Password must contain at least one number",
     );
+  });
+
+  it("rejects a password pulled from the common-password denylist", () => {
+    // Uppercase/lowercase/digit present (so it clears the composition
+    // checks) but still matches the denylist case-insensitively.
+    expect(validatePassword("Bookshelf123")).toBe(
+      "This password is too common — please choose a stronger one",
+    );
+  });
+
+  it("rejects passwords containing a disallowed name or email", () => {
+    expect(validatePassword("MyNameIsAda123", ["Ada", "ada"])).toBe(
+      "Password must not contain your name or email",
+    );
+  });
+
+  it("ignores disallowed entries shorter than 3 characters", () => {
+    expect(validatePassword("Passw0rd1234", ["Jo"])).toBeNull();
+  });
+});
+
+describe("scorePasswordStrength", () => {
+  it("scores an empty password as very weak", () => {
+    expect(scorePasswordStrength("").score).toBe(0);
+  });
+
+  it("scores a common password as very weak even if long", () => {
+    expect(scorePasswordStrength("bookshelf123").score).toBe(0);
+  });
+
+  it("scores a short simple password low", () => {
+    expect(scorePasswordStrength("aaaaaaaaaaaa").score).toBeLessThanOrEqual(1);
+  });
+
+  it("scores a long, varied, non-sequential password high", () => {
+    expect(
+      scorePasswordStrength("Tr0mb0ne$Kayak!9").score,
+    ).toBeGreaterThanOrEqual(3);
   });
 });
 

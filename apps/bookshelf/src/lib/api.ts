@@ -31,16 +31,184 @@ export type {
   DashboardStats,
 };
 
-/** Returns an error message if the password does not meet complexity requirements, or null if valid. */
-export function validatePassword(password: string): string | null {
-  if (password.length < 8) return "Password must be at least 8 characters";
+// Mirrors internal/handlers/auth.go's minPasswordLength/maxPasswordLength —
+// there's no shared validation module across the Go/TS boundary, so these
+// (and COMMON_PASSWORDS below) are kept in sync by hand.
+export const MIN_PASSWORD_LENGTH = 12;
+export const MAX_PASSWORD_LENGTH = 72;
+
+// Mirrors internal/handlers/auth.go's commonPasswords denylist.
+const COMMON_PASSWORDS = new Set([
+  "123456",
+  "123456789",
+  "12345678",
+  "1234567890",
+  "1234567",
+  "1234",
+  "12345",
+  "111111",
+  "000000",
+  "123123",
+  "password",
+  "password1",
+  "password123",
+  "passw0rd",
+  "iloveyou",
+  "qwerty",
+  "qwerty123",
+  "qwertyuiop",
+  "qazwsx",
+  "azerty",
+  "abc123",
+  "letmein",
+  "letmein1",
+  "welcome",
+  "welcome1",
+  "monkey",
+  "dragon",
+  "master",
+  "shadow",
+  "superman",
+  "batman",
+  "football",
+  "baseball",
+  "starwars",
+  "sunshine",
+  "princess",
+  "flower",
+  "freedom",
+  "whatever",
+  "trustno1",
+  "admin",
+  "admin123",
+  "administrator",
+  "root",
+  "toor",
+  "guest",
+  "guest123",
+  "test",
+  "test123",
+  "temp123",
+  "changeme",
+  "changeme123",
+  "hunter2",
+  "michael",
+  "ashley",
+  "bailey",
+  "jennifer",
+  "jordan",
+  "michelle",
+  "mustang",
+  "ninja",
+  "121212",
+  "123321",
+  "654321",
+  "1q2w3e4r",
+  "zaq1zaq1",
+  "1qaz2wsx",
+  "aa123456",
+  "google",
+  "bookshelf",
+  "bookshelf1",
+  "bookshelf123",
+]);
+
+/**
+ * Returns an error message if the password does not meet complexity
+ * requirements, or null if valid. `disallowed` is a set of
+ * user-identifying strings (e.g. name, email local part) the password must
+ * not contain — pass what's available on the form; omit where there's
+ * nothing to check against yet (e.g. registration's name field is only
+ * checked once both fields exist).
+ */
+export function validatePassword(
+  password: string,
+  disallowed: string[] = [],
+): string | null {
+  if (password.length < MIN_PASSWORD_LENGTH)
+    return `Password must be at least ${MIN_PASSWORD_LENGTH} characters`;
+  if (password.length > MAX_PASSWORD_LENGTH)
+    return `Password must be at most ${MAX_PASSWORD_LENGTH} characters`;
   if (!/[A-Z]/.test(password))
     return "Password must contain at least one uppercase letter";
   if (!/[a-z]/.test(password))
     return "Password must contain at least one lowercase letter";
   if (!/[0-9]/.test(password))
     return "Password must contain at least one number";
+
+  const lower = password.toLowerCase();
+  if (COMMON_PASSWORDS.has(lower))
+    return "This password is too common — please choose a stronger one";
+  for (const d of disallowed) {
+    const needle = d.trim().toLowerCase();
+    if (needle.length >= 3 && lower.includes(needle))
+      return "Password must not contain your name or email";
+  }
   return null;
+}
+
+/** Returns the portion of email before "@", for use as a validatePassword disallowed entry. */
+export function emailLocalPart(email: string): string {
+  const at = email.indexOf("@");
+  return at > 0 ? email.slice(0, at) : email;
+}
+
+export type PasswordStrengthScore = 0 | 1 | 2 | 3 | 4;
+
+export interface PasswordStrength {
+  score: PasswordStrengthScore;
+  label: "Very weak" | "Weak" | "Fair" | "Good" | "Strong";
+}
+
+const STRENGTH_LABELS = [
+  "Very weak",
+  "Weak",
+  "Fair",
+  "Good",
+  "Strong",
+] as const;
+
+/**
+ * A lightweight, dependency-free password strength estimate for live UI
+ * feedback (not a substitute for validatePassword's hard requirements).
+ * Rewards length and character variety, penalizes common passwords and
+ * repeated/sequential runs (e.g. "aaaa", "1234", "abcd").
+ */
+export function scorePasswordStrength(password: string): PasswordStrength {
+  if (!password) return { score: 0, label: STRENGTH_LABELS[0] };
+
+  const lower = password.toLowerCase();
+  if (COMMON_PASSWORDS.has(lower))
+    return { score: 0, label: STRENGTH_LABELS[0] };
+
+  let rawScore = 0;
+  if (password.length >= MIN_PASSWORD_LENGTH) rawScore++;
+  if (password.length >= 16) rawScore++;
+  if (password.length >= 20) rawScore++;
+
+  const varietyCount = [/[a-z]/, /[A-Z]/, /[0-9]/, /[^a-zA-Z0-9]/].filter(
+    (re) => re.test(password),
+  ).length;
+  if (varietyCount >= 3) rawScore++;
+
+  if (/(.)\1\1/.test(password)) rawScore--; // 3+ repeated chars, e.g. "aaa"
+  if (hasSequentialRun(password, 4)) rawScore--; // e.g. "abcd", "1234", "4321"
+
+  const score = Math.max(0, Math.min(4, rawScore)) as PasswordStrengthScore;
+  return { score, label: STRENGTH_LABELS[score] };
+}
+
+/** True if password contains `runLength` consecutive ascending or descending character codes. */
+function hasSequentialRun(password: string, runLength: number): boolean {
+  let ascending = 1;
+  let descending = 1;
+  for (let i = 1; i < password.length; i++) {
+    const delta = password.charCodeAt(i) - password.charCodeAt(i - 1);
+    ascending = delta === 1 ? ascending + 1 : 1;
+    descending = delta === -1 ? descending + 1 : 1;
+    if (ascending >= runLength || descending >= runLength) return true;
+  }
+  return false;
 }
 
 const BASE = "/api";
