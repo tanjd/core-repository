@@ -1,3 +1,13 @@
+## 0.4.0 (2026-08-18)
+
+### 🚀 Features
+
+- **bookshelf:** verify email and phone before registration completes ([#43](https://github.com/tanjd/core-repository/pull/43))
+
+### ❤️ Thank You
+
+- Jeddy Tan @tanjd
+
 ## 0.3.1 (2026-08-18)
 
 ### 🩹 Fixes
