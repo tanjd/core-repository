@@ -114,8 +114,17 @@ func main() {
 	// Router
 	mux := http.NewServeMux()
 
-	// Static file serving for locally cached book covers.
-	mux.Handle("/covers/", http.StripPrefix("/covers/", http.FileServer(http.Dir(coversDir))))
+	// Static file serving for locally cached book covers. Directory-listing
+	// requests (trailing slash, e.g. GET /covers/) are rejected with 404
+	// rather than falling through to http.FileServer's default listing.
+	coverFS := http.StripPrefix("/covers/", http.FileServer(http.Dir(coversDir)))
+	mux.Handle("/covers/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if strings.HasSuffix(r.URL.Path, "/") {
+			http.NotFound(w, r)
+			return
+		}
+		coverFS.ServeHTTP(w, r)
+	}))
 
 	// Health check (plain net/http, outside huma)
 	mux.HandleFunc("GET /health", func(w http.ResponseWriter, _ *http.Request) {

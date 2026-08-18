@@ -7,6 +7,7 @@ import (
 	"crypto/subtle"
 	"errors"
 	"fmt"
+	"html"
 
 	"math/big"
 	"time"
@@ -465,11 +466,11 @@ func (h *AuthHandler) requestEmailChange(ctx context.Context, user *models.User,
 	user.PendingEmailOTPCode = code
 	user.PendingEmailOTPExpiry = &expiry
 
-	html := fmt.Sprintf(
+	body := fmt.Sprintf(
 		"<p>Hi %s,</p><p>You requested to change your Bookshelf account email to this address. Your confirmation code is: <strong>%s</strong></p><p>This code expires in 15 minutes. If you didn't request this change, you can safely ignore this email.</p>",
-		user.Name, code,
+		html.EscapeString(user.Name), code,
 	)
-	h.email.SendEmailAsync(ctx, newEmail, "Confirm your new Bookshelf email address", html)
+	h.email.SendEmailAsync(ctx, newEmail, "Confirm your new Bookshelf email address", body)
 	return nil
 }
 
@@ -596,11 +597,11 @@ func (h *AuthHandler) sendOTP(ctx context.Context, _ *sendOTPInput) (*struct{}, 
 		return nil, huma.Error500InternalServerError("could not save OTP")
 	}
 
-	html := fmt.Sprintf(
+	body := fmt.Sprintf(
 		"<p>Hi %s,</p><p>Your Bookshelf verification code is: <strong>%s</strong></p><p>This code expires in 15 minutes.</p>",
-		user.Name, code,
+		html.EscapeString(user.Name), code,
 	)
-	h.email.SendEmailAsync(ctx, user.Email, "Your Bookshelf verification code", html)
+	h.email.SendEmailAsync(ctx, user.Email, "Your Bookshelf verification code", body)
 
 	return nil, nil
 }
