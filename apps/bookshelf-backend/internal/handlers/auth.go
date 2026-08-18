@@ -18,6 +18,7 @@ import (
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/rs/zerolog"
 	"golang.org/x/crypto/bcrypt"
+	"golang.org/x/time/rate"
 
 	"github.com/tanjd/core-repository/apps/bookshelf-backend/internal/middleware"
 	"github.com/tanjd/core-repository/apps/bookshelf-backend/internal/models"
@@ -160,6 +161,8 @@ type AuthHandler struct {
 	encryptionSecret string
 	email            *services.EmailService
 	loginLimiter     *ratelimit.Limiter
+	registerLimiter  *middleware.RateLimiter
+	otpLimiter       *middleware.RateLimiter
 }
 
 // NewAuthHandler creates a new AuthHandler.
@@ -172,6 +175,15 @@ func NewAuthHandler(users repository.UserRepository, admin repository.AdminRepos
 		encryptionSecret: encryptionSecret,
 		email:            email,
 		loginLimiter:     ratelimit.New(loginRateLimitAttempts, loginRateLimitWindow),
+		// 5 immediately, refilling one every 10min (~11/hr steady-state) —
+		// enough headroom for a real user retrying a rejected password, tight
+		// enough to block registration spam. Keyed by IP; see ClientIP's doc
+		// comment for the caveat about the current deployment topology.
+		registerLimiter: middleware.NewRateLimiter(rate.Every(10*time.Minute), 5),
+		// 3 immediately, refilling one every 5min — OTP codes last 15min so
+		// legitimate resends are rare; keyed by user ID since this endpoint is
+		// already authenticated.
+		otpLimiter: middleware.NewRateLimiter(rate.Every(5*time.Minute), 3),
 	}
 }
 
@@ -291,6 +303,7 @@ func (h *AuthHandler) RegisterRoutes(api huma.API) {
 		Tags:          []string{"auth"},
 		Summary:       "Register a new user",
 		DefaultStatus: 201,
+		Middlewares:   huma.Middlewares{middleware.RateLimit(api, h.registerLimiter, middleware.ClientIP)},
 	}, h.register)
 
 	huma.Register(api, huma.Operation{
@@ -343,6 +356,7 @@ func (h *AuthHandler) RegisterRoutes(api huma.API) {
 		Tags:        []string{"auth"},
 		Summary:     "Send a 6-digit OTP to the authenticated user's email for verification",
 		Security:    []map[string][]string{{"bearer": {}}},
+		Middlewares: huma.Middlewares{middleware.RateLimit(api, h.otpLimiter, middleware.UserOrIP)},
 	}, h.sendOTP)
 
 	huma.Register(api, huma.Operation{
