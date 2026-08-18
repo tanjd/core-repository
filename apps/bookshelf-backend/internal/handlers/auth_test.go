@@ -82,6 +82,26 @@ func TestRegister(t *testing.T) {
 		require.Error(t, err)
 		assertStatus(t, err, 403)
 	})
+
+	t.Run("creates a pending, token-less account when approval is required", func(t *testing.T) {
+		h, users, admin := newAuthHandler()
+		require.NoError(t, admin.UpsertSetting("require_registration_approval", "true"))
+
+		input := &registerInput{}
+		input.Body.Name = "Ada"
+		input.Body.Email = "ada4@example.com"
+		input.Body.Password = "Passw0rd"
+
+		out, err := h.register(context.Background(), input)
+
+		require.NoError(t, err)
+		assert.Empty(t, out.Body.Token)
+		assert.True(t, out.Body.User.PendingApproval)
+
+		stored, findErr := users.FindByEmail("ada4@example.com")
+		require.NoError(t, findErr)
+		assert.True(t, stored.PendingApproval)
+	})
 }
 
 func TestLogin(t *testing.T) {
@@ -132,6 +152,23 @@ func TestLogin(t *testing.T) {
 
 		input := &loginInput{}
 		input.Body.Email = "suspended@example.com"
+		input.Body.Password = "Passw0rd"
+
+		_, err = h.login(context.Background(), input)
+
+		require.Error(t, err)
+		assertStatus(t, err, 403)
+	})
+
+	t.Run("account pending approval is rejected", func(t *testing.T) {
+		hash, err := bcrypt.GenerateFromPassword([]byte("Passw0rd"), 12)
+		require.NoError(t, err)
+		require.NoError(t, users.Create(&models.User{
+			Name: "Pending", Email: "pending@example.com", Password: string(hash), PendingApproval: true,
+		}))
+
+		input := &loginInput{}
+		input.Body.Email = "pending@example.com"
 		input.Body.Password = "Passw0rd"
 
 		_, err = h.login(context.Background(), input)

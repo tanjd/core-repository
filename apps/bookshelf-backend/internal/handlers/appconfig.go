@@ -11,17 +11,19 @@ import (
 
 // appConfigFile is the YAML structure used for import/export of app settings.
 type appConfigFile struct {
-	AllowRegistration          string `yaml:"allow_registration,omitempty"`
-	MaxCopiesPerUser           string `yaml:"max_copies_per_user,omitempty"`
-	MaxActiveLoans             string `yaml:"max_active_loans,omitempty"`
-	RequireVerifiedToBorrow    string `yaml:"require_verified_to_borrow,omitempty"`
-	VerificationRequiresPhone  string `yaml:"verification_requires_phone,omitempty"`
-	VerificationMinBooksShared string `yaml:"verification_min_books_shared,omitempty"`
-	CoverRefreshInterval       string `yaml:"cover_refresh_interval,omitempty"`
+	AllowRegistration           string `yaml:"allow_registration,omitempty"`
+	RequireRegistrationApproval string `yaml:"require_registration_approval,omitempty"`
+	MaxCopiesPerUser            string `yaml:"max_copies_per_user,omitempty"`
+	MaxActiveLoans              string `yaml:"max_active_loans,omitempty"`
+	RequireVerifiedToBorrow     string `yaml:"require_verified_to_borrow,omitempty"`
+	VerificationRequiresPhone   string `yaml:"verification_requires_phone,omitempty"`
+	VerificationMinBooksShared  string `yaml:"verification_min_books_shared,omitempty"`
+	CoverRefreshInterval        string `yaml:"cover_refresh_interval,omitempty"`
 }
 
 var knownYAMLKeys = map[string]struct{}{
 	"allow_registration":            {},
+	"require_registration_approval": {},
 	"max_copies_per_user":           {},
 	"max_active_loans":              {},
 	"require_verified_to_borrow":    {},
@@ -74,6 +76,9 @@ func flattenYAMLConfig(cfg appConfigFile) map[string]string {
 	if cfg.AllowRegistration != "" {
 		kv["allow_registration"] = cfg.AllowRegistration
 	}
+	if cfg.RequireRegistrationApproval != "" {
+		kv["require_registration_approval"] = cfg.RequireRegistrationApproval
+	}
 	if cfg.MaxCopiesPerUser != "" {
 		kv["max_copies_per_user"] = cfg.MaxCopiesPerUser
 	}
@@ -104,13 +109,14 @@ func settingsToYAML(settings []models.AppSetting) ([]byte, error) {
 	}
 
 	cfg := appConfigFile{
-		AllowRegistration:          m["allow_registration"],
-		MaxCopiesPerUser:           m["max_copies_per_user"],
-		MaxActiveLoans:             m["max_active_loans"],
-		RequireVerifiedToBorrow:    m["require_verified_to_borrow"],
-		VerificationRequiresPhone:  m["verification_requires_phone"],
-		VerificationMinBooksShared: m["verification_min_books_shared"],
-		CoverRefreshInterval:       m["cover_refresh_interval"],
+		AllowRegistration:           m["allow_registration"],
+		RequireRegistrationApproval: m["require_registration_approval"],
+		MaxCopiesPerUser:            m["max_copies_per_user"],
+		MaxActiveLoans:              m["max_active_loans"],
+		RequireVerifiedToBorrow:     m["require_verified_to_borrow"],
+		VerificationRequiresPhone:   m["verification_requires_phone"],
+		VerificationMinBooksShared:  m["verification_min_books_shared"],
+		CoverRefreshInterval:        m["cover_refresh_interval"],
 	}
 	return yaml.Marshal(cfg)
 }

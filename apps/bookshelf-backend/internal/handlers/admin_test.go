@@ -137,6 +137,34 @@ func TestUpdateUser_SuspensionChanges(t *testing.T) {
 	})
 }
 
+func TestUpdateUser_PendingApprovalChanges(t *testing.T) {
+	h, admin := newAdminHandler()
+	require.NoError(t, admin.SaveUser(&models.User{ID: 1, Role: "admin"}))
+	require.NoError(t, admin.SaveUser(&models.User{ID: 2, Role: "user", PendingApproval: true}))
+
+	t.Run("admin cannot set their own account back to pending approval", func(t *testing.T) {
+		input := &updateAdminUserInput{ID: 1}
+		pending := true
+		input.Body.PendingApproval = &pending
+
+		_, err := h.updateUser(fakeAuthedCtx(t, 1, "admin"), input)
+
+		require.Error(t, err)
+		assertStatus(t, err, 400)
+	})
+
+	t.Run("admin can approve a pending user", func(t *testing.T) {
+		input := &updateAdminUserInput{ID: 2}
+		pending := false
+		input.Body.PendingApproval = &pending
+
+		out, err := h.updateUser(fakeAuthedCtx(t, 1, "admin"), input)
+
+		require.NoError(t, err)
+		assert.False(t, out.Body.PendingApproval)
+	})
+}
+
 func TestDeleteUser(t *testing.T) {
 	t.Run("cannot delete yourself", func(t *testing.T) {
 		h, admin := newAdminHandler()

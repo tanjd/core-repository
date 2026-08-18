@@ -3,6 +3,7 @@ package services
 import (
 	"context"
 	"fmt"
+	"html"
 
 	"github.com/rs/zerolog"
 
@@ -64,11 +65,11 @@ func (w *LoanWorkflow) OnRequested(ctx context.Context, lr *models.LoanRequest) 
 	}
 
 	subject := "Someone wants to borrow your book"
-	html := fmt.Sprintf(
+	body := fmt.Sprintf(
 		"<p>Hi %s,</p><p><strong>%s</strong> has requested to borrow your copy of <em>%s</em>.</p>",
-		bookCopy.Owner.Name, borrower.Name, bookCopy.Book.Title,
+		html.EscapeString(bookCopy.Owner.Name), html.EscapeString(borrower.Name), html.EscapeString(bookCopy.Book.Title),
 	)
-	w.email.SendEmailAsync(ctx, bookCopy.Owner.Email, subject, html)
+	w.email.SendEmailAsync(ctx, bookCopy.Owner.Email, subject, body)
 	return nil
 }
 
@@ -107,12 +108,12 @@ func (w *LoanWorkflow) OnAccepted(ctx context.Context, lr *models.LoanRequest) e
 	}
 
 	subject := "Your loan request was accepted"
-	html := fmt.Sprintf(
+	body := fmt.Sprintf(
 		"<p>Hi %s,</p><p>Your request to borrow <em>%s</em> has been accepted by %s. "+
 			"Please get in touch to arrange collection.</p>",
-		borrower.Name, bookCopy.Book.Title, bookCopy.Owner.Name,
+		html.EscapeString(borrower.Name), html.EscapeString(bookCopy.Book.Title), html.EscapeString(bookCopy.Owner.Name),
 	)
-	w.email.SendEmailAsync(ctx, borrower.Email, subject, html)
+	w.email.SendEmailAsync(ctx, borrower.Email, subject, body)
 	return nil
 }
 
@@ -194,10 +195,10 @@ func (w *LoanWorkflow) OnReturned(ctx context.Context, lr *models.LoanRequest) e
 	}
 
 	subject := "Your loan has been marked as returned"
-	html := fmt.Sprintf(
+	body := fmt.Sprintf(
 		"<p>Hi %s,</p><p>Your loan of <em>%s</em> has been marked as returned. Thank you!</p>",
-		borrower.Name, bookCopy.Book.Title,
+		html.EscapeString(borrower.Name), html.EscapeString(bookCopy.Book.Title),
 	)
-	w.email.SendEmailAsync(ctx, borrower.Email, subject, html)
+	w.email.SendEmailAsync(ctx, borrower.Email, subject, body)
 	return nil
 }

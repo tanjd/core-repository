@@ -12,6 +12,7 @@ type User struct {
 	Password          string     `gorm:"not null" json:"-"`
 	Verified          bool       `gorm:"default:false" json:"verified"`
 	Suspended         bool       `gorm:"default:false" json:"suspended"`
+	PendingApproval   bool       `gorm:"column:pending_approval;default:false" json:"pending_approval"`
 	Role              string     `gorm:"default:'user';not null" json:"role"`
 	CreatedAt         time.Time  `json:"created_at"`
 	OTPCode           string     `gorm:"column:otp_code" json:"-"`

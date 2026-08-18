@@ -266,7 +266,11 @@ export const api = {
   },
   adminUpdateUser: (
     id: number,
-    data: { role?: "user" | "admin"; suspended?: boolean },
+    data: {
+      role?: "user" | "admin";
+      suspended?: boolean;
+      pending_approval?: boolean;
+    },
   ) =>
     request<User>(`/admin/users/${id}`, {
       method: "PATCH",

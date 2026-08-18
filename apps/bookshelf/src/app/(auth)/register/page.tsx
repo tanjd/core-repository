@@ -40,6 +40,13 @@ export default function RegisterPage() {
     setLoading(true);
     try {
       const { token, user } = await api.register({ name, email, password });
+      if (!token) {
+        toast.success(
+          "Account created! An admin needs to approve it before you can sign in.",
+        );
+        router.push("/login");
+        return;
+      }
       localStorage.setItem("bookshelf_token", token);
       localStorage.setItem("bookshelf_user", JSON.stringify(user));
       toast.success("Account created! Welcome to Bookshelf.");

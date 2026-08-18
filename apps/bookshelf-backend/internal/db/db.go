@@ -128,6 +128,7 @@ func ensureBaseline(sqlDB *sql.DB) error {
 func Seed(database *gorm.DB) {
 	defaults := []models.AppSetting{
 		{Key: "allow_registration", Value: "true"},
+		{Key: "require_registration_approval", Value: "false"},
 		{Key: "max_copies_per_user", Value: "10"},
 		{Key: "require_verified_to_borrow", Value: "false"},
 		{Key: "max_active_loans", Value: "0"},
