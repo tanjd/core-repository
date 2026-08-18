@@ -227,8 +227,11 @@ async function request<T>(path: string, options?: RequestInit): Promise<T> {
   };
   const res = await fetch(`${BASE}${path}`, { ...options, headers });
   if (!res.ok) {
-    const err = await res.json().catch(() => ({ error: res.statusText }));
-    throw new Error(err.error ?? "Request failed");
+    // huma's ErrorModel puts the message in `detail` (see e.g. auth.go's
+    // huma.Error400BadRequest calls), not `error` — this previously always
+    // fell through to the generic fallback below for every API error.
+    const err = await res.json().catch(() => ({ detail: res.statusText }));
+    throw new Error(err.detail ?? "Request failed");
   }
   const text = await res.text();
   if (!text) return undefined as T;
@@ -243,10 +246,37 @@ export const api = {
       method: "POST",
       body: JSON.stringify(data),
     }),
-  register: (data: { name: string; email: string; password: string }) =>
+  register: (data: {
+    name: string;
+    email: string;
+    password: string;
+    phone?: string;
+    email_verification_token: string;
+    phone_verification_token?: string;
+  }) =>
     request<AuthResponse>("/auth/register", {
       method: "POST",
       body: JSON.stringify(data),
+    }),
+  sendRegisterEmailOTP: (email: string) =>
+    request<{ debug_code?: string }>("/auth/register/send-email-otp", {
+      method: "POST",
+      body: JSON.stringify({ email }),
+    }),
+  verifyRegisterEmailOTP: (email: string, code: string) =>
+    request<{ verification_token: string }>("/auth/register/verify-email-otp", {
+      method: "POST",
+      body: JSON.stringify({ email, code }),
+    }),
+  sendRegisterPhoneOTP: (phone: string) =>
+    request<{ mock_code: string }>("/auth/register/send-phone-otp", {
+      method: "POST",
+      body: JSON.stringify({ phone }),
+    }),
+  verifyRegisterPhoneOTP: (phone: string, code: string) =>
+    request<{ verification_token: string }>("/auth/register/verify-phone-otp", {
+      method: "POST",
+      body: JSON.stringify({ phone, code }),
     }),
   login: (data: { email: string; password: string }) =>
     request<AuthResponse>("/auth/login", {

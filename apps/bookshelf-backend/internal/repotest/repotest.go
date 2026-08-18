@@ -9,6 +9,7 @@ package repotest
 import (
 	"sort"
 	"sync"
+	"time"
 
 	"github.com/tanjd/core-repository/apps/bookshelf-backend/internal/models"
 	"github.com/tanjd/core-repository/apps/bookshelf-backend/internal/repository"
@@ -95,6 +96,53 @@ func (r *UserRepository) HasAdmin() (bool, error) {
 		}
 	}
 	return false, nil
+}
+
+// RegistrationVerificationRepository is an in-memory fake of
+// repository.RegistrationVerificationRepository.
+type RegistrationVerificationRepository struct {
+	mu    sync.Mutex
+	byKey map[string]*models.RegistrationVerification
+}
+
+// NewRegistrationVerificationRepository creates an empty fake
+// RegistrationVerificationRepository.
+func NewRegistrationVerificationRepository() *RegistrationVerificationRepository {
+	return &RegistrationVerificationRepository{byKey: map[string]*models.RegistrationVerification{}}
+}
+
+func regVerificationKey(channel, identifier string) string {
+	return channel + ":" + identifier
+}
+
+// Upsert replaces any existing code for (channel, identifier).
+func (r *RegistrationVerificationRepository) Upsert(channel, identifier, code string, expiresAt time.Time) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.byKey[regVerificationKey(channel, identifier)] = &models.RegistrationVerification{
+		Channel: channel, Identifier: identifier, Code: code, ExpiresAt: expiresAt,
+	}
+	return nil
+}
+
+// Find returns the stored verification for (channel, identifier), or repository.ErrNotFound.
+func (r *RegistrationVerificationRepository) Find(channel, identifier string) (*models.RegistrationVerification, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	v, ok := r.byKey[regVerificationKey(channel, identifier)]
+	if !ok {
+		return nil, repository.ErrNotFound
+	}
+	cp := *v
+	return &cp, nil
+}
+
+// Delete removes the stored verification for (channel, identifier), if present.
+func (r *RegistrationVerificationRepository) Delete(channel, identifier string) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	delete(r.byKey, regVerificationKey(channel, identifier))
+	return nil
 }
 
 // AdminRepository is an in-memory fake of repository.AdminRepository.
@@ -759,10 +807,11 @@ func totalPages(length, pageSize int) int {
 }
 
 var (
-	_ repository.UserRepository         = (*UserRepository)(nil)
-	_ repository.AdminRepository        = (*AdminRepository)(nil)
-	_ repository.CopyRepository         = (*CopyRepository)(nil)
-	_ repository.NotificationRepository = (*NotificationRepository)(nil)
-	_ repository.WaitlistRepository     = (*WaitlistRepository)(nil)
-	_ repository.LoanRequestRepository  = (*LoanRequestRepository)(nil)
+	_ repository.UserRepository                     = (*UserRepository)(nil)
+	_ repository.AdminRepository                    = (*AdminRepository)(nil)
+	_ repository.CopyRepository                     = (*CopyRepository)(nil)
+	_ repository.NotificationRepository             = (*NotificationRepository)(nil)
+	_ repository.WaitlistRepository                 = (*WaitlistRepository)(nil)
+	_ repository.LoanRequestRepository              = (*LoanRequestRepository)(nil)
+	_ repository.RegistrationVerificationRepository = (*RegistrationVerificationRepository)(nil)
 )

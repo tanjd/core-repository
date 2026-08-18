@@ -4,6 +4,7 @@ export interface User {
   email: string;
   phone: string;
   verified: boolean;
+  phone_verified: boolean;
   suspended: boolean;
   pending_approval: boolean;
   role: "user" | "admin";

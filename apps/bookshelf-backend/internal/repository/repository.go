@@ -5,6 +5,7 @@ package repository
 
 import (
 	"errors"
+	"time"
 
 	"github.com/tanjd/core-repository/apps/bookshelf-backend/internal/models"
 )
@@ -31,6 +32,17 @@ type UserRepository interface {
 	FindByID(id uint) (*models.User, error)
 	Save(user *models.User) error
 	HasAdmin() (bool, error)
+}
+
+// RegistrationVerificationRepository handles persistence for the short-lived
+// pre-registration OTP codes proving control of an email or phone number
+// before any User row exists.
+type RegistrationVerificationRepository interface {
+	// Upsert replaces any existing code for (channel, identifier) with a new
+	// one — a resend supersedes rather than accumulates.
+	Upsert(channel, identifier, code string, expiresAt time.Time) error
+	Find(channel, identifier string) (*models.RegistrationVerification, error)
+	Delete(channel, identifier string) error
 }
 
 // BookRepository handles persistence for Book records.
