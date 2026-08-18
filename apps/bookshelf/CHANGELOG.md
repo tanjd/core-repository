@@ -1,3 +1,13 @@
+## 0.3.1 (2026-08-18)
+
+### 🩹 Fixes
+
+- **bookshelf:** close session-revocation gap, harden login and password rules ([#40](https://github.com/tanjd/core-repository/pull/40))
+
+### ❤️ Thank You
+
+- Jeddy Tan @tanjd
+
 ## 0.3.0 (2026-08-18)
 
 ### 🚀 Features
