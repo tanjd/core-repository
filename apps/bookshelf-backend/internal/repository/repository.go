@@ -32,6 +32,11 @@ type UserRepository interface {
 	FindByID(id uint) (*models.User, error)
 	Save(user *models.User) error
 	HasAdmin() (bool, error)
+	// CreateAdminIfNoneExists atomically checks whether an admin already
+	// exists and, if not, creates user with role "admin". Returns
+	// ErrConflict if an admin already exists (closes the TOCTOU window
+	// between check and insert).
+	CreateAdminIfNoneExists(user *models.User) error
 }
 
 // RegistrationVerificationRepository handles persistence for the short-lived

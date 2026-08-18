@@ -98,6 +98,30 @@ func (r *UserRepository) HasAdmin() (bool, error) {
 	return false, nil
 }
 
+// CreateAdminIfNoneExists inserts user (assigning a new ID, forcing Role to
+// "admin") if no stored user currently has the "admin" role, holding the
+// lock across the check and insert to mirror the real transaction's TOCTOU
+// guard. Returns repository.ErrConflict if an admin already exists or if
+// the email is already taken, matching the GORM impl's unique-email index.
+func (r *UserRepository) CreateAdminIfNoneExists(user *models.User) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	for _, u := range r.byID {
+		if u.Role == "admin" {
+			return repository.ErrConflict
+		}
+		if u.Email == user.Email {
+			return repository.ErrConflict
+		}
+	}
+	r.nextID++
+	user.ID = r.nextID
+	user.Role = "admin"
+	cp := *user
+	r.byID[user.ID] = &cp
+	return nil
+}
+
 // RegistrationVerificationRepository is an in-memory fake of
 // repository.RegistrationVerificationRepository.
 type RegistrationVerificationRepository struct {

@@ -4,8 +4,6 @@ services:
     image: ghcr.io/tanjd/bookshelf-backend:latest
     container_name: bookshelf-backend
     restart: unless-stopped
-    ports:
-      - "8000:8000"
     volumes:
       - /mnt/apps/bookshelf:/app/data
     environment:
@@ -14,10 +12,10 @@ services:
       - DB_PATH=${DB_PATH}
       - JWT_SECRET=${JWT_SECRET}
       - CORS_ORIGINS=https://${DOMAIN}
-      - SMTP_HOST=
+      - SMTP_HOST=${SMTP_HOST}
       - SMTP_PORT=587
-      - SMTP_USERNAME=
-      - SMTP_PASSWORD=
+      - SMTP_USERNAME=${SMTP_USERNAME}
+      - SMTP_PASSWORD=${SMTP_PASSWORD}
       - EMAIL_FROM=${EMAIL_FROM:-noreply@yourdomain.com}
       - GOOGLE_BOOKS_API_KEY=${GOOGLE_BOOKS_API_KEY:-}
       - METADATA_REFRESH_INTERVAL=${METADATA_REFRESH_INTERVAL:-}
@@ -39,8 +37,6 @@ services:
     image: ghcr.io/tanjd/bookshelf:latest
     container_name: bookshelf-frontend
     restart: unless-stopped
-    ports:
-      - "3000:3000"
     environment:
       # The Next.js server (inside Docker) proxies /api/* to this URL.
       # Uses the Docker Compose service name — no changes needed here.
@@ -50,11 +46,18 @@ services:
       - bookshelf
     labels:
       - "traefik.enable=true"
-      - "traefik.http.routers.bookshelf.rule=Host(`bookshelf.tanjd.com`)"
+      - "traefik.http.routers.bookshelf.rule=Host(`${DOMAIN}`)"
       - "traefik.http.routers.bookshelf.entrypoints=websecure"
       - "traefik.http.routers.bookshelf.tls.certresolver=cloudflare"
       - "traefik.http.services.bookshelf.loadbalancer.server.port=3000"
       - "traefik.docker.network=proxy"
+      - "traefik.http.middlewares.bookshelf-headers.headers.stsSeconds=31536000"
+      - "traefik.http.middlewares.bookshelf-headers.headers.stsIncludeSubdomains=true"
+      - "traefik.http.middlewares.bookshelf-headers.headers.stsPreload=false"
+      - "traefik.http.middlewares.bookshelf-headers.headers.contentTypeNosniff=true"
+      - "traefik.http.middlewares.bookshelf-headers.headers.customFrameOptionsValue=SAMEORIGIN"
+      - "traefik.http.middlewares.bookshelf-headers.headers.referrerPolicy=strict-origin-when-cross-origin"
+      - "traefik.http.routers.bookshelf.middlewares=bookshelf-headers"
     depends_on:
       bookshelf-backend:
         condition: service_healthy

@@ -25,3 +25,22 @@ func TestSendEmail_SkipsEvenWithDevOverride(t *testing.T) {
 
 	assert.NoError(t, err)
 }
+
+func TestSendEmail_RejectsCRLFInRecipient(t *testing.T) {
+	// The guard must fire even with no SMTP_HOST configured (host=="" would
+	// otherwise no-op before ever reaching the header construction), proving
+	// it isn't skippable via the local/dev no-op path.
+	svc := NewEmailService("", "", "", "", "from@example.com", "prod", "")
+
+	err := svc.SendEmail(context.Background(), "to@example.com\r\nBcc: attacker@evil.com", "subject", "<p>body</p>")
+
+	assert.Error(t, err)
+}
+
+func TestSendEmail_RejectsCRLFInSubject(t *testing.T) {
+	svc := NewEmailService("", "", "", "", "from@example.com", "prod", "")
+
+	err := svc.SendEmail(context.Background(), "to@example.com", "subject\r\nBcc: attacker@evil.com", "<p>body</p>")
+
+	assert.Error(t, err)
+}
