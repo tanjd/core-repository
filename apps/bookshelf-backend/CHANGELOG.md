@@ -1,3 +1,13 @@
+## 0.4.6 (2026-08-19)
+
+### 🚀 Features
+
+- **bookshelf:** add wishlist board with catalog auto-fulfillment ([#49](https://github.com/tanjd/core-repository/pull/49))
+
+### ❤️ Thank You
+
+- Jeddy Tan @tanjd
+
 ## 0.4.5 (2026-08-19)
 
 This was a version bump only for bookshelf-backend to align it with other projects, there were no code changes.
