@@ -7,11 +7,28 @@ name: PR Title
 # exactly what nx release's conventionalCommits engine reads to decide
 # whether a project gets a version bump. A non-conventional title means
 # nx release silently skips versioning/publishing for every project the PR
-# touches, even though real code shipped to main. This already happened to
-# bookshelf-backend (see apps/bookshelf-backend/CHANGELOG.md's 0.3.0 entry).
-# This check isn't wired up as a required status check yet (see root
-# CLAUDE.md's "Known gaps" — branch protection on main isn't enabled), so it
-# reports pass/fail but doesn't block merging on its own.
+# touches, even though real code shipped to main. This has already happened
+# twice: bookshelf-backend's 0.3.0 CHANGELOG.md entry, and PR #50 (squash
+# title "Add password reset, contact prefs, loan-return tracking, and
+# backups" — no type prefix, so bookshelf and bookshelf-backend both got
+# silently skipped despite real feature commits touching both).
+#
+# This job (`validate`) is one of the required status checks in main's
+# branch protection (see root CLAUDE.md), so a non-conventional title now
+# blocks merging — but enforce_admins is off, so it's still bypassable
+# manually, which is how PR #50 got through.
+#
+# Separately: a PR that touches more than one nx project (e.g. both
+# apps/bookshelf and apps/bookshelf-backend) should scope its title to all
+# of them, comma-separated — e.g. `feat(bookshelf,bookshelf-backend): ...`.
+# nx's conventionalCommits.useCommitScope defaults to true, so a project
+# touched by a commit but NOT named in its scope only gets an indirect
+# patch-level bump, never the real feat/fix-implied bump, even though it's
+# still listed in that project's changelog under the right heading. Scoping
+# only "bookshelf" on a PR that also touches bookshelf-backend files is why
+# bookshelf-backend has repeatedly landed real features as patch bumps
+# (0.4.3 -> 0.4.4 for PR #47, 0.4.0 -> 0.4.1 for PR #43, etc.) instead of
+# minor ones.
 
 on:
   pull_request_target:
