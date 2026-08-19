@@ -54,6 +54,10 @@ type RegistrationVerificationRepository interface {
 type BookRepository interface {
 	FindByOLKey(olKey string) (*models.Book, error)
 	FindByGoogleBooksID(id string) (*models.Book, error)
+	// FindByISBN is a fallback lookup for createBook's upsert when neither a
+	// stronger external key (OL key or Google Books ID) is present — see
+	// BookHandler.findExistingBook.
+	FindByISBN(isbn string) (*models.Book, error)
 	List(search, sort string, availableOnly bool) ([]models.Book, error)
 	ListPaginated(search, sort string, availableOnly bool, page, pageSize int) (*PaginatedResult[models.Book], error)
 	ListRecent(limit int) ([]models.Book, error)

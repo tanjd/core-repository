@@ -2,7 +2,13 @@
 
 import { useState, useEffect, useRef } from "react";
 import Link from "next/link";
-import { Search, SlidersHorizontal, Plus, PlusCircle } from "lucide-react";
+import {
+  Search,
+  SlidersHorizontal,
+  Plus,
+  PlusCircle,
+  ScanLine,
+} from "lucide-react";
 import { api } from "@/lib/api";
 import type { Book, PaginatedResult } from "@/lib/types";
 import { BookCard } from "@/components/BookCard";
@@ -216,8 +222,9 @@ export default function CatalogPage() {
       {/* Mobile-only speed-dial FAB — desktop already has "Share a Book"
           and "Wishlist" in the top nav; neither is a bottom-tab slot
           (see navItems.ts), so this is how mobile users reach either from
-          the primary browse screen. Sits above the bottom tab bar + its
-          safe-area inset. */}
+          the primary browse screen. "Scan ISBN" has no desktop nav
+          affordance at all (most desktops lack a book-facing camera). Sits
+          above the bottom tab bar + its safe-area inset. */}
       <Popover>
         <PopoverTrigger asChild>
           <button
@@ -240,6 +247,13 @@ export default function CatalogPage() {
           >
             <PlusCircle className="size-4" />
             Share a Book
+          </Link>
+          <Link
+            href="/share/scan"
+            className="flex items-center gap-2 rounded-md px-3 py-2 text-sm hover:bg-accent"
+          >
+            <ScanLine className="size-4" />
+            Scan ISBN
           </Link>
           <Link
             href="/wishlist"
