@@ -1,0 +1,2 @@
+-- No column drop: same rationale as prior migrations' down files — no established
+-- pattern in this repo drops a column, so returned_by is left in place here too.

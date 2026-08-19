@@ -69,7 +69,9 @@ func (w *LoanWorkflow) OnRequested(ctx context.Context, lr *models.LoanRequest) 
 		"<p>Hi %s,</p><p><strong>%s</strong> has requested to borrow your copy of <em>%s</em>.</p>",
 		html.EscapeString(bookCopy.Owner.Name), html.EscapeString(borrower.Name), html.EscapeString(bookCopy.Book.Title),
 	)
-	w.email.SendEmailAsync(ctx, bookCopy.Owner.Email, subject, body)
+	if bookCopy.Owner.EmailNotificationsEnabled {
+		w.email.SendEmailAsync(ctx, bookCopy.Owner.Email, subject, body)
+	}
 	return nil
 }
 
@@ -113,7 +115,9 @@ func (w *LoanWorkflow) OnAccepted(ctx context.Context, lr *models.LoanRequest) e
 			"Please get in touch to arrange collection.</p>",
 		html.EscapeString(borrower.Name), html.EscapeString(bookCopy.Book.Title), html.EscapeString(bookCopy.Owner.Name),
 	)
-	w.email.SendEmailAsync(ctx, borrower.Email, subject, body)
+	if borrower.EmailNotificationsEnabled {
+		w.email.SendEmailAsync(ctx, borrower.Email, subject, body)
+	}
 	return nil
 }
 
@@ -150,14 +154,33 @@ func (w *LoanWorkflow) OnCancelled(_ context.Context, lr *models.LoanRequest) er
 	return nil
 }
 
-// OnReturned fires when the owner marks a loan as returned.
-// The copy is set back to "available", the borrower is notified, and any
-// waitlisted users are notified that the copy is now available.
+// OnReturned fires when either the borrower or the copy owner marks a loan as
+// returned. The copy is set back to "available", whichever party didn't
+// perform the return is notified, and any waitlisted users are notified that
+// the copy is now available.
+//
+// Known limitation: if this loan's return is later undone (OnReturnUndone),
+// the waitlist notified/cleared below cannot be restored. In practice this is
+// bounded — undo requires the copy to still be "available" (see undoReturn),
+// so it's only possible before anyone has acted on their waitlist
+// notification; once someone does, the copy moves off "available" and undo
+// is blocked anyway.
 func (w *LoanWorkflow) OnReturned(ctx context.Context, lr *models.LoanRequest) error {
 	w.copies.UpdateStatus(lr.CopyID, "available") //nolint:errcheck,gosec
 
+	bookCopy, err := w.copies.GetByIDWithAssociations(lr.CopyID)
+	if err != nil {
+		return fmt.Errorf("OnReturned: load copy: %w", err)
+	}
+
+	// Notify whichever party didn't perform the return.
+	recipientID := lr.BorrowerID
+	if lr.ReturnedBy != nil && *lr.ReturnedBy == lr.BorrowerID {
+		recipientID = bookCopy.OwnerID
+	}
+
 	n := models.Notification{
-		RecipientID:   lr.BorrowerID,
+		RecipientID:   recipientID,
 		Type:          "marked_returned",
 		LoanRequestID: &lr.ID,
 	}
@@ -165,40 +188,105 @@ func (w *LoanWorkflow) OnReturned(ctx context.Context, lr *models.LoanRequest) e
 		zerolog.Ctx(ctx).Warn().Err(err).Msg("OnReturned: create notification")
 	}
 
+	w.notifyWaitlistAndClear(ctx, lr)
+	w.sendReturnedEmail(ctx, recipientID, lr, bookCopy)
+	return nil
+}
+
+// notifyWaitlistAndClear notifies every user waitlisted for lr's copy that it
+// is now available, then clears the waitlist — the copy has just become
+// available, so it can't stay a promise for anyone still on the list.
+func (w *LoanWorkflow) notifyWaitlistAndClear(ctx context.Context, lr *models.LoanRequest) {
+	if w.waitlists == nil {
+		return
+	}
+	entries, wErr := w.waitlists.ListByCopyID(lr.CopyID)
+	if wErr != nil || len(entries) == 0 {
+		return
+	}
+	for _, entry := range entries {
+		wn := models.Notification{
+			RecipientID:   entry.UserID,
+			Type:          "waitlist_available",
+			LoanRequestID: &lr.ID,
+		}
+		if nErr := w.notifs.Create(&wn); nErr != nil {
+			zerolog.Ctx(ctx).Warn().Err(nErr).Msg("OnReturned: waitlist notification")
+		}
+	}
+	w.waitlists.DeleteByCopyID(lr.CopyID) //nolint:errcheck,gosec
+}
+
+// sendReturnedEmail best-effort emails whichever party (identified by
+// recipientID) didn't perform the return, with copy tailored to the
+// direction: the borrower being thanked, or the owner being told their book
+// came back.
+func (w *LoanWorkflow) sendReturnedEmail(ctx context.Context, recipientID uint, lr *models.LoanRequest, bookCopy *models.Copy) {
 	borrower, err := w.users.FindByID(lr.BorrowerID)
 	if err != nil {
 		zerolog.Ctx(ctx).Warn().Err(err).Uint("borrower_id", lr.BorrowerID).Msg("OnReturned: load borrower")
+		return
+	}
+
+	if recipientID == lr.BorrowerID {
+		subject := "Your loan has been marked as returned"
+		body := fmt.Sprintf(
+			"<p>Hi %s,</p><p>Your loan of <em>%s</em> has been marked as returned. Thank you!</p>",
+			html.EscapeString(borrower.Name), html.EscapeString(bookCopy.Book.Title),
+		)
+		if borrower.EmailNotificationsEnabled {
+			w.email.SendEmailAsync(ctx, borrower.Email, subject, body)
+		}
+		return
+	}
+
+	owner := bookCopy.Owner
+	subject := "A loan of your book was marked as returned"
+	body := fmt.Sprintf(
+		"<p>Hi %s,</p><p>%s marked your copy of <em>%s</em> as returned.</p>",
+		html.EscapeString(owner.Name), html.EscapeString(borrower.Name), html.EscapeString(bookCopy.Book.Title),
+	)
+	if owner.EmailNotificationsEnabled {
+		w.email.SendEmailAsync(ctx, owner.Email, subject, body)
+	}
+}
+
+// OnReturnUndone fires when the owner reverses a "returned" loan back to
+// "accepted" because the return wasn't genuine. The copy goes back to
+// "loaned" and the borrower is notified. See OnReturned's doc comment for the
+// waitlist-loss limitation this doesn't attempt to fix.
+func (w *LoanWorkflow) OnReturnUndone(ctx context.Context, lr *models.LoanRequest) error {
+	if err := w.copies.UpdateStatus(lr.CopyID, "loaned"); err != nil {
+		return fmt.Errorf("OnReturnUndone: update copy status: %w", err)
+	}
+
+	n := models.Notification{
+		RecipientID:   lr.BorrowerID,
+		Type:          "return_undone",
+		LoanRequestID: &lr.ID,
+	}
+	if err := w.notifs.Create(&n); err != nil {
+		zerolog.Ctx(ctx).Warn().Err(err).Msg("OnReturnUndone: create notification")
+	}
+
+	borrower, err := w.users.FindByID(lr.BorrowerID)
+	if err != nil {
+		zerolog.Ctx(ctx).Warn().Err(err).Uint("borrower_id", lr.BorrowerID).Msg("OnReturnUndone: load borrower")
 		return nil // email is best-effort
 	}
 
 	bookCopy, err := w.copies.GetByIDWithAssociations(lr.CopyID)
 	if err != nil {
-		return fmt.Errorf("OnReturned: load copy: %w", err)
+		return fmt.Errorf("OnReturnUndone: load copy: %w", err)
 	}
 
-	// Notify waitlisted users and clear the waitlist.
-	if w.waitlists != nil {
-		entries, wErr := w.waitlists.ListByCopyID(lr.CopyID)
-		if wErr == nil && len(entries) > 0 {
-			for _, entry := range entries {
-				wn := models.Notification{
-					RecipientID:   entry.UserID,
-					Type:          "waitlist_available",
-					LoanRequestID: &lr.ID,
-				}
-				if nErr := w.notifs.Create(&wn); nErr != nil {
-					zerolog.Ctx(ctx).Warn().Err(nErr).Msg("OnReturned: waitlist notification")
-				}
-			}
-			w.waitlists.DeleteByCopyID(lr.CopyID) //nolint:errcheck,gosec
-		}
-	}
-
-	subject := "Your loan has been marked as returned"
+	subject := "Your return was undone"
 	body := fmt.Sprintf(
-		"<p>Hi %s,</p><p>Your loan of <em>%s</em> has been marked as returned. Thank you!</p>",
-		html.EscapeString(borrower.Name), html.EscapeString(bookCopy.Book.Title),
+		"<p>Hi %s,</p><p>%s undid the return of <em>%s</em> — your loan is active again.</p>",
+		html.EscapeString(borrower.Name), html.EscapeString(bookCopy.Owner.Name), html.EscapeString(bookCopy.Book.Title),
 	)
-	w.email.SendEmailAsync(ctx, borrower.Email, subject, body)
+	if borrower.EmailNotificationsEnabled {
+		w.email.SendEmailAsync(ctx, borrower.Email, subject, body)
+	}
 	return nil
 }

@@ -26,6 +26,16 @@ type User struct {
 
 	ResetPasswordOTPCode   string     `gorm:"column:reset_password_otp_code" json:"-"`
 	ResetPasswordOTPExpiry *time.Time `gorm:"column:reset_password_otp_expiry" json:"-"`
+
+	// No GORM "default:true" tag here deliberately — same reasoning as
+	// Announcement.Active below: GORM's Create() treats a zero-valued bool
+	// field carrying a "default" tag as unset and substitutes the DB
+	// default, silently turning an explicit false into true. register/setup
+	// below explicitly set this true; the migration's SQL-level DEFAULT 1
+	// is a safety net for direct inserts that bypass application code.
+	EmailNotificationsEnabled bool   `gorm:"column:email_notifications_enabled;not null" json:"email_notifications_enabled"`
+	TelegramUsername          string `gorm:"column:telegram_username" json:"telegram_username,omitempty"`
+	WhatsAppUsername          string `gorm:"column:whatsapp_username" json:"whatsapp_username,omitempty"`
 }
 
 // RegistrationVerification holds a short-lived OTP code proving control of an
@@ -94,6 +104,7 @@ type LoanRequest struct {
 	RespondedAt        *time.Time `json:"responded_at"`
 	LoanedAt           *time.Time `json:"loaned_at"`
 	ReturnedAt         *time.Time `json:"returned_at"`
+	ReturnedBy         *uint      `gorm:"column:returned_by" json:"returned_by,omitempty"`
 	ExpectedReturnDate *time.Time `json:"expected_return_date,omitempty"`
 	Copy               Copy       `json:"copy,omitempty"`
 	Borrower           User       `json:"borrower,omitempty"`
@@ -136,7 +147,7 @@ type WishlistRequest struct {
 // Notification is an in-app alert delivered to a user.
 // Type values: request_received | request_accepted | request_rejected |
 //
-//	marked_loaned | marked_returned | waitlist_available |
+//	marked_loaned | marked_returned | return_undone | waitlist_available |
 //	copy_transferred_in | copy_transferred_out | wishlist_fulfilled
 type Notification struct {
 	ID                uint      `gorm:"primarykey" json:"id"`

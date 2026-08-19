@@ -82,6 +82,7 @@ type getLoanRequestBody struct {
 	RespondedAt        *time.Time              `json:"responded_at"`
 	LoanedAt           *time.Time              `json:"loaned_at"`
 	ReturnedAt         *time.Time              `json:"returned_at"`
+	ReturnedBy         *uint                   `json:"returned_by,omitempty"`
 	ExpectedReturnDate *time.Time              `json:"expected_return_date,omitempty"`
 	Copy               loanRequestCopyResponse `json:"copy"`
 	Borrower           safeUser                `json:"borrower"`
@@ -120,12 +121,21 @@ type listMineActiveOutput struct {
 type updateLoanRequestInput struct {
 	ID   uint `path:"id" doc:"Loan request ID"`
 	Body struct {
-		Status       string `json:"status" required:"true" doc:"New status: accepted, rejected, returned, or cancelled"`
+		Status       string `json:"status" required:"true" doc:"New status: accepted, rejected, returned, or cancelled. Submitting \"accepted\" while the loan is currently \"returned\" undoes the return (owner only)."`
 		NewCondition string `json:"new_condition,omitempty" doc:"Updated copy condition on return: good, fair, or worn"`
 	}
 }
 
 type updateLoanRequestOutput struct{ Body models.LoanRequest }
+
+type updateExpectedReturnDateInput struct {
+	ID   uint `path:"id" doc:"Loan request ID"`
+	Body struct {
+		ExpectedReturnDate string `json:"expected_return_date" required:"true" doc:"New agreed return date (YYYY-MM-DD)"`
+	}
+}
+
+type updateExpectedReturnDateOutput struct{ Body models.LoanRequest }
 
 // --- Route registration ---
 
@@ -182,9 +192,18 @@ func (h *LoanRequestHandler) RegisterRoutes(api huma.API) {
 		Method:      "PATCH",
 		Path:        "/loan-requests/{id}",
 		Tags:        []string{"loan-requests"},
-		Summary:     "Update a loan request status (accept, reject, cancel, or mark returned)",
+		Summary:     "Update a loan request status (accept, reject, cancel, mark returned, or undo a return)",
 		Security:    []map[string][]string{{"bearer": {}}},
 	}, h.updateLoanRequest)
+
+	huma.Register(api, huma.Operation{
+		OperationID: "update-loan-request-return-date",
+		Method:      "PATCH",
+		Path:        "/loan-requests/{id}/expected-return-date",
+		Tags:        []string{"loan-requests"},
+		Summary:     "Set or update the agreed return date for an accepted loan",
+		Security:    []map[string][]string{{"bearer": {}}},
+	}, h.updateExpectedReturnDate)
 }
 
 // --- Handlers ---
@@ -210,6 +229,7 @@ func toGetLoanRequestBody(lr models.LoanRequest) getLoanRequestBody {
 		RespondedAt:        lr.RespondedAt,
 		LoanedAt:           lr.LoanedAt,
 		ReturnedAt:         lr.ReturnedAt,
+		ReturnedBy:         lr.ReturnedBy,
 		ExpectedReturnDate: lr.ExpectedReturnDate,
 		Copy: loanRequestCopyResponse{
 			ID:        lr.Copy.ID,
@@ -335,6 +355,7 @@ func (h *LoanRequestHandler) listLoanRequests(ctx context.Context, input *listLo
 			RespondedAt:        lr.RespondedAt,
 			LoanedAt:           lr.LoanedAt,
 			ReturnedAt:         lr.ReturnedAt,
+			ReturnedBy:         lr.ReturnedBy,
 			ExpectedReturnDate: lr.ExpectedReturnDate,
 			Copy: loanRequestCopyResponse{
 				ID:        lr.Copy.ID,
@@ -600,6 +621,7 @@ func (h *LoanRequestHandler) getLoanRequest(ctx context.Context, input *getLoanR
 		RespondedAt:        lr.RespondedAt,
 		LoanedAt:           lr.LoanedAt,
 		ReturnedAt:         lr.ReturnedAt,
+		ReturnedBy:         lr.ReturnedBy,
 		ExpectedReturnDate: lr.ExpectedReturnDate,
 		Copy: loanRequestCopyResponse{
 			ID:        lr.Copy.ID,
@@ -634,14 +656,20 @@ func (h *LoanRequestHandler) updateLoanRequest(ctx context.Context, input *updat
 	ownerID := lr.Copy.OwnerID
 	now := time.Now()
 
+	var action string
 	var transitionErr error
 	switch input.Body.Status {
-	case "accepted", "rejected":
-		transitionErr = h.acceptOrRejectLoan(lr, callerID, ownerID, input.Body.Status, now)
+	case "accepted":
+		action, transitionErr = h.acceptedTransition(lr, callerID, ownerID, now)
+	case "rejected":
+		transitionErr = h.acceptOrRejectLoan(lr, callerID, ownerID, "rejected", now)
+		action = "rejected"
 	case "returned":
 		transitionErr = h.returnLoan(ctx, lr, callerID, ownerID, now, input.Body.NewCondition)
+		action = "returned"
 	case "cancelled":
 		transitionErr = h.cancelLoan(lr, callerID)
+		action = "cancelled"
 	default:
 		transitionErr = huma.Error400BadRequest("invalid status transition")
 	}
@@ -653,7 +681,7 @@ func (h *LoanRequestHandler) updateLoanRequest(ctx context.Context, input *updat
 		return nil, huma.Error500InternalServerError("could not update loan request")
 	}
 
-	h.runLoanWorkflowSideEffect(ctx, lr)
+	h.runLoanWorkflowSideEffect(ctx, lr, action)
 
 	return &updateLoanRequestOutput{Body: *lr}, nil
 }
@@ -672,19 +700,60 @@ func (h *LoanRequestHandler) acceptOrRejectLoan(lr *models.LoanRequest, callerID
 	return nil
 }
 
+// acceptedTransition dispatches a "status: accepted" PATCH to either a fresh
+// pending→accepted acceptance, or — if the loan is currently "returned" — an
+// owner-only undo of that return. It returns the workflow action name for
+// runLoanWorkflowSideEffect to fire on, since both paths leave lr.Status as
+// "accepted" and can no longer be told apart afterwards.
+func (h *LoanRequestHandler) acceptedTransition(lr *models.LoanRequest, callerID, ownerID uint, now time.Time) (string, error) {
+	if lr.Status == "returned" {
+		if err := h.undoReturn(lr, callerID, ownerID); err != nil {
+			return "", err
+		}
+		return "return_undone", nil
+	}
+	if err := h.acceptOrRejectLoan(lr, callerID, ownerID, "accepted", now); err != nil {
+		return "", err
+	}
+	return "accepted", nil
+}
+
+// undoReturn reverses a "returned" loan back to "accepted" because the return
+// wasn't genuine. Only the copy owner may do this, and only while the copy is
+// still exactly in the state OnReturned left it ("available") — i.e. nobody
+// has requested, accepted, or otherwise touched the copy since. That guard
+// prevents an undo from silently clobbering a different borrower's now-active
+// loan on the same copy.
+func (h *LoanRequestHandler) undoReturn(lr *models.LoanRequest, callerID, ownerID uint) error {
+	if callerID != ownerID {
+		return huma.Error403Forbidden("only the copy owner can undo a return")
+	}
+	if lr.Copy.Status != "available" {
+		return huma.Error409Conflict(
+			"this copy is no longer available — it may have been re-requested or loaned out since this was marked returned",
+		)
+	}
+	lr.Status = "accepted"
+	lr.ReturnedAt = nil
+	lr.ReturnedBy = nil
+	return nil
+}
+
 // returnLoan validates and applies a return transition, optionally updating
-// the copy's condition; only the copy owner may act, and only on an accepted loan.
+// the copy's condition; either the borrower or the copy owner may act, and
+// only on an accepted loan.
 func (h *LoanRequestHandler) returnLoan(
 	ctx context.Context, lr *models.LoanRequest, callerID, ownerID uint, now time.Time, newCondition string,
 ) error {
-	if callerID != ownerID {
-		return huma.Error403Forbidden("only the copy owner can mark as returned")
+	if callerID != ownerID && callerID != lr.BorrowerID {
+		return huma.Error403Forbidden("only the borrower or the copy owner can mark this as returned")
 	}
 	if lr.Status != "accepted" {
 		return huma.Error400BadRequest("can only mark accepted loans as returned")
 	}
 	lr.Status = "returned"
 	lr.ReturnedAt = &now
+	lr.ReturnedBy = &callerID
 
 	if newCondition == "" {
 		return nil
@@ -713,11 +782,50 @@ func (h *LoanRequestHandler) cancelLoan(lr *models.LoanRequest, callerID uint) e
 	return nil
 }
 
-// runLoanWorkflowSideEffect fires the workflow callback matching lr's new
-// status (non-fatal — failures are logged, not returned).
-func (h *LoanRequestHandler) runLoanWorkflowSideEffect(ctx context.Context, lr *models.LoanRequest) {
+// updateExpectedReturnDate lets either party (borrower or owner) set or
+// change the agreed return date on an accepted loan — unlike at request
+// creation, this can be filled in later once a date is actually agreed.
+func (h *LoanRequestHandler) updateExpectedReturnDate(
+	ctx context.Context, input *updateExpectedReturnDateInput,
+) (*updateExpectedReturnDateOutput, error) {
+	callerID, err := middleware.GetRequiredUserID(ctx)
+	if err != nil {
+		return nil, huma.Error401Unauthorized("authentication required")
+	}
+
+	lr, err := h.loanReqs.GetByIDWithCopyAndBorrower(input.ID)
+	if err != nil {
+		if errors.Is(err, repository.ErrNotFound) {
+			return nil, huma.Error404NotFound("loan request not found")
+		}
+		return nil, huma.Error500InternalServerError("could not fetch loan request")
+	}
+
+	if callerID != lr.Copy.OwnerID && callerID != lr.BorrowerID {
+		return nil, huma.Error403Forbidden("only the borrower or the copy owner can update the return date")
+	}
+	if lr.Status != "accepted" {
+		return nil, huma.Error400BadRequest("return date can only be changed while the loan is accepted")
+	}
+
+	t, parseErr := time.Parse("2006-01-02", input.Body.ExpectedReturnDate)
+	if parseErr != nil {
+		return nil, huma.Error400BadRequest("expected_return_date must be in YYYY-MM-DD format")
+	}
+	lr.ExpectedReturnDate = &t
+
+	if err := h.loanReqs.Save(lr); err != nil {
+		return nil, huma.Error500InternalServerError("could not update return date")
+	}
+
+	return &updateExpectedReturnDateOutput{Body: *lr}, nil
+}
+
+// runLoanWorkflowSideEffect fires the workflow callback matching the action
+// just performed (non-fatal — failures are logged, not returned).
+func (h *LoanRequestHandler) runLoanWorkflowSideEffect(ctx context.Context, lr *models.LoanRequest, action string) {
 	var workflowErr error
-	switch lr.Status {
+	switch action {
 	case "accepted":
 		workflowErr = h.workflow.OnAccepted(ctx, lr)
 	case "rejected":
@@ -726,8 +834,10 @@ func (h *LoanRequestHandler) runLoanWorkflowSideEffect(ctx context.Context, lr *
 		workflowErr = h.workflow.OnCancelled(ctx, lr)
 	case "returned":
 		workflowErr = h.workflow.OnReturned(ctx, lr)
+	case "return_undone":
+		workflowErr = h.workflow.OnReturnUndone(ctx, lr)
 	}
 	if workflowErr != nil {
-		zerolog.Ctx(ctx).Error().Err(workflowErr).Str("status", lr.Status).Msg("workflow side-effect failed")
+		zerolog.Ctx(ctx).Error().Err(workflowErr).Str("action", action).Msg("workflow side-effect failed")
 	}
 }

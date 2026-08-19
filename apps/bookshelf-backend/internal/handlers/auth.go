@@ -392,12 +392,17 @@ type meBody struct {
 type meOutput struct{ Body meBody }
 
 type updateMeInput struct {
-	Body struct {
-		Name              *string `json:"name,omitempty" doc:"New display name"`
-		Phone             *string `json:"phone,omitempty" doc:"Contact phone number"`
-		Email             *string `json:"email,omitempty" format:"email" doc:"New email address"`
-		GoogleBooksAPIKey *string `json:"google_books_api_key,omitempty" doc:"Your Google Books API key. Set to empty string to remove."`
-	}
+	Body updateMeBody
+}
+
+type updateMeBody struct {
+	Name                      *string `json:"name,omitempty" doc:"New display name"`
+	Phone                     *string `json:"phone,omitempty" doc:"Contact phone number"`
+	Email                     *string `json:"email,omitempty" format:"email" doc:"New email address"`
+	GoogleBooksAPIKey         *string `json:"google_books_api_key,omitempty" doc:"Your Google Books API key. Set to empty string to remove."`
+	EmailNotificationsEnabled *bool   `json:"email_notifications_enabled,omitempty" doc:"Whether to receive non-transactional notification emails (loan requests, wishlist matches). Account/security emails are unaffected."`
+	TelegramUsername          *string `json:"telegram_username,omitempty" doc:"Telegram username, for other members to reach you. Set to empty string to remove."`
+	WhatsAppUsername          *string `json:"whatsapp_username,omitempty" doc:"WhatsApp username, for other members to reach you. Set to empty string to remove."`
 }
 
 type testGoogleBooksKeyInput struct {
@@ -659,11 +664,12 @@ func (h *AuthHandler) register(_ context.Context, input *registerInput) (*authOu
 		Name: input.Body.Name,
 		// Preserve the casing the user typed rather than the lowercased form
 		// used to match the verification token above.
-		Email:         input.Body.Email,
-		Phone:         phone,
-		Password:      string(hash),
-		Verified:      true,
-		PhoneVerified: phoneVerified,
+		Email:                     input.Body.Email,
+		Phone:                     phone,
+		Password:                  string(hash),
+		Verified:                  true,
+		PhoneVerified:             phoneVerified,
+		EmailNotificationsEnabled: true,
 	}
 	if val, _ := h.admin.GetSetting("require_registration_approval"); val == "true" {
 		user.PendingApproval = true
@@ -1048,12 +1054,28 @@ func (h *AuthHandler) updateMe(ctx context.Context, input *updateMeInput) (*meOu
 			return nil, err
 		}
 	}
+	applyContactPrefsUpdate(user, input.Body)
 
 	if err := h.users.Save(user); err != nil {
 		return nil, huma.Error500InternalServerError("could not update user")
 	}
 
 	return &meOutput{Body: meBody{User: *user, GoogleBooksKeyConfigured: user.GoogleBooksAPIKey != ""}}, nil
+}
+
+// applyContactPrefsUpdate applies the notification-preference and
+// messaging-username fields of an updateMe request. Split out from updateMe
+// to keep its cognitive complexity under the repo's gocognit threshold.
+func applyContactPrefsUpdate(user *models.User, body updateMeBody) {
+	if body.EmailNotificationsEnabled != nil {
+		user.EmailNotificationsEnabled = *body.EmailNotificationsEnabled
+	}
+	if body.TelegramUsername != nil {
+		user.TelegramUsername = *body.TelegramUsername
+	}
+	if body.WhatsAppUsername != nil {
+		user.WhatsAppUsername = *body.WhatsAppUsername
+	}
 }
 
 // applyPhoneUpdate sets the user's phone number, clearing PhoneVerified when
@@ -1209,11 +1231,12 @@ func (h *AuthHandler) setup(_ context.Context, input *setupInput) (*authOutput, 
 	}
 
 	user := models.User{
-		Name:     input.Body.Name,
-		Email:    input.Body.Email,
-		Password: string(hash),
-		Role:     "admin",
-		Verified: true,
+		Name:                      input.Body.Name,
+		Email:                     input.Body.Email,
+		Password:                  string(hash),
+		Role:                      "admin",
+		Verified:                  true,
+		EmailNotificationsEnabled: true,
 	}
 	if err := h.users.CreateAdminIfNoneExists(&user); err != nil {
 		if errors.Is(err, repository.ErrConflict) {

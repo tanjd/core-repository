@@ -310,6 +310,9 @@ export const api = {
     phone?: string;
     email?: string;
     google_books_api_key?: string;
+    email_notifications_enabled?: boolean;
+    telegram_username?: string;
+    whatsapp_username?: string;
   }) =>
     request<User>("/auth/me", { method: "PATCH", body: JSON.stringify(data) }),
   changePassword: (data: {
@@ -459,6 +462,11 @@ export const api = {
     request<LoanRequest>(`/loan-requests/${id}`, {
       method: "PATCH",
       body: JSON.stringify(data),
+    }),
+  updateExpectedReturnDate: (id: number, expectedReturnDate: string) =>
+    request<LoanRequest>(`/loan-requests/${id}/expected-return-date`, {
+      method: "PATCH",
+      body: JSON.stringify({ expected_return_date: expectedReturnDate }),
     }),
 
   // Notifications

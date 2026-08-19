@@ -11,6 +11,9 @@ export interface User {
   created_at: string;
   google_books_key_configured: boolean;
   pending_email?: string;
+  email_notifications_enabled: boolean;
+  telegram_username?: string;
+  whatsapp_username?: string;
 }
 
 export interface AppSetting {
@@ -72,6 +75,7 @@ export interface LoanRequest {
   responded_at?: string;
   loaned_at?: string;
   returned_at?: string;
+  returned_by?: number;
   expected_return_date?: string;
   copy?: Copy;
   borrower?: { id: number; name: string; email?: string; phone?: string };
@@ -86,6 +90,7 @@ export interface Notification {
     | "request_rejected"
     | "marked_loaned"
     | "marked_returned"
+    | "return_undone"
     | "waitlist_available"
     | "copy_transferred_in"
     | "copy_transferred_out"

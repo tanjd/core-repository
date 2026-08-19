@@ -7,6 +7,7 @@ import { toast } from "sonner";
 import { api } from "@/lib/api";
 import type { LoanRequest } from "@/lib/types";
 import { ContactReveal } from "@/components/ContactReveal";
+import { ReturnDateCell } from "@/components/ReturnDateCell";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -41,7 +42,11 @@ const statusVariant: Record<
 };
 
 function hasExpandContent(request: LoanRequest): boolean {
-  return !!(request.message || request.status === "accepted");
+  return !!(
+    request.message ||
+    request.status === "accepted" ||
+    request.status === "returned"
+  );
 }
 
 export default function CopyRequestsPage() {
@@ -62,6 +67,12 @@ export default function CopyRequestsPage() {
     currentCondition: string;
   } | null>(null);
   const [returnCondition, setReturnCondition] = useState<Condition>("good");
+
+  // Undo-return confirmation dialog
+  const [undoDialog, setUndoDialog] = useState<{ requestId: number } | null>(
+    null,
+  );
+  const [undoing, setUndoing] = useState(false);
 
   useEffect(() => {
     const token = localStorage.getItem("bookshelf_token");
@@ -128,6 +139,33 @@ export default function CopyRequestsPage() {
   function openReturnDialog(requestId: number, currentCondition: string) {
     setReturnCondition((currentCondition as Condition) || "good");
     setReturnDialog({ requestId, currentCondition });
+  }
+
+  async function handleUndoReturn() {
+    if (!undoDialog) return;
+    setUndoing(true);
+    try {
+      const updated = await api.updateLoanRequest(undoDialog.requestId, {
+        status: "accepted",
+      });
+      setRequests((prev) =>
+        prev.map((r) => (r.id === updated.id ? updated : r)),
+      );
+      toast.success("Return undone — loan is active again");
+    } catch (err) {
+      toast.error(
+        err instanceof Error
+          ? err.message
+          : "Can't undo — this copy has already moved on since it was marked returned.",
+      );
+    } finally {
+      setUndoing(false);
+      setUndoDialog(null);
+    }
+  }
+
+  function handleRequestUpdated(updated: LoanRequest) {
+    setRequests((prev) => prev.map((r) => (r.id === updated.id ? updated : r)));
   }
 
   const bookTitle = requests[0]?.copy?.book?.title;
@@ -221,11 +259,10 @@ export default function CopyRequestsPage() {
                         {new Date(request.requested_at).toLocaleDateString()}
                       </TableCell>
                       <TableCell className="text-muted-foreground">
-                        {request.expected_return_date
-                          ? new Date(
-                              request.expected_return_date,
-                            ).toLocaleDateString()
-                          : "—"}
+                        <ReturnDateCell
+                          request={request}
+                          onUpdated={handleRequestUpdated}
+                        />
                       </TableCell>
                       <TableCell
                         className="text-right"
@@ -270,6 +307,17 @@ export default function CopyRequestsPage() {
                               {actioning === request.id ? "…" : "Mark Returned"}
                             </Button>
                           )}
+                          {request.status === "returned" && (
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() =>
+                                setUndoDialog({ requestId: request.id })
+                              }
+                            >
+                              Undo Return
+                            </Button>
+                          )}
                         </div>
                       </TableCell>
                     </TableRow>
@@ -304,6 +352,24 @@ export default function CopyRequestsPage() {
                                   />
                                 </div>
                               )}
+                            {request.status === "returned" && (
+                              <div>
+                                <p className="text-xs font-medium text-muted-foreground mb-1">
+                                  Returned
+                                </p>
+                                <p className="text-sm text-muted-foreground">
+                                  {request.returned_at
+                                    ? new Date(
+                                        request.returned_at,
+                                      ).toLocaleDateString()
+                                    : "Return date not recorded"}
+                                  {request.returned_by != null &&
+                                    (request.returned_by === request.borrower_id
+                                      ? " · returned by the borrower"
+                                      : " · returned by you")}
+                                </p>
+                              </div>
+                            )}
                           </div>
                         </TableCell>
                       </TableRow>
@@ -362,6 +428,27 @@ export default function CopyRequestsPage() {
               disabled={actioning !== null}
             >
               {actioning !== null ? "Saving…" : "Confirm Return"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Undo-return confirmation dialog */}
+      <Dialog
+        open={!!undoDialog}
+        onOpenChange={(open) => !open && setUndoDialog(null)}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Undo return?</DialogTitle>
+            <DialogDescription>
+              Not actually returned? This puts the loan back to accepted and
+              marks the copy as loaned again.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter showCloseButton>
+            <Button onClick={handleUndoReturn} disabled={undoing}>
+              {undoing ? "Undoing…" : "Undo Return"}
             </Button>
           </DialogFooter>
         </DialogContent>

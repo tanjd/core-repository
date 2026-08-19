@@ -55,6 +55,7 @@ func TestRegister(t *testing.T) {
 		assert.Equal(t, "Ada Lovelace", out.Body.User.Name)
 		assert.Equal(t, "user", out.Body.User.Role)
 		assert.True(t, out.Body.User.Verified, "email is verified at registration time now")
+		assert.True(t, out.Body.User.EmailNotificationsEnabled, "email notifications default to on")
 
 		stored, err := users.FindByEmail("ada@example.com")
 		require.NoError(t, err)
@@ -742,6 +743,69 @@ func TestUpdateMePhoneChange(t *testing.T) {
 
 		require.NoError(t, err)
 		assert.True(t, out.Body.PhoneVerified)
+	})
+}
+
+func TestUpdateMeContactPrefs(t *testing.T) {
+	t.Run("sets email notification preference and messaging usernames", func(t *testing.T) {
+		h, users, _ := newAuthHandler()
+		user := &models.User{Name: "Ada", Email: "ada@example.com", Password: "x", EmailNotificationsEnabled: true}
+		require.NoError(t, users.Create(user))
+
+		input := &updateMeInput{}
+		disabled := false
+		telegram := "@ada"
+		whatsapp := "+15550100"
+		input.Body.EmailNotificationsEnabled = &disabled
+		input.Body.TelegramUsername = &telegram
+		input.Body.WhatsAppUsername = &whatsapp
+
+		out, err := h.updateMe(fakeAuthedCtx(t, user.ID, "user"), input)
+
+		require.NoError(t, err)
+		assert.False(t, out.Body.EmailNotificationsEnabled)
+		assert.Equal(t, "@ada", out.Body.TelegramUsername)
+		assert.Equal(t, "+15550100", out.Body.WhatsAppUsername)
+
+		reloaded, findErr := users.FindByID(user.ID)
+		require.NoError(t, findErr)
+		assert.False(t, reloaded.EmailNotificationsEnabled)
+		assert.Equal(t, "@ada", reloaded.TelegramUsername)
+		assert.Equal(t, "+15550100", reloaded.WhatsAppUsername)
+	})
+
+	t.Run("empty string clears a previously set username", func(t *testing.T) {
+		h, users, _ := newAuthHandler()
+		user := &models.User{Name: "Ada", Email: "ada2@example.com", Password: "x", TelegramUsername: "@ada"}
+		require.NoError(t, users.Create(user))
+
+		input := &updateMeInput{}
+		empty := ""
+		input.Body.TelegramUsername = &empty
+
+		out, err := h.updateMe(fakeAuthedCtx(t, user.ID, "user"), input)
+
+		require.NoError(t, err)
+		assert.Empty(t, out.Body.TelegramUsername)
+	})
+
+	t.Run("leaves fields untouched when omitted", func(t *testing.T) {
+		h, users, _ := newAuthHandler()
+		user := &models.User{
+			Name: "Ada", Email: "ada3@example.com", Password: "x",
+			EmailNotificationsEnabled: true, TelegramUsername: "@ada",
+		}
+		require.NoError(t, users.Create(user))
+
+		input := &updateMeInput{}
+		newName := "Ada Lovelace"
+		input.Body.Name = &newName
+
+		out, err := h.updateMe(fakeAuthedCtx(t, user.ID, "user"), input)
+
+		require.NoError(t, err)
+		assert.True(t, out.Body.EmailNotificationsEnabled)
+		assert.Equal(t, "@ada", out.Body.TelegramUsername)
 	})
 }
 

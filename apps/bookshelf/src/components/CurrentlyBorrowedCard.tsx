@@ -40,7 +40,7 @@ export function CurrentlyBorrowedCard({ request }: { request: LoanRequest }) {
           <p className="text-xs text-muted-foreground mt-1">
             {request.expected_return_date
               ? `Due ${new Date(request.expected_return_date).toLocaleDateString()}`
-              : "No return date set"}
+              : "No return date agreed"}
           </p>
           {request.copy?.owner?.name && (
             <p className="text-xs text-muted-foreground">

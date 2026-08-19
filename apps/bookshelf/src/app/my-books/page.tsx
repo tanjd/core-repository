@@ -386,8 +386,9 @@ export default function MyBooksPage() {
                           <span className="font-medium text-foreground">
                             {loan.borrowerName}
                           </span>
-                          {loan.dueDate &&
-                            ` · due ${new Date(loan.dueDate).toLocaleDateString()}`}
+                          {loan.dueDate
+                            ? ` · due ${new Date(loan.dueDate).toLocaleDateString()}`
+                            : " · no return date agreed"}
                         </p>
                       )}
 
