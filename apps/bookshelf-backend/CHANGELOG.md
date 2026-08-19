@@ -1,3 +1,21 @@
+## 0.5.0 (2026-08-19)
+
+### 🚀 Features
+
+- **bookshelf:** add password reset flow
+- **bookshelf:** add contact preferences and loan return tracking
+- **bookshelf:** add automatic backups and refresh admin console
+
+Manually versioned: PR [#50](https://github.com/tanjd/core-repository/pull/50) squash-merged with
+the non-conventional title "Add password reset, contact prefs, loan-return tracking, and backups",
+so nx release's conventional-commits detection silently skipped this project despite the PR
+touching `apps/bookshelf-backend` (password-reset endpoints, backup service/handlers, contact-pref
+fields). See `.github/workflows/pr-title.yml`.
+
+### ❤️ Thank You
+
+- Jeddy Tan @tanjd
+
 ## 0.4.6 (2026-08-19)
 
 ### 🚀 Features
