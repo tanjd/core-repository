@@ -1,0 +1,12 @@
+{
+  "$schema": "../../node_modules/nx/schemas/project-schema.json",
+  "// targets": "to see all targets run: nx show project bookshelf-e2e --web",
+  "implicitDependencies": [
+    "bookshelf"
+  ],
+  "name": "bookshelf-e2e",
+  "projectType": "application",
+  "sourceRoot": "apps/bookshelf-e2e/src",
+  "tags": [],
+  "targets": {}
+}
