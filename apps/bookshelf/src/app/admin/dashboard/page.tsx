@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 import {
   BookOpen,
   Library,
@@ -69,7 +69,10 @@ export default function AdminDashboardPage() {
     }
   }, []);
 
+  const loadedRef = useRef(false);
   useEffect(() => {
+    if (loadedRef.current) return;
+    loadedRef.current = true;
     loadStats();
   }, [loadStats]);
 

@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useState, useRef } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
@@ -160,23 +160,26 @@ export default function MyBooksPage() {
     }
   }, [loadRequestInfo]);
 
+  const checkedRef = useRef(false);
   useEffect(() => {
+    if (checkedRef.current) return;
+    checkedRef.current = true;
     const token = localStorage.getItem("bookshelf_token");
-    if (!token) {
-      router.push("/login");
-      return;
-    }
-    const stored = localStorage.getItem("bookshelf_user");
+    const stored = token ? localStorage.getItem("bookshelf_user") : null;
+    let validUser = false;
     if (stored) {
       try {
         JSON.parse(stored); // validate JSON
-        loadMyCopies();
+        validUser = true;
       } catch {
-        router.push("/login");
+        validUser = false;
       }
-    } else {
-      router.push("/login");
     }
+    if (!token || !validUser) {
+      router.push("/login");
+      return;
+    }
+    loadMyCopies();
   }, [router, loadMyCopies]);
 
   function openEdit(copy: MyCopy) {

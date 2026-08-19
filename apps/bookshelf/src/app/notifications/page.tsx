@@ -6,22 +6,15 @@ import { Bell, CheckCheck } from "lucide-react";
 import { toast } from "sonner";
 import { api } from "@/lib/api";
 import type { Notification, PaginatedResult } from "@/lib/types";
+import {
+  notificationDestination,
+  notificationTypeLabel,
+} from "@/lib/notifications";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Pagination } from "@/components/ui/Pagination";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
-
-const typeLabel: Record<Notification["type"], string> = {
-  request_received: "New borrow request",
-  request_accepted: "Request accepted",
-  request_rejected: "Request declined",
-  marked_loaned: "Book loaned out",
-  marked_returned: "Book returned",
-  waitlist_available: "Copy now available",
-  copy_transferred_in: "Copy transferred to you",
-  copy_transferred_out: "Copy transfer sent",
-};
 
 const PAGE_SIZE = 20;
 
@@ -79,22 +72,8 @@ export default function NotificationsPage() {
         // silently ignore
       }
     }
-    if (notification.loan_request_id) {
-      if (notification.type === "request_received") {
-        try {
-          const lr = await api.getLoanRequest(notification.loan_request_id);
-          router.push(`/my-books/${lr.copy_id}/requests`);
-        } catch {
-          router.push("/my-books");
-        }
-      } else if (notification.type === "waitlist_available") {
-        router.push("/catalog");
-      } else if (notification.type === "copy_transferred_in") {
-        router.push("/my-books");
-      } else {
-        router.push("/my-requests");
-      }
-    }
+    const dest = await notificationDestination(notification);
+    if (dest) router.push(dest);
   }
 
   async function handleMarkAllRead() {
@@ -181,7 +160,7 @@ export default function NotificationsPage() {
                 </div>
                 <div className="flex flex-col gap-0.5 min-w-0">
                   <p className={cn("text-sm", !n.read && "font-medium")}>
-                    {typeLabel[n.type] ?? n.type}
+                    {notificationTypeLabel[n.type] ?? n.type}
                   </p>
                   {n.type === "waitlist_available" && (
                     <p className="text-xs text-muted-foreground">

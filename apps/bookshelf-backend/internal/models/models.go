@@ -117,3 +117,23 @@ type Notification struct {
 	Read          bool      `gorm:"default:false" json:"read"`
 	CreatedAt     time.Time `json:"created_at"`
 }
+
+// Announcement is a permanent, admin-authored banner shown to community
+// members until an admin manually deactivates it — no scheduled start/end,
+// unlike a per-release changelog (deliberately a separate, undesigned
+// feature — see TODO.md).
+// Type values: info | new_feature | known_issue
+type Announcement struct {
+	ID    uint   `gorm:"primarykey" json:"id"`
+	Title string `gorm:"not null" json:"title"`
+	Body  string `gorm:"not null" json:"body"`
+	Type  string `gorm:"not null;default:'info'" json:"type"`
+	// No GORM "default:true" tag here deliberately: GORM's Create() treats a
+	// zero-valued field (false, for bool) with a "default" tag as "unset" and
+	// substitutes the DB default instead — silently turning an explicit
+	// Active: false into true. The handler layer already applies the
+	// default-true behavior when the API caller omits the field; the
+	// migration's SQL-level DEFAULT 1 remains as a safety net for direct inserts.
+	Active    bool      `gorm:"not null" json:"active"`
+	CreatedAt time.Time `json:"created_at"`
+}

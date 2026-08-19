@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useState, useRef } from "react";
 import { api } from "@/lib/api";
 
 const POLL_INTERVAL_MS = 30_000;
@@ -19,11 +19,15 @@ export function useUnreadNotifications() {
     }
   }, []);
 
+  const startedRef = useRef(false);
   useEffect(() => {
-    fetchUnread();
+    if (!startedRef.current) {
+      startedRef.current = true;
+      fetchUnread();
+    }
     const interval = setInterval(fetchUnread, POLL_INTERVAL_MS);
     return () => clearInterval(interval);
   }, [fetchUnread]);
 
-  return unreadCount;
+  return { unreadCount, refetch: fetchUnread };
 }

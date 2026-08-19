@@ -3,6 +3,9 @@
   "dockerComposeFile": "docker-compose.yml",
   "workspaceFolder": "/workspace",
   "service": "core-repository-devcontainer",
+  "containerEnv": {
+    "NX_DAEMON": "true"
+  },
   "features": {
     "ghcr.io/devcontainers-extra/features/zsh-plugins:0": {
       "plugins": "npm git zsh-autosuggestions zsh-syntax-highlighting sudo",

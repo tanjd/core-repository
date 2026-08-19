@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 import { RefreshCw } from "lucide-react";
 import { api } from "@/lib/api";
 import type { MetadataProviderStatus } from "@/lib/types";
@@ -47,7 +47,10 @@ export default function AdminMetadataPage() {
     }
   }, []);
 
+  const loadedRef = useRef(false);
   useEffect(() => {
+    if (loadedRef.current) return;
+    loadedRef.current = true;
     loadStatuses();
   }, [loadStatuses]);
 

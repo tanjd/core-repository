@@ -17,19 +17,6 @@ const eslintConfig = defineConfig([
     "**/build/**",
     "next-env.d.ts",
   ]),
-  {
-    // The source repo pinned eslint-config-next 16.1.6; this workspace is on
-    // 16.2.12, whose bundled eslint-plugin-react-hooks added
-    // react-hooks/set-state-in-effect as an error. It fires on 11 ported
-    // call sites (all "hydrate auth/fetched state on mount" patterns, e.g.
-    // src/components/auth/AdminGuard.tsx) that are safe as written but
-    // flagged as an anti-pattern by the newer rule. Downgrading rather than
-    // rewriting 11 components' effect logic as part of a migration pass —
-    // revisit as a follow-up (see apps/bookshelf/CLAUDE.md).
-    rules: {
-      "react-hooks/set-state-in-effect": "warn",
-    },
-  },
 ]);
 
 export default eslintConfig;

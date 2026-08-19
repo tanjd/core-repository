@@ -516,6 +516,95 @@ func (r *NotificationRepository) Count() int {
 	return len(r.byID)
 }
 
+// AnnouncementRepository is an in-memory fake of repository.AnnouncementRepository.
+type AnnouncementRepository struct {
+	mu     sync.Mutex
+	nextID uint
+	byID   map[uint]*models.Announcement
+}
+
+// NewAnnouncementRepository creates an empty fake AnnouncementRepository.
+func NewAnnouncementRepository() *AnnouncementRepository {
+	return &AnnouncementRepository{byID: map[uint]*models.Announcement{}}
+}
+
+// Create inserts a, assigning it a new ID.
+func (r *AnnouncementRepository) Create(a *models.Announcement) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.nextID++
+	a.ID = r.nextID
+	cp := *a
+	r.byID[a.ID] = &cp
+	return nil
+}
+
+// GetByID returns the announcement with the given ID, or repository.ErrNotFound.
+func (r *AnnouncementRepository) GetByID(id uint) (*models.Announcement, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	a, ok := r.byID[id]
+	if !ok {
+		return nil, repository.ErrNotFound
+	}
+	cp := *a
+	return &cp, nil
+}
+
+// Save inserts a (assigning a new ID) if its ID is zero, else overwrites the
+// existing record.
+func (r *AnnouncementRepository) Save(a *models.Announcement) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if a.ID == 0 {
+		r.nextID++
+		a.ID = r.nextID
+	}
+	cp := *a
+	r.byID[a.ID] = &cp
+	return nil
+}
+
+// Delete removes the announcement with the given ID from the store. Deleting
+// a missing ID is a no-op, matching GORM's Delete semantics.
+func (r *AnnouncementRepository) Delete(id uint) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	delete(r.byID, id)
+	return nil
+}
+
+// ListActive returns active announcements, newest first.
+func (r *AnnouncementRepository) ListActive() ([]models.Announcement, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	out := []models.Announcement{}
+	for _, a := range r.byID {
+		if a.Active {
+			out = append(out, *a)
+		}
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].ID > out[j].ID })
+	return out, nil
+}
+
+// ListPaginated returns a page of every announcement (active and inactive), newest first.
+func (r *AnnouncementRepository) ListPaginated(page, pageSize int) (*repository.PaginatedResult[models.Announcement], error) {
+	r.mu.Lock()
+	all := make([]models.Announcement, 0, len(r.byID))
+	for _, a := range r.byID {
+		all = append(all, *a)
+	}
+	r.mu.Unlock()
+	sort.Slice(all, func(i, j int) bool { return all[i].ID > all[j].ID })
+	start, end := paginationBounds(len(all), page, pageSize)
+	items := append([]models.Announcement{}, all[start:end]...)
+	return &repository.PaginatedResult[models.Announcement]{
+		Items: items, Total: int64(len(all)), Page: page, PageSize: pageSize,
+		TotalPages: totalPages(len(all), pageSize),
+	}, nil
+}
+
 // WaitlistRepository is an in-memory fake of repository.WaitlistRepository.
 type WaitlistRepository struct {
 	mu      sync.Mutex
@@ -835,6 +924,7 @@ var (
 	_ repository.AdminRepository                    = (*AdminRepository)(nil)
 	_ repository.CopyRepository                     = (*CopyRepository)(nil)
 	_ repository.NotificationRepository             = (*NotificationRepository)(nil)
+	_ repository.AnnouncementRepository             = (*AnnouncementRepository)(nil)
 	_ repository.WaitlistRepository                 = (*WaitlistRepository)(nil)
 	_ repository.LoanRequestRepository              = (*LoanRequestRepository)(nil)
 	_ repository.RegistrationVerificationRepository = (*RegistrationVerificationRepository)(nil)

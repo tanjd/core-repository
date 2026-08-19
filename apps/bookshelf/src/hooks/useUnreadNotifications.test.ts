@@ -22,7 +22,7 @@ describe("useUnreadNotifications", () => {
   it("does not fetch when no token is stored", async () => {
     const { result } = renderHook(() => useUnreadNotifications());
 
-    await waitFor(() => expect(result.current).toBe(0));
+    await waitFor(() => expect(result.current.unreadCount).toBe(0));
     expect(api.getNotifications).not.toHaveBeenCalled();
   });
 
@@ -32,7 +32,20 @@ describe("useUnreadNotifications", () => {
 
     const { result } = renderHook(() => useUnreadNotifications());
 
-    await waitFor(() => expect(result.current).toBe(2));
+    await waitFor(() => expect(result.current.unreadCount).toBe(2));
+  });
+
+  it("exposes a refetch function that fetches immediately", async () => {
+    localStorage.setItem("bookshelf_token", "abc123");
+    (api.getNotifications as jest.Mock).mockResolvedValue({ total: 0 });
+
+    const { result } = renderHook(() => useUnreadNotifications());
+    await waitFor(() => expect(api.getNotifications).toHaveBeenCalledTimes(1));
+
+    (api.getNotifications as jest.Mock).mockResolvedValue({ total: 5 });
+    result.current.refetch();
+
+    await waitFor(() => expect(result.current.unreadCount).toBe(5));
   });
 
   it("polls again after the interval elapses", async () => {
