@@ -142,7 +142,14 @@ export interface JobStatus {
   running: boolean;
   interval: string;
   last_run_at: string | null;
+  next_run_at: string | null;
   last_result: string;
+}
+
+export interface BackupInfo {
+  filename: string;
+  size_bytes: number;
+  created_at: string;
 }
 
 export interface PaginatedResult<T> {

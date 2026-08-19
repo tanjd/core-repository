@@ -67,16 +67,42 @@ been fixed.
   flagging the blast radius so it's weighed if templating ever changes (e.g. rendering
   book descriptions as raw HTML). Accepted trade-off, not an actionable fix right now.
 
+## Shipped since the security audit (not originally tracked above)
+
+- ~~Password reset via email OTP~~ — `forgotPassword`/`resetPassword` handlers in
+  `internal/handlers/auth.go` (migration `000005_add_password_reset`), plus a new
+  `(auth)/forgot-password` page. Rate-limited, constant-time code comparison, and
+  anti-enumeration (identical response whether or not the account exists).
+- ~~Per-user email notification opt-out~~ — `User.EmailNotificationsEnabled` (migration
+  `000006_add_user_contact_prefs`), gated in front of every non-transactional email send in
+  `loan_workflow.go` and `wishlist_workflow.go`. The same migration also added
+  `TelegramUsername`/`WhatsappUsername` as display-only contact fields on the profile (for
+  other members to reach each other manually) — no bot integration yet, so this doesn't count
+  toward the "Telegram bot: link account" item below.
+- ~~Borrower can mark a loan returned, owner can undo it~~ — previously owner-only;
+  `LoanRequest.ReturnedBy` (migration `000007_add_loan_request_returned_by`) tracks who did it,
+  and the undo path guards against the copy already being re-loaned out. Either party can now
+  also set/edit `ExpectedReturnDate` post-acceptance via a new PATCH endpoint
+  (`ReturnDateCell.tsx`) — a prerequisite for the "Overdue reminders" item below, not the
+  reminder job itself.
+- ~~Wishlist request anonymity~~ — `WishlistRequest.IsAnonymous` (migration
+  `000004_add_wishlist_anonymity`); non-owner/non-admin viewers see "Anonymous member" instead
+  of the requester's identity.
+- ~~Automatic backup~~ — scheduled + on-demand snapshots (DB + covers, tar.gz) via a second
+  `Scheduler` job, admin UI at `/admin/backups` (list/download/delete, schedule + retention
+  controls). Restore is a manual, documented ops procedure (stop container, replace files,
+  restart) rather than a live self-service endpoint — see `apps/bookshelf-backend/CLAUDE.md`'s
+  "Backup and restore" section. "Import settings" (YAML) above is a separate, still-open item —
+  this doesn't cover restoring individual settings.
+
 ## Next — before opening to real community members
 
 - **Feedback mechanism** — in-app "send feedback" form, writes to a table, emails the admin
   via the existing `EmailService`. No new infra.
 - **Bulk/CSV import** and **ISBN scan-to-add** — reduces the friction of listing an entire
   shelf by hand; metadata lookup (Open Library/Google Books) already exists per-book.
-- **Loan history / "my shelf" view** — currently-held + past loans per user.
 - **"Report a problem" on a loan** — feeds into the existing `User.Suspended` field, which
   currently has no UI trigger.
-- **"Automatic backup"** - backup settings, database (something like jellyfin?)
 - **"Import settings"** - use yaml file to update settings
 - **"Export and import books"** - allow users to export and import the books they have
 
@@ -100,11 +126,11 @@ been fixed.
   integration since `libs/telegram-bot-shared` and the bot generator already exist. Link via
   a deep-link token, forward `Notification` rows to Telegram alongside/instead of email.
 - **Overdue reminders** — `LoanRequest.ExpectedReturnDate` and `Copy.ReturnDateRequired`
-  already exist but nothing reads them proactively; add a scheduled job (alongside the
-  existing cover-refresh job in `internal/services/scheduler.go`) that notifies
-  borrower/owner via the existing `Notification` + `EmailService`. Highest-value cheap add —
-  "silently overdue forever" is the most obvious failure mode once real people use this.
-- A backup story for `data/bookshelf.db` + `data/covers` — needed now the URL is public.
+  already exist, and `ExpectedReturnDate` is now user-editable post-acceptance (see "Shipped"
+  above), but nothing reads it proactively yet; add a scheduled job (alongside the existing
+  cover-refresh job in `internal/services/scheduler.go`) that notifies borrower/owner via the
+  existing `Notification` + `EmailService`. Highest-value cheap add — "silently overdue
+  forever" is the most obvious failure mode once real people use this.
 
 ## Someday / hold — don't build until there's proven demand
 

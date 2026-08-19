@@ -27,7 +27,7 @@ type listJobsOutput struct {
 }
 
 type runJobInput struct {
-	Job string `path:"job" doc:"Job name (e.g. cover-refresh)"`
+	Job string `path:"job" doc:"Job name (e.g. cover-refresh, backup)"`
 }
 
 // --- Route registration ---
@@ -62,17 +62,14 @@ func (h *JobsHandler) listJobs(ctx context.Context, _ *struct{}) (*listJobsOutpu
 	if err := middleware.RequireAdmin(ctx); err != nil {
 		return nil, jobsAdminError(err)
 	}
-	return &listJobsOutput{Body: []services.JobStatus{h.scheduler.Status()}}, nil
+	return &listJobsOutput{Body: h.scheduler.Status()}, nil
 }
 
 func (h *JobsHandler) runJob(ctx context.Context, input *runJobInput) (*struct{}, error) {
 	if err := middleware.RequireAdmin(ctx); err != nil {
 		return nil, jobsAdminError(err)
 	}
-	switch input.Job {
-	case "cover-refresh":
-		h.scheduler.TriggerNow()
-	default:
+	if !h.scheduler.TriggerNow(input.Job) {
 		return nil, huma.Error404NotFound("unknown job: " + input.Job)
 	}
 	return nil, nil

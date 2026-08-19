@@ -5,11 +5,17 @@ import { toast } from "sonner";
 import { api } from "@/lib/api";
 import type { AppSetting } from "@/lib/api";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Switch } from "@/components/ui/switch";
+import { Skeleton } from "@/components/ui/skeleton";
 
-const SETTING_LABELS: Record<
-  string,
-  { label: string; description: string; type: "bool" | "number" | "text" }
-> = {
+interface SettingMeta {
+  label: string;
+  description: string;
+  type: "bool" | "number";
+}
+
+const SETTING_LABELS: Record<string, SettingMeta> = {
   allow_registration: {
     label: "Allow Registration",
     description: "Whether new users can sign up",
@@ -20,12 +26,6 @@ const SETTING_LABELS: Record<
     description:
       "New sign-ups are created but can't log in until an admin approves them from the Users page. Useful while running in beta.",
     type: "bool",
-  },
-  max_copies_per_user: {
-    label: "Max Copies Per User",
-    description:
-      "Maximum number of book copies a user can share (0 = unlimited)",
-    type: "number",
   },
   require_verified_to_borrow: {
     label: "Require Verified Email to Borrow",
@@ -48,6 +48,12 @@ const SETTING_LABELS: Record<
     description: "Maximum concurrent borrows per user (0 = unlimited)",
     type: "number",
   },
+  max_copies_per_user: {
+    label: "Max Copies Per User",
+    description:
+      "Maximum number of book copies a user can share (0 = unlimited)",
+    type: "number",
+  },
   require_email_confirmation_on_change: {
     label: "Confirm Email Changes via OTP",
     description:
@@ -55,6 +61,31 @@ const SETTING_LABELS: Record<
     type: "bool",
   },
 };
+
+// Grouped the same way Sonarr/Jellyfin group related settings under one
+// section rather than one flat, unrelated list — each group renders as its
+// own card, matching the status-card pattern used by the Jobs/Backups/
+// Metadata admin pages.
+const SETTING_GROUPS: { title: string; keys: string[] }[] = [
+  {
+    title: "Access & Registration",
+    keys: ["allow_registration", "require_registration_approval"],
+  },
+  {
+    title: "Borrowing Eligibility",
+    keys: [
+      "require_verified_to_borrow",
+      "verification_requires_phone",
+      "verification_min_books_shared",
+      "max_active_loans",
+      "max_copies_per_user",
+    ],
+  },
+  {
+    title: "Account Security",
+    keys: ["require_email_confirmation_on_change"],
+  },
+];
 
 export default function AdminSettingsPage() {
   const [settings, setSettings] = useState<AppSetting[]>([]);
@@ -112,72 +143,85 @@ export default function AdminSettingsPage() {
     }
   }
 
-  if (loading)
-    return <p className="text-muted-foreground">Loading settings…</p>;
+  if (loading) {
+    return (
+      <div className="flex flex-col gap-3">
+        {[1, 2, 3].map((i) => (
+          <Skeleton key={i} className="h-32 rounded-lg" />
+        ))}
+      </div>
+    );
+  }
+
+  const known = new Set(settings.map((s) => s.key));
 
   return (
-    <div>
-      <div className="space-y-6">
-        {settings.map((setting) => {
-          const meta = SETTING_LABELS[setting.key];
-          if (!meta) return null;
-          const type = meta.type;
+    <div className="flex flex-col gap-4">
+      <div className="flex flex-col gap-3">
+        {SETTING_GROUPS.map((group) => {
+          const keys = group.keys.filter((k) => known.has(k));
+          if (keys.length === 0) return null;
           return (
             <div
-              key={setting.key}
-              className="flex items-start justify-between gap-4"
+              key={group.title}
+              className="rounded-lg border bg-card p-4 flex flex-col gap-3"
             >
-              <div>
-                <p className="font-medium text-sm">{meta.label}</p>
-                {meta.description && (
-                  <p className="text-xs text-muted-foreground mt-0.5">
-                    {meta.description}
-                  </p>
-                )}
-              </div>
-              <div className="shrink-0">
-                {type === "bool" ? (
-                  <button
-                    onClick={() =>
-                      setValues((prev) => ({
-                        ...prev,
-                        [setting.key]:
-                          prev[setting.key] === "true" ? "false" : "true",
-                      }))
+              <p className="font-medium text-sm">{group.title}</p>
+              {keys.map((key, i) => {
+                const meta = SETTING_LABELS[key];
+                return (
+                  <div
+                    key={key}
+                    className={
+                      i === 0
+                        ? "flex items-start justify-between gap-4"
+                        : "flex items-start justify-between gap-4 border-t pt-3"
                     }
-                    className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
-                      values[setting.key] === "true" ? "bg-primary" : "bg-muted"
-                    }`}
                   >
-                    <span
-                      className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${
-                        values[setting.key] === "true"
-                          ? "translate-x-6"
-                          : "translate-x-1"
-                      }`}
-                    />
-                  </button>
-                ) : (
-                  <input
-                    type="number"
-                    value={values[setting.key] ?? ""}
-                    onChange={(e) =>
-                      setValues((prev) => ({
-                        ...prev,
-                        [setting.key]: e.target.value,
-                      }))
-                    }
-                    className="w-20 rounded-md border px-2 py-1 text-sm text-right"
-                    min={0}
-                  />
-                )}
-              </div>
+                    <div className="min-w-0">
+                      <p className="text-sm">{meta.label}</p>
+                      {meta.description && (
+                        <p className="text-xs text-muted-foreground mt-0.5">
+                          {meta.description}
+                        </p>
+                      )}
+                    </div>
+                    <div className="shrink-0">
+                      {meta.type === "bool" ? (
+                        <Switch
+                          checked={values[key] === "true"}
+                          onCheckedChange={(checked) =>
+                            setValues((prev) => ({
+                              ...prev,
+                              [key]: checked ? "true" : "false",
+                            }))
+                          }
+                          aria-label={meta.label}
+                        />
+                      ) : (
+                        <Input
+                          type="number"
+                          min={0}
+                          value={values[key] ?? ""}
+                          onChange={(e) =>
+                            setValues((prev) => ({
+                              ...prev,
+                              [key]: e.target.value,
+                            }))
+                          }
+                          className="h-8 w-20 text-sm text-right"
+                        />
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
             </div>
           );
         })}
       </div>
 
-      <div className="mt-8 flex items-center gap-3">
+      <div className="flex items-center gap-3">
         <Button onClick={handleSave} disabled={saving}>
           {saving ? "Saving…" : "Save Settings"}
         </Button>

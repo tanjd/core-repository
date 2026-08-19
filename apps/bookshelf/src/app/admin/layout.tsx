@@ -12,6 +12,7 @@ const adminLinks = [
   { href: "/admin/settings", label: "Settings" },
   { href: "/admin/announcements", label: "Announcements" },
   { href: "/admin/jobs", label: "Jobs" },
+  { href: "/admin/backups", label: "Backups" },
   { href: "/admin/metadata", label: "Metadata" },
 ];
 

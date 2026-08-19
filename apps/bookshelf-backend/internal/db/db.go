@@ -94,6 +94,8 @@ func Seed(database *gorm.DB) {
 		{Key: "require_verified_to_borrow", Value: "false"},
 		{Key: "max_active_loans", Value: "0"},
 		{Key: "cover_refresh_interval", Value: "24h"},
+		{Key: "backup_interval", Value: "24h"},
+		{Key: "backup_retention_count", Value: "7"},
 		{Key: "verification_requires_phone", Value: "false"},
 		{Key: "verification_min_books_shared", Value: "0"},
 		{Key: "require_email_confirmation_on_change", Value: "true"},

@@ -75,6 +75,11 @@ func main() {
 		log.Fatal().Err(err).Msg("failed to create covers dir")
 	}
 
+	backupsDir := "./data/backups"
+	if err := os.MkdirAll(backupsDir, 0o750); err != nil {
+		log.Fatal().Err(err).Msg("failed to create backups dir")
+	}
+
 	// Repositories — only this layer and db.Open ever import gorm.io/gorm.
 	userRepo := gormrepo.NewUserRepository(database)
 	bookRepo := gormrepo.NewBookRepository(database)
@@ -94,7 +99,14 @@ func main() {
 	wishlistWorkflow := services.NewWishlistWorkflow(wishlistRepo, notifRepo, userRepo, emailSvc)
 	registrationWorkflow := services.NewRegistrationWorkflow(adminRepo, notifRepo, emailSvc)
 
+	sqlDB, err := database.DB()
+	if err != nil {
+		log.Fatal().Err(err).Msg("failed to get underlying sql.DB")
+	}
+	backupSvc := services.NewBackupService(sqlDB, adminRepo, cfg.DBPath, coversDir, backupsDir)
+
 	scheduler := services.NewScheduler(bookRepo, adminRepo, coversDir, cfg.MetadataRefreshInterval)
+	scheduler.RegisterJob("backup", "backup_interval", 24*time.Hour, backupSvc.CreateSnapshot)
 
 	seedYAMLConfig(cfg.AppConfigPath, adminRepo)
 
@@ -118,6 +130,7 @@ func main() {
 	notifH := handlers.NewNotificationHandler(notifRepo)
 	adminH := handlers.NewAdminHandler(adminRepo, cfg.GoogleBooksAPIKey)
 	jobsH := handlers.NewJobsHandler(scheduler)
+	backupH := handlers.NewBackupHandler(backupSvc)
 	waitlistH := handlers.NewWaitlistHandler(copyRepo, waitlistRepo)
 	announcementH := handlers.NewAnnouncementHandler(announcementRepo)
 	wishlistH := handlers.NewWishlistHandler(wishlistRepo, bookRepo, wishlistWorkflow)
@@ -168,6 +181,7 @@ func main() {
 	notifH.RegisterRoutes(api)
 	adminH.RegisterRoutes(api)
 	jobsH.RegisterRoutes(api)
+	backupH.RegisterRoutes(api)
 	waitlistH.RegisterRoutes(api)
 	announcementH.RegisterRoutes(api)
 	wishlistH.RegisterRoutes(api)
