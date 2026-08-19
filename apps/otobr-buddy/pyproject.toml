@@ -1,0 +1,54 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.package-dir]
+"" = "src"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+include = ["otobr_buddy*"]
+
+[project]
+name = "otobr-buddy"
+version = "1.0.0"
+description = "Telegram bot for one-to-one Bible reading tracking"
+readme = "README.md"
+requires-python = ">=3.13"
+dependencies = [
+    "python-telegram-bot[job-queue]>=21.0",
+    "python-dotenv>=1.0.0",
+    "telegram-bot-shared",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8.0", "pytest-asyncio>=0.24", "ruff>=0.8"]
+
+[dependency-groups]
+dev = ["basedpyright>=1.35", "pre-commit>=4.0", "pytest>=8.0", "pytest-asyncio>=0.24", "ruff>=0.8"]
+
+[tool.uv.sources]
+telegram-bot-shared = { path = "../../libs/telegram-bot-shared", editable = true }
+
+[tool.ruff]
+extend = "../../ruff.toml"
+src = ["src", "tests"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
+asyncio_mode = "auto"
+
+# Basedpyright config (replaces pyright for better compatibility)
+[tool.basedpyright]
+pythonVersion = "3.13"
+typeCheckingMode = "standard"
+venvPath = "."
+venv = ".venv"
+# Suppress warnings for external library type stubs and mocks
+reportUnknownMemberType = false
+reportUnknownParameterType = false
+reportUnknownArgumentType = false
+reportUnknownVariableType = false
+reportMissingParameterType = false
+reportPrivateUsage = false

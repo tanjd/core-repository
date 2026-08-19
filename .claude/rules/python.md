@@ -9,10 +9,10 @@ paths:
 
 ## Python (uv + ruff)
 
-`apps/index-watch`, `apps/table-talks`, and `apps/ledger-lens-backend` (all
-migrated) are the only Python apps in the repo so far; further apps are
-created on demand via `make new-bot` (see the `scaffold-telegram-bot` skill)
-or migrated in like these were.
+`apps/index-watch`, `apps/table-talks`, `apps/otobr-buddy`, and
+`apps/ledger-lens-backend` (all migrated) are the only Python apps in the
+repo so far; further apps are created on demand via `make new-bot` (see the
+`scaffold-telegram-bot` skill) or migrated in like these were.
 
 - **uv**, not Poetry — matches the real standalone bot repos and eases their
   eventual migration into this monorepo (see the `scaffold-telegram-bot`

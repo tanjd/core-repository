@@ -9,6 +9,7 @@ from apscheduler.events import EVENT_JOB_ERROR, EVENT_JOB_EXECUTED
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from telegram import Update
 from telegram.ext import Application, CommandHandler, ContextTypes
+from telegram_bot_shared.env import is_admin
 
 from index_watch import database
 from index_watch.alerts import AlertDetail, AlertState, RecoveryDetail, RecoveryState
@@ -727,11 +728,10 @@ async def cmd_debug(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     config = context.bot_data.get("config")
 
     # Admin check
-    if config and config.admin_chat_ids:
-        if chat_id not in config.admin_chat_ids:
-            logger.warning("Unauthorized /debug attempt from user %s", chat_id)
-            await update.message.reply_text("⛔️ This command is restricted to administrators.")
-            return
+    if not is_admin(chat_id, config.admin_chat_ids if config else []):
+        logger.warning("Unauthorized /debug attempt from user %s", chat_id)
+        await update.message.reply_text("⛔️ This command is restricted to administrators.")
+        return
 
     # Rate limiting: 1 minute
     remaining = rate_limiter.check_rate_limit(chat_id, "debug", RATE_LIMITS["debug"])
@@ -791,11 +791,10 @@ async def cmd_clearcache(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     config = context.bot_data.get("config")
 
     # Admin check
-    if config and config.admin_chat_ids:
-        if chat_id not in config.admin_chat_ids:
-            logger.warning("Unauthorized /clearcache attempt from user %s", chat_id)
-            await update.message.reply_text("⛔️ This command is restricted to administrators.")
-            return
+    if not is_admin(chat_id, config.admin_chat_ids if config else []):
+        logger.warning("Unauthorized /clearcache attempt from user %s", chat_id)
+        await update.message.reply_text("⛔️ This command is restricted to administrators.")
+        return
 
     # Rate limiting: 30 seconds
     remaining = rate_limiter.check_rate_limit(chat_id, "clearcache", RATE_LIMITS["clearcache"])

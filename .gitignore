@@ -111,6 +111,9 @@ docs/specs/
 *.sqlite
 *.sqlite3
 
+# otobr-buddy: runtime SQLite DB (mounted as a volume in its Dockerfile)
+apps/otobr-buddy/data/*.db
+
 # ledger-lens-backend: runtime CSV drop dir (whole dir ignored, no tracked
 # content inside)
 apps/ledger-lens-backend/data/

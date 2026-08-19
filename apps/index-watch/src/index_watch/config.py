@@ -4,7 +4,7 @@ import os
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from telegram_bot_shared.env import require_bot_token, select_bot_token
+from telegram_bot_shared.env import parse_admin_chat_ids, require_bot_token, select_bot_token
 
 DEFAULT_INDEX_SYMBOLS = {
     "^GSPC": "S&P 500",
@@ -64,8 +64,7 @@ class Config:
         raw_chat_ids = os.getenv("TELEGRAM_CHAT_IDS", "").strip()
         chat_ids = [c.strip() for c in raw_chat_ids.split(",") if c.strip()]
 
-        raw_admin_ids = os.getenv("ADMIN_CHAT_IDS", "").strip()
-        admin_chat_ids = [c.strip() for c in raw_admin_ids.split(",") if c.strip()]
+        admin_chat_ids = parse_admin_chat_ids()
 
         raw_thresholds = os.getenv("DRAWDOWN_THRESHOLDS_PCT", "").strip()
         if raw_thresholds:
