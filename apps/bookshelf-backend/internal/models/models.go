@@ -105,17 +105,43 @@ type WaitlistEntry struct {
 	User      User      `json:"user,omitempty"`
 }
 
+// WishlistRequest tracks a member's post for a book not currently in the
+// catalog — "does anyone have X" for a title nobody's added yet. Book
+// identity comes from the same metadata-search results used by /books
+// (createBook), so it always carries a resolvable external key: this lets a
+// newly-added Book auto-match and fulfill it. Status values: open |
+// fulfilled | cancelled
+type WishlistRequest struct {
+	ID              uint       `gorm:"primarykey" json:"id"`
+	RequesterID     uint       `gorm:"not null" json:"requester_id"`
+	Title           string     `gorm:"not null" json:"title"`
+	Author          string     `gorm:"not null" json:"author"`
+	ISBN            string     `json:"isbn"`
+	OLKey           string     `json:"ol_key"`
+	GoogleBooksID   string     `json:"google_books_id"`
+	CoverURL        string     `json:"cover_url"`
+	Notes           string     `json:"notes"`
+	Status          string     `gorm:"not null;default:'open'" json:"status"`
+	FulfilledBookID *uint      `json:"fulfilled_book_id"`
+	FulfilledAt     *time.Time `json:"fulfilled_at"`
+	CreatedAt       time.Time  `json:"created_at"`
+	Requester       User       `json:"requester,omitempty"`
+	FulfilledBook   *Book      `json:"fulfilled_book,omitempty"`
+}
+
 // Notification is an in-app alert delivered to a user.
 // Type values: request_received | request_accepted | request_rejected |
 //
-//	marked_loaned | marked_returned
+//	marked_loaned | marked_returned | waitlist_available |
+//	copy_transferred_in | copy_transferred_out | wishlist_fulfilled
 type Notification struct {
-	ID            uint      `gorm:"primarykey" json:"id"`
-	RecipientID   uint      `gorm:"not null" json:"recipient_id"`
-	Type          string    `json:"type"`
-	LoanRequestID *uint     `json:"loan_request_id"`
-	Read          bool      `gorm:"default:false" json:"read"`
-	CreatedAt     time.Time `json:"created_at"`
+	ID                uint      `gorm:"primarykey" json:"id"`
+	RecipientID       uint      `gorm:"not null" json:"recipient_id"`
+	Type              string    `json:"type"`
+	LoanRequestID     *uint     `json:"loan_request_id"`
+	WishlistRequestID *uint     `json:"wishlist_request_id"`
+	Read              bool      `gorm:"default:false" json:"read"`
+	CreatedAt         time.Time `json:"created_at"`
 }
 
 // Announcement is a permanent, admin-authored banner shown to community

@@ -35,7 +35,50 @@ page-layout system, search-as-hero pattern, and status-color conventions this ap
 follow: full `max-w-6xl` for grid/table pages, `max-w-2xl`/`max-w-lg mx-auto` for narrow
 single-column pages, `max-w-md mx-auto` for forms, always pairing a `max-w-*` constraint with
 `mx-auto`. `success`/`destructive`/`secondary`/`outline` badge variants map to
-available/loaned/pending/terminal states respectively.
+available/loaned/pending/terminal states — every status enum in the app (loan requests,
+`WaitlistEntry`, `WishlistRequest`'s `open`/`fulfilled`/`cancelled` in `src/lib/wishlist.ts`)
+reuses this same four-variant vocabulary rather than introducing new badge colors.
+
+## Mobile-first UI
+
+This app is used from the phone as much as (probably more than) the desktop — community members
+requesting/lending books day-to-day — so mobile is a first-class layout target, not a shrink-down
+of the desktop view. Concretely:
+
+- **Bottom tab bar, not a hamburger menu** (`src/components/layout/BottomTabBar.tsx`,
+  `md:hidden`, fixed to the viewport bottom): primary nav lives in thumb reach instead of behind
+  an extra tap. `src/components/layout/navItems.ts`'s `primaryNavItems` is the single source of
+  truth for both this and the desktop `NavBar` — add/rename/remove a destination there once.
+  - The tab bar is a **fixed 5-slot grid** (`grid-cols-5`): Notifications and Profile/Admin
+    always occupy two of the five, so at most **three** `primaryNavItems` entries can have
+    `mobileTab: true` (the default) at once. A `NavItem` opts out with `mobileTab: false` when
+    the bar is already full — its destination still shows in the desktop `NavBar`, and on mobile
+    it's reachable another way (see the FAB pattern below). `Share a Book` and `Wishlist` are
+    both `mobileTab: false` today, leaving Catalog/My Books/My Requests as the three tab slots.
+    Adding a fourth mobile tab means either bumping every other item's `mobileTab` decision or
+    changing the grid — it doesn't just slot in.
+  - Padded with `style={{ paddingBottom: "env(safe-area-inset-bottom)" }}` for the iOS home
+    indicator; every fixed-to-bottom mobile element in this app (tab bar, FABs) does the same.
+- **Content clears the tab bar**: `src/app/layout.tsx`'s `<main>` and `<footer>` both carry
+  `pb-24 md:pb-6` — the extra bottom padding only applies below the `md` breakpoint, since the
+  fixed tab bar would otherwise cover the last ~6rem of scrollable content on mobile.
+- **FAB for actions that lost their tab slot**: a page needing quick access to a `mobileTab:
+false` destination adds a `md:hidden fixed` circular button, positioned above the tab bar with
+  `bottom: "calc(env(safe-area-inset-bottom) + 4.5rem)"` (safe-area inset plus the tab bar's own
+  height). `src/app/catalog/page.tsx` uses a `Popover`-based speed-dial FAB (`Plus` icon, rotates
+  45° via `data-[state=open]:rotate-45` when open) once it needed to reach two destinations
+  (`/share` and `/wishlist`) from one button — a plain `<Link>` FAB only works for a single
+  target.
+- **Cards over dense tables on narrow screens**: compact "glance" cards (e.g.
+  `CurrentlyBorrowedCard.tsx`, `WishlistCard` in `src/app/wishlist/page.tsx`) show cover + title +
+  the one or two facts that matter, in a `grid-cols-1 sm:grid-cols-2 lg:grid-cols-3` grid — full
+  detail (message threads, contact info) stays behind an explicit expand/dialog rather than being
+  crammed into the card, so the default view stays scannable one-handed.
+- Touch targets follow shadcn/ui defaults (`size-icon`/`size-5`+ icons, `py-2`+ tap areas) — avoid
+  shrinking interactive elements below those defaults for density on mobile-facing pages.
+
+When adding a new page or primary action, check both the `md:hidden`/`hidden md:*` breakpoint
+split and the tab-bar slot budget above before assuming there's room for one more nav entry.
 
 ## Environment
 

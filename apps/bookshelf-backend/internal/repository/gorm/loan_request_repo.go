@@ -104,25 +104,39 @@ func (r *LoanRequestRepository) ListByBorrowerID(borrowerID uint) ([]models.Loan
 	return requests, err
 }
 
-func (r *LoanRequestRepository) ListByBorrowerIDPaginated(borrowerID uint, page, pageSize int) (*repository.PaginatedResult[models.LoanRequest], error) {
+func (r *LoanRequestRepository) ListByBorrowerIDPaginated(borrowerID uint, statuses []string, page, pageSize int) (*repository.PaginatedResult[models.LoanRequest], error) {
+	countQuery := r.db.Model(&models.LoanRequest{}).Where("borrower_id = ?", borrowerID)
+	selectQuery := r.db.Preload("Copy.Book").Preload("Copy.Owner").Preload("Borrower").
+		Where("borrower_id = ?", borrowerID)
+	if len(statuses) > 0 {
+		countQuery = countQuery.Where("status IN ?", statuses)
+		selectQuery = selectQuery.Where("status IN ?", statuses)
+	}
+
 	var total int64
-	if err := r.db.Model(&models.LoanRequest{}).Where("borrower_id = ?", borrowerID).Count(&total).Error; err != nil {
+	if err := countQuery.Count(&total).Error; err != nil {
 		return nil, err
 	}
 	var requests []models.LoanRequest
 	offset := (page - 1) * pageSize
-	err := r.db.Preload("Copy.Book").Preload("Copy.Owner").Preload("Borrower").
-		Where("borrower_id = ?", borrowerID).
-		Order("requested_at DESC").
-		Offset(offset).Limit(pageSize).
-		Find(&requests).Error
-	if err != nil {
+	if err := selectQuery.Order("requested_at DESC").Offset(offset).Limit(pageSize).Find(&requests).Error; err != nil {
 		return nil, err
 	}
 	totalPages := int((total + int64(pageSize) - 1) / int64(pageSize))
 	return &repository.PaginatedResult[models.LoanRequest]{
 		Items: requests, Total: total, Page: page, PageSize: pageSize, TotalPages: totalPages,
 	}, nil
+}
+
+// ListActiveByBorrowerID returns borrowerID's accepted (currently-held) loan
+// requests, due-soonest first, with NULL expected_return_date sorted last.
+func (r *LoanRequestRepository) ListActiveByBorrowerID(borrowerID uint) ([]models.LoanRequest, error) {
+	var requests []models.LoanRequest
+	err := r.db.Preload("Copy.Book").Preload("Copy.Owner").Preload("Borrower").
+		Where("borrower_id = ? AND status = ?", borrowerID, "accepted").
+		Order("expected_return_date IS NULL, expected_return_date ASC, requested_at ASC").
+		Find(&requests).Error
+	return requests, err
 }
 
 func (r *LoanRequestRepository) Save(lr *models.LoanRequest) error {

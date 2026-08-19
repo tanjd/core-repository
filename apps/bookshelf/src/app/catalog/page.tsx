@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef } from "react";
 import Link from "next/link";
-import { Search, SlidersHorizontal, Plus } from "lucide-react";
+import { Search, SlidersHorizontal, Plus, PlusCircle } from "lucide-react";
 import { api } from "@/lib/api";
 import type { Book, PaginatedResult } from "@/lib/types";
 import { BookCard } from "@/components/BookCard";
@@ -19,6 +19,11 @@ import {
 } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
 import { useOwnedBookIds } from "@/hooks/useOwnedBookIds";
 
 const PAGE_SIZE = 20;
@@ -170,7 +175,15 @@ export default function CatalogPage() {
               href={`/share?q=${encodeURIComponent(search.trim())}`}
               className="text-sm text-primary hover:underline"
             >
-              Can&apos;t find it? Share &ldquo;{search.trim()}&rdquo; →
+              Own a copy? Share &ldquo;{search.trim()}&rdquo; →
+            </Link>
+          )}
+          {search.trim() && (
+            <Link
+              href={`/wishlist?q=${encodeURIComponent(search.trim())}`}
+              className="text-sm text-primary hover:underline"
+            >
+              Don&apos;t have it? Add to wishlist →
             </Link>
           )}
         </div>
@@ -200,18 +213,43 @@ export default function CatalogPage() {
         </>
       )}
 
-      {/* Mobile-only FAB — desktop already has "Share a Book" in the top
-          nav; "Share" isn't a bottom-tab slot (see navItems.ts), so this is
-          how mobile users reach it from the primary browse screen. Sits
-          above the bottom tab bar + its safe-area inset. */}
-      <Link
-        href="/share"
-        aria-label="Share a book"
-        className="md:hidden fixed right-4 z-40 flex size-14 items-center justify-center rounded-full bg-primary text-primary-foreground shadow-lg active:scale-95 transition-transform"
-        style={{ bottom: "calc(env(safe-area-inset-bottom) + 4.5rem)" }}
-      >
-        <Plus className="size-6" />
-      </Link>
+      {/* Mobile-only speed-dial FAB — desktop already has "Share a Book"
+          and "Wishlist" in the top nav; neither is a bottom-tab slot
+          (see navItems.ts), so this is how mobile users reach either from
+          the primary browse screen. Sits above the bottom tab bar + its
+          safe-area inset. */}
+      <Popover>
+        <PopoverTrigger asChild>
+          <button
+            aria-label="Share a book or post a wishlist request"
+            className="md:hidden fixed right-4 z-40 flex size-14 items-center justify-center rounded-full bg-primary text-primary-foreground shadow-lg active:scale-95 transition-transform data-[state=open]:rotate-45"
+            style={{ bottom: "calc(env(safe-area-inset-bottom) + 4.5rem)" }}
+          >
+            <Plus className="size-6" />
+          </button>
+        </PopoverTrigger>
+        <PopoverContent
+          side="top"
+          align="end"
+          sideOffset={12}
+          className="md:hidden w-52 p-1"
+        >
+          <Link
+            href="/share"
+            className="flex items-center gap-2 rounded-md px-3 py-2 text-sm hover:bg-accent"
+          >
+            <PlusCircle className="size-4" />
+            Share a Book
+          </Link>
+          <Link
+            href="/wishlist"
+            className="flex items-center gap-2 rounded-md px-3 py-2 text-sm hover:bg-accent"
+          >
+            <Search className="size-4" />
+            Wishlist
+          </Link>
+        </PopoverContent>
+      </Popover>
     </div>
   );
 }

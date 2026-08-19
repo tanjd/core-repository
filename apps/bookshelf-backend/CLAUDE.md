@@ -61,6 +61,42 @@ apps/bookshelf-backend/Dockerfile .`) and switched from the source repo's `golan
   `targetDefaults.lint.dependsOn`), so a plain `nx affected -t lint` genuinely gates on it, not
   just `go vet`/`go fmt`.
 
+## Wishlist board
+
+`WishlistRequest` (`internal/models/models.go`, migration `000003_create_wishlist_requests`) lets
+a member post "does anyone have X" for a book nobody's added to the catalog yet — book identity
+comes from the same metadata-search external keys `/books`' `createBook` uses (ISBN/OL
+key/Google Books ID), so a title always carries a resolvable key even before it exists as a
+`Book` row.
+
+- **Auto-fulfillment**: `BookHandler.createBook` calls `WishlistWorkflow.OnBookCreated`
+  (`internal/services/wishlist_workflow.go`) after a genuinely new `Book` insert — never on the
+  upsert-return-existing path. It matches by `OLKey`/`GoogleBooksID` only (`ISBN` isn't indexed
+  for auto-match, only used in the create-time dedupe check below) and fulfills _every_ open
+  request sharing the key, since multiple members can separately be looking for the same book.
+  `BookHandler.wishlistWorkflow` is a nil-safe field so existing tests constructing a
+  `BookHandler` without one keep working.
+- **Single write site**: `fulfill()` in `wishlist_workflow.go` is the only place an open request
+  transitions to `fulfilled` — both the auto-match path and the manual "link to an existing
+  catalog book" path (`POST /wishlist/{id}/fulfill`, for a different edition/ISBN that didn't
+  auto-match) route through it. It sets status/`FulfilledBookID`/`FulfilledAt`, creates a
+  `wishlist_fulfilled` notification, and best-effort emails the requester (email failure doesn't
+  fail the fulfillment).
+- **Dedupe check**: `WishlistRequestRepository.FindOpenMatch` (checks ISBN/OL key/Google Books ID,
+  unlike the auto-match pair above) powers a create-time "this is already on someone's wishlist"
+  prompt so members join an existing request instead of posting a duplicate.
+- **Route ordering**: `/wishlist/mine` and `/wishlist/check` are registered before the
+  `/wishlist/{id}` wildcard in `WishlistHandler.RegisterRoutes` — same care as `notifications.go`,
+  otherwise huma's wildcard swallows the literal paths.
+
+`LoanRequestRepository.ListActiveByBorrowerID` (added alongside this feature, for the frontend's
+"currently borrowed" cards) sorts with
+`Order("expected_return_date IS NULL, expected_return_date ASC, requested_at ASC")` — a
+SQLite-specific NULLS-last idiom relying on boolean expressions evaluating to 0/1, not portable
+as-is to a different SQL dialect. `ListByBorrowerIDPaginated` also gained an optional
+`statuses []string` filter (empty/nil = no filter) so the frontend can split "current" vs.
+"history" tabs without new endpoints.
+
 ## Known gaps
 
 Dockerized (GHCR) and versioned independently via `nx release` (`release.projects` in root

@@ -11,6 +11,7 @@ import (
 	"github.com/tanjd/core-repository/apps/bookshelf-backend/internal/middleware"
 	"github.com/tanjd/core-repository/apps/bookshelf-backend/internal/models"
 	"github.com/tanjd/core-repository/apps/bookshelf-backend/internal/repository"
+	"github.com/tanjd/core-repository/apps/bookshelf-backend/internal/services"
 )
 
 // BookHandler holds dependencies for book routes.
@@ -18,11 +19,14 @@ type BookHandler struct {
 	books     repository.BookRepository
 	users     repository.UserRepository
 	coversDir string
+	// wishlistWorkflow is optional (nil-safe) — see createBook — so
+	// existing tests that construct a BookHandler without one keep working.
+	wishlistWorkflow *services.WishlistWorkflow
 }
 
 // NewBookHandler creates a new BookHandler.
-func NewBookHandler(books repository.BookRepository, users repository.UserRepository, coversDir string) *BookHandler {
-	return &BookHandler{books: books, users: users, coversDir: coversDir}
+func NewBookHandler(books repository.BookRepository, users repository.UserRepository, coversDir string, wishlistWorkflow *services.WishlistWorkflow) *BookHandler {
+	return &BookHandler{books: books, users: users, coversDir: coversDir, wishlistWorkflow: wishlistWorkflow}
 }
 
 // bookResponse wraps a Book and adds the computed available_copies count.
@@ -258,6 +262,10 @@ func (h *BookHandler) createBook(ctx context.Context, input *createBookInput) (*
 	}
 	if err := h.books.Create(&book); err != nil {
 		return nil, huma.Error500InternalServerError("could not create book")
+	}
+
+	if h.wishlistWorkflow != nil {
+		h.wishlistWorkflow.OnBookCreated(ctx, &book) // log-and-continue; never blocks book creation
 	}
 
 	return &createBookOutput{Body: book}, nil

@@ -85,11 +85,13 @@ func main() {
 	waitlistRepo := gormrepo.NewWaitlistRepository(database)
 	regVerificationRepo := gormrepo.NewRegistrationVerificationRepository(database)
 	announcementRepo := gormrepo.NewAnnouncementRepository(database)
+	wishlistRepo := gormrepo.NewWishlistRequestRepository(database)
 
 	// Services
 	emailSvc := services.NewEmailService(cfg.SMTPHost, cfg.SMTPPort, cfg.SMTPUsername, cfg.SMTPPassword, cfg.EmailFrom, cfg.Env, cfg.DevEmailOverride)
 	smsSvc := services.NewMockSMSService()
 	workflow := services.NewLoanWorkflow(copyRepo, loanRepo, notifRepo, userRepo, waitlistRepo, emailSvc)
+	wishlistWorkflow := services.NewWishlistWorkflow(wishlistRepo, notifRepo, userRepo, emailSvc)
 	scheduler := services.NewScheduler(bookRepo, adminRepo, coversDir, cfg.MetadataRefreshInterval)
 
 	seedYAMLConfig(cfg.AppConfigPath, adminRepo)
@@ -108,7 +110,7 @@ func main() {
 	// Handlers
 	authH := handlers.NewAuthHandler(userRepo, adminRepo, copyRepo, regVerificationRepo, cfg.JWTSecret, encryptionSecret, emailSvc, smsSvc, cfg.Env)
 	metadataH := handlers.NewMetadataHandler(ctx, cfg.GoogleBooksAPIKey, encryptionSecret, userRepo)
-	bookH := handlers.NewBookHandler(bookRepo, userRepo, coversDir)
+	bookH := handlers.NewBookHandler(bookRepo, userRepo, coversDir, wishlistWorkflow)
 	copyH := handlers.NewCopyHandler(copyRepo, userRepo, notifRepo, waitlistRepo, adminRepo)
 	loanH := handlers.NewLoanRequestHandler(copyRepo, loanRepo, adminRepo, userRepo, workflow)
 	notifH := handlers.NewNotificationHandler(notifRepo)
@@ -116,6 +118,7 @@ func main() {
 	jobsH := handlers.NewJobsHandler(scheduler)
 	waitlistH := handlers.NewWaitlistHandler(copyRepo, waitlistRepo)
 	announcementH := handlers.NewAnnouncementHandler(announcementRepo)
+	wishlistH := handlers.NewWishlistHandler(wishlistRepo, bookRepo, wishlistWorkflow)
 
 	// Router
 	mux := http.NewServeMux()
@@ -165,6 +168,7 @@ func main() {
 	jobsH.RegisterRoutes(api)
 	waitlistH.RegisterRoutes(api)
 	announcementH.RegisterRoutes(api)
+	wishlistH.RegisterRoutes(api)
 
 	// Middleware chain: security headers → request logging → CORS → auth enrichment → mux
 	corsHandler := cors.New(cors.Options{
