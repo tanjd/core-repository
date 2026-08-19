@@ -1,0 +1,130 @@
+name: Post-Merge Release Sanity
+
+# Backstop for the one failure mode nothing upstream can actually prevent:
+# a PR's title and source commits are perfectly conventional, but a human
+# hand-edits GitHub's squash-merge confirmation box before clicking merge,
+# landing a differently-worded commit on main. `validate` (PR Title) only
+# checks the PR title; nx release reads the commit that actually lands.
+# GitHub's ruleset `commit_message_pattern` rule can't catch this either -
+# for squash merges it validates the pre-squash source commits, not the
+# final squash message (see root CLAUDE.md's "Always merge PRs via
+# `gh pr merge --squash`" note). There is no hook between "human edits the
+# confirm dialog" and "commit lands on the branch", so this can only be
+# detected after the fact, not blocked before it - hence a fast, loud
+# failure right after merge instead of silence until someone happens to
+# notice a changelog is missing an entry (how PR #50 was actually found).
+#
+# For every new commit reaching main in this push, checks whether its
+# message is conventional (feat/fix/etc.) AND, if not, whether it touched
+# any nx.json release.projects project - the same "would nx release skip
+# this?" question the actual release run silently answers on its own.
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  check:
+    timeout-minutes: 10
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Read pnpm version from devcontainer config
+        id: pnpm-version
+        run: |
+          version=$(jq -r '.features["ghcr.io/devcontainers/features/node:1"].pnpmVersion' .devcontainer/devcontainer.json)
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
+      - uses: pnpm/action-setup@v6
+        with:
+          version: ${{ steps.pnpm-version.outputs.version }}
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: Check every new commit for silently-skipped release projects
+        id: scan
+        env:
+          BEFORE: ${{ github.event.before }}
+          AFTER: ${{ github.event.after }}
+        run: |
+          release_projects=$(jq -r '.release.projects[]' nx.json)
+          report=""
+
+          # github.event.before is all-zeros on a branch's first push - nothing to
+          # compare against yet, so there's nothing this check can do.
+          if [ "$BEFORE" = "0000000000000000000000000000000000000000" ]; then
+            echo "First push on this ref - nothing to compare against, skipping."
+            exit 0
+          fi
+
+          for sha in $(git rev-list "$BEFORE..$AFTER"); do
+            subject=$(git log -1 --format=%s "$sha")
+
+            if printf '%s' "$subject" | grep -qE '^(feat|fix|refactor|test|chore|docs|perf|build|types)(\([^)]+\))?!?: .+'; then
+              continue
+            fi
+
+            affected=$(npx nx show projects --affected --base="$sha~1" --head="$sha" --json)
+
+            touched=""
+            for project in $release_projects; do
+              if echo "$affected" | jq -e --arg p "$project" 'index($p) != null' > /dev/null; then
+                touched="$touched $project"
+              fi
+            done
+
+            if [ -n "$touched" ]; then
+              echo "::error::Commit $sha (\"$subject\") isn't conventional and touches release project(s):$touched"
+              report="$report\n- \`$sha\` \"$subject\" touches:$touched"
+            fi
+          done
+
+          if [ -n "$report" ]; then
+            {
+              echo "found<<SCAN_EOF"
+              printf '%b' "$report"
+              echo "SCAN_EOF"
+            } >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Open an issue so this doesn't sit unnoticed
+        if: steps.scan.outputs.found != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+          FOUND: ${{ steps.scan.outputs.found }}
+        run: |
+          gh issue create \
+            --title "Release versioning silently skipped for a commit on main" \
+            --label "release" \
+            --body "$(cat <<EOF
+          nx release's conventional-commits engine will silently skip versioning for
+          the affected project(s) below, since it only recognizes a commit whose
+          subject starts with a conventional-commit type (feat/fix/etc.) - see root
+          CLAUDE.md's "Always merge PRs via \`gh pr merge --squash\`" note for why this
+          happens even when the PR title and source commits were fine.
+
+          $FOUND
+
+          To recover: manually version the affected project(s), e.g.
+          \`npx nx release minor -p <project> --skip-publish\` (or \`patch\`, matching
+          what the actual change deserves), then hand-write the CHANGELOG.md entry
+          nx would have generated - see how commit e74d76b recovered PR #50 for the
+          pattern to follow.
+          EOF
+          )"
+
+      - name: Fail the job so this is visible on the commit
+        if: steps.scan.outputs.found != ''
+        run: exit 1

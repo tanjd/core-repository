@@ -80,10 +80,39 @@ push beats failing in CI, even with no remote cache to offset it
 repeat commits that don't touch a given project. CI (`.github/workflows/ci.yml`,
 triggered on `push`/`pull_request` to `main`) still runs the same
 `nx affected -t lint test` as the authoritative gate, since `--no-verify` or a
-merge can land changes the hook never saw. Branch protection on `main`
-requires the `main`, `docker-build`, and `validate` (PR Title) checks to pass
-and the PR branch to be up to date before merging — `enforce_admins` is off,
-so this can still be bypassed manually if needed.
+merge can land changes the hook never saw. Branch protection on `main` is a
+GitHub repository Ruleset ("Main Branch Protection", not classic branch
+protection — `gh api repos/tanjd/core-repository/branches/main/protection`
+shows a merged legacy view of it, so check the ruleset directly via
+`gh api repos/tanjd/core-repository/rulesets/1892923` for ground truth). It
+requires the `main`, `docker-build`, `validate` (PR Title), and `check` (PR
+Scope Check) status checks to pass and the PR branch to be up to date before
+merging. Its `bypass_actors` grants the admin `RepositoryRole` `bypass_mode:
+"always"` — tanjd can still bypass every rule in it (including required
+status checks and the PR-required rule) via a direct push or a force-merge,
+which is exactly how `release.yml`'s automated `chore(release): publish`
+commits land directly on `main` without a PR. Don't tighten that bypass
+without redesigning the release push mechanism first — it would break
+release automation, not just close the hole.
+
+**Always merge PRs via `gh pr merge --squash` (or "Enable auto-merge" in the
+UI once checks are configured to require it) — never the web UI's manual
+"Squash and merge" button.** That button opens a commit-message box
+prefilled from the PR title (`squash_merge_commit_title:
+COMMIT_OR_PR_TITLE`) but freely editable before confirming, and nothing
+validates whatever ends up typed there — `validate` only checks the PR
+title, a separate string. This isn't hypothetical: PR #50's title was a
+valid `feat(bookshelf): ...`, but its actual squash commit landed as "Add
+password reset, contact prefs, loan-return tracking, and backups (#50)" —
+no type prefix — because someone hand-edited the merge box. nx release's
+conventional-commits parser reads that landed commit, not the PR title, so
+it silently skipped versioning `bookshelf` and `bookshelf-backend` for real
+shipped features. `gh pr merge --squash` (no `--body`/interactive prompt)
+uses the PR title verbatim with no editable box, closing the gap. GitHub's
+ruleset `commit_message_pattern` rule does NOT catch this even if added —
+for squash merges it validates the pre-squash source commits, not the final
+squash message, so a PR whose source commits are fine but whose merge box
+gets hand-edited still passes it.
 
 ## Nx conventions
 
