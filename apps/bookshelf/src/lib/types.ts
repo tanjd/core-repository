@@ -94,9 +94,11 @@ export interface Notification {
     | "waitlist_available"
     | "copy_transferred_in"
     | "copy_transferred_out"
-    | "wishlist_fulfilled";
+    | "wishlist_fulfilled"
+    | "user_pending_approval";
   loan_request_id?: number;
   wishlist_request_id?: number;
+  pending_user_id?: number;
   read: boolean;
   created_at: string;
 }

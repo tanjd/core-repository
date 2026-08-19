@@ -1,0 +1,3 @@
+-- SQLite can't cheaply drop notifications.pending_user_id back out (would
+-- need a full table rebuild); no other migration in this repo drops a
+-- column either (see 000003's down migration), so it's left in place here.

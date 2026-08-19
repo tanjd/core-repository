@@ -13,6 +13,7 @@ import (
 	"github.com/tanjd/core-repository/apps/bookshelf-backend/internal/models"
 	"github.com/tanjd/core-repository/apps/bookshelf-backend/internal/repository"
 	"github.com/tanjd/core-repository/apps/bookshelf-backend/internal/repotest"
+	"github.com/tanjd/core-repository/apps/bookshelf-backend/internal/services"
 )
 
 func newAuthHandler() (*AuthHandler, *repotest.UserRepository, *repotest.AdminRepository) {
@@ -25,7 +26,8 @@ func newAuthHandlerWithVerifications() (*AuthHandler, *repotest.UserRepository, 
 	admin := repotest.NewAdminRepository()
 	copies := repotest.NewCopyRepository()
 	regVerifications := repotest.NewRegistrationVerificationRepository()
-	h := NewAuthHandler(users, admin, copies, regVerifications, testJWTSecret, "encryption-secret", noopEmail(), noopSMS(), "dev")
+	registration := services.NewRegistrationWorkflow(admin, repotest.NewNotificationRepository(), noopEmail())
+	h := NewAuthHandler(users, admin, copies, regVerifications, testJWTSecret, "encryption-secret", noopEmail(), noopSMS(), registration, "dev")
 	return h, users, admin, regVerifications
 }
 
@@ -177,8 +179,15 @@ func TestRegister(t *testing.T) {
 	})
 
 	t.Run("creates a pending, token-less account when approval is required", func(t *testing.T) {
-		h, users, admin := newAuthHandler()
+		users := repotest.NewUserRepository()
+		admin := repotest.NewAdminRepository()
+		copies := repotest.NewCopyRepository()
+		regVerifications := repotest.NewRegistrationVerificationRepository()
+		notifs := repotest.NewNotificationRepository()
+		registration := services.NewRegistrationWorkflow(admin, notifs, noopEmail())
+		h := NewAuthHandler(users, admin, copies, regVerifications, testJWTSecret, "encryption-secret", noopEmail(), noopSMS(), registration, "dev")
 		require.NoError(t, admin.UpsertSetting("require_registration_approval", "true"))
+		require.NoError(t, admin.SaveUser(&models.User{ID: 1, Name: "Site Admin", Email: "admin@example.com", Role: "admin"}))
 
 		input := &registerInput{}
 		input.Body.Name = "Ada"
@@ -195,6 +204,13 @@ func TestRegister(t *testing.T) {
 		stored, findErr := users.FindByEmail("ada4@example.com")
 		require.NoError(t, findErr)
 		assert.True(t, stored.PendingApproval)
+
+		adminNotifs, notifErr := notifs.FindByRecipient(1, false)
+		require.NoError(t, notifErr)
+		require.Len(t, adminNotifs, 1)
+		assert.Equal(t, "user_pending_approval", adminNotifs[0].Type)
+		require.NotNil(t, adminNotifs[0].PendingUserID)
+		assert.Equal(t, stored.ID, *adminNotifs[0].PendingUserID)
 	})
 }
 
@@ -904,7 +920,8 @@ func TestSendVerifyRegisterEmailOTP(t *testing.T) {
 		admin := repotest.NewAdminRepository()
 		copies := repotest.NewCopyRepository()
 		regVerifications := repotest.NewRegistrationVerificationRepository()
-		h := NewAuthHandler(users, admin, copies, regVerifications, testJWTSecret, "encryption-secret", noopEmail(), noopSMS(), "prd")
+		registration := services.NewRegistrationWorkflow(admin, repotest.NewNotificationRepository(), noopEmail())
+		h := NewAuthHandler(users, admin, copies, regVerifications, testJWTSecret, "encryption-secret", noopEmail(), noopSMS(), registration, "prd")
 
 		sendIn := &sendRegisterEmailOTPInput{}
 		sendIn.Body.Email = "prod-user@example.com"

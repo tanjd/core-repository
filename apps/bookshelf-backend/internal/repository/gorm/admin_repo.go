@@ -48,6 +48,14 @@ func (r *AdminRepository) ListUsersPaginated(page, pageSize int) (*repository.Pa
 	}, nil
 }
 
+func (r *AdminRepository) ListByRole(role string) ([]models.User, error) {
+	var users []models.User
+	if err := r.db.Where("role = ?", role).Find(&users).Error; err != nil {
+		return nil, err
+	}
+	return users, nil
+}
+
 func (r *AdminRepository) FindUserByID(id uint) (*models.User, error) {
 	var user models.User
 	if err := r.db.First(&user, id).Error; err != nil {

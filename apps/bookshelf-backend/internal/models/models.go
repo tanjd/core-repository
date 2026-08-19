@@ -148,13 +148,15 @@ type WishlistRequest struct {
 // Type values: request_received | request_accepted | request_rejected |
 //
 //	marked_loaned | marked_returned | return_undone | waitlist_available |
-//	copy_transferred_in | copy_transferred_out | wishlist_fulfilled
+//	copy_transferred_in | copy_transferred_out | wishlist_fulfilled |
+//	user_pending_approval
 type Notification struct {
 	ID                uint      `gorm:"primarykey" json:"id"`
 	RecipientID       uint      `gorm:"not null" json:"recipient_id"`
 	Type              string    `json:"type"`
 	LoanRequestID     *uint     `json:"loan_request_id"`
 	WishlistRequestID *uint     `json:"wishlist_request_id"`
+	PendingUserID     *uint     `json:"pending_user_id"`
 	Read              bool      `gorm:"default:false" json:"read"`
 	CreatedAt         time.Time `json:"created_at"`
 }

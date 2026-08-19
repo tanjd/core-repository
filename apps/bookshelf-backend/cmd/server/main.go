@@ -92,6 +92,8 @@ func main() {
 	smsSvc := services.NewMockSMSService()
 	workflow := services.NewLoanWorkflow(copyRepo, loanRepo, notifRepo, userRepo, waitlistRepo, emailSvc)
 	wishlistWorkflow := services.NewWishlistWorkflow(wishlistRepo, notifRepo, userRepo, emailSvc)
+	registrationWorkflow := services.NewRegistrationWorkflow(adminRepo, notifRepo, emailSvc)
+
 	scheduler := services.NewScheduler(bookRepo, adminRepo, coversDir, cfg.MetadataRefreshInterval)
 
 	seedYAMLConfig(cfg.AppConfigPath, adminRepo)
@@ -108,7 +110,7 @@ func main() {
 	}
 
 	// Handlers
-	authH := handlers.NewAuthHandler(userRepo, adminRepo, copyRepo, regVerificationRepo, cfg.JWTSecret, encryptionSecret, emailSvc, smsSvc, cfg.Env)
+	authH := handlers.NewAuthHandler(userRepo, adminRepo, copyRepo, regVerificationRepo, cfg.JWTSecret, encryptionSecret, emailSvc, smsSvc, registrationWorkflow, cfg.Env)
 	metadataH := handlers.NewMetadataHandler(ctx, cfg.GoogleBooksAPIKey, encryptionSecret, userRepo)
 	bookH := handlers.NewBookHandler(bookRepo, userRepo, coversDir, wishlistWorkflow)
 	copyH := handlers.NewCopyHandler(copyRepo, userRepo, notifRepo, waitlistRepo, adminRepo)

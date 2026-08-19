@@ -12,6 +12,7 @@ export const notificationTypeLabel: Record<Notification["type"], string> = {
   copy_transferred_in: "Copy transferred to you",
   copy_transferred_out: "Copy transfer sent",
   wishlist_fulfilled: "A book you wanted is available",
+  user_pending_approval: "New user awaiting approval",
 };
 
 // The currently logged-in user's id, as stashed in localStorage at login
@@ -35,6 +36,8 @@ function currentUserID(): number | null {
 export async function notificationDestination(
   n: Notification,
 ): Promise<string | null> {
+  if (n.type === "user_pending_approval") return "/admin/users";
+
   if (n.type === "wishlist_fulfilled") {
     if (!n.wishlist_request_id) return null;
     try {

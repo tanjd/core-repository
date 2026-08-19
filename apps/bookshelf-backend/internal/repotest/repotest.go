@@ -214,6 +214,20 @@ func (r *AdminRepository) ListUsersPaginated(page, pageSize int) (*repository.Pa
 	}, nil
 }
 
+// ListByRole returns all stored users with the given role, ordered by ID.
+func (r *AdminRepository) ListByRole(role string) ([]models.User, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	out := make([]models.User, 0)
+	for _, u := range r.users {
+		if u.Role == role {
+			out = append(out, *u)
+		}
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].ID < out[j].ID })
+	return out, nil
+}
+
 // FindUserByID returns the user with the given ID, or repository.ErrNotFound.
 func (r *AdminRepository) FindUserByID(id uint) (*models.User, error) {
 	r.mu.Lock()

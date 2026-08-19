@@ -228,6 +228,7 @@ type AuthHandler struct {
 	encryptionSecret          string
 	email                     *services.EmailService
 	sms                       services.SMSService
+	registration              *services.RegistrationWorkflow
 	env                       string
 	loginLimiter              *ratelimit.Limiter
 	emailOTPLimiter           *ratelimit.Limiter
@@ -247,6 +248,7 @@ func NewAuthHandler(
 	jwtSecret, encryptionSecret string,
 	email *services.EmailService,
 	sms services.SMSService,
+	registration *services.RegistrationWorkflow,
 	env string,
 ) *AuthHandler {
 	return &AuthHandler{
@@ -258,6 +260,7 @@ func NewAuthHandler(
 		encryptionSecret:          encryptionSecret,
 		email:                     email,
 		sms:                       sms,
+		registration:              registration,
 		env:                       env,
 		loginLimiter:              ratelimit.New(loginRateLimitAttempts, loginRateLimitWindow),
 		emailOTPLimiter:           ratelimit.New(registrationOTPRateLimitAttempts, registrationOTPRateLimitWindow),
@@ -633,7 +636,7 @@ func (h *AuthHandler) RegisterRoutes(api huma.API) {
 
 // --- Handlers ---
 
-func (h *AuthHandler) register(_ context.Context, input *registerInput) (*authOutput, error) {
+func (h *AuthHandler) register(ctx context.Context, input *registerInput) (*authOutput, error) {
 	if val, _ := h.admin.GetSetting("allow_registration"); val == "false" {
 		return nil, huma.Error403Forbidden("registration is currently disabled")
 	}
@@ -681,6 +684,7 @@ func (h *AuthHandler) register(_ context.Context, input *registerInput) (*authOu
 	// An account awaiting admin approval gets no session — the frontend shows
 	// a pending-approval message instead of logging the user straight in.
 	if user.PendingApproval {
+		h.registration.OnPendingApproval(ctx, &user)
 		return &authOutput{Body: authResponse{User: user}}, nil
 	}
 
