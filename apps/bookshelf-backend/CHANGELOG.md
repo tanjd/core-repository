@@ -1,3 +1,13 @@
+## 0.6.0 (2026-08-19)
+
+### 🚀 Features
+
+- **bookshelf,bookshelf-backend:** ISBN barcode scanning to sharing flow ([#53](https://github.com/tanjd/core-repository/pull/53))
+
+### ❤️ Thank You
+
+- Jeddy Tan @tanjd
+
 ## 0.5.0 (2026-08-19)
 
 ### 🚀 Features
