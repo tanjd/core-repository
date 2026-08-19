@@ -17,6 +17,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Textarea } from "@/components/ui/textarea";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Card, CardContent } from "@/components/ui/card";
@@ -263,10 +264,18 @@ function WishlistCard({
             <Badge variant={wishlistStatusVariant[request.status]}>
               {wishlistStatusLabel[request.status]}
             </Badge>
-            {request.requester?.name && (
-              <span className="text-xs text-muted-foreground">
-                by {request.requester.name}
+            {request.is_anonymous ? (
+              <span className="text-xs text-muted-foreground italic">
+                {canManage && request.requester?.name
+                  ? `by ${request.requester.name} (hidden from others)`
+                  : "Anonymous member"}
               </span>
+            ) : (
+              request.requester?.name && (
+                <span className="text-xs text-muted-foreground">
+                  by {request.requester.name}
+                </span>
+              )
             )}
           </div>
           <div className="flex items-center gap-3 mt-1">
@@ -309,6 +318,7 @@ function CreateRequestDialog({
   const [searchError, setSearchError] = useState("");
   const [selected, setSelected] = useState<SelectedBook | null>(null);
   const [notes, setNotes] = useState("");
+  const [isAnonymous, setIsAnonymous] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [match, setMatch] = useState<WishlistRequest | null>(null);
   const [matchLoading, setMatchLoading] = useState(false);
@@ -386,6 +396,7 @@ function CreateRequestDialog({
     setResults([]);
     setSelected(null);
     setNotes("");
+    setIsAnonymous(false);
     setMatch(null);
     setBypassMatch(false);
   }
@@ -414,6 +425,7 @@ function CreateRequestDialog({
         google_books_id: selected.googleBooksId || undefined,
         cover_url: selected.coverUrl || undefined,
         notes: notes.trim() || undefined,
+        is_anonymous: isAnonymous,
       });
       toast.success(
         "Added to the wishlist! We'll let you know if it turns up.",
@@ -517,6 +529,19 @@ function CreateRequestDialog({
                   value={notes}
                   onChange={(e) => setNotes(e.target.value)}
                 />
+                <div className="flex items-center gap-2 mt-1">
+                  <Checkbox
+                    id="wishlist-anonymous"
+                    checked={isAnonymous}
+                    onCheckedChange={(c) => setIsAnonymous(c === true)}
+                  />
+                  <Label
+                    htmlFor="wishlist-anonymous"
+                    className="text-sm font-normal cursor-pointer"
+                  >
+                    Post anonymously
+                  </Label>
+                </div>
               </div>
             )}
           </div>

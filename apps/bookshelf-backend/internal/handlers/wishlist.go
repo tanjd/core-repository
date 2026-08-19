@@ -3,6 +3,7 @@ package handlers
 import (
 	"context"
 	"errors"
+	"time"
 
 	"github.com/danielgtaylor/huma/v2"
 
@@ -39,10 +40,63 @@ type createWishlistRequestInput struct {
 		GoogleBooksID string `json:"google_books_id,omitempty" doc:"Google Books volume ID"`
 		CoverURL      string `json:"cover_url,omitempty" doc:"Cover image URL"`
 		Notes         string `json:"notes,omitempty" doc:"Optional note, e.g. preferred edition"`
+		IsAnonymous   bool   `json:"is_anonymous,omitempty" doc:"Hide the requester's identity from other members"`
 	}
 }
 
-type wishlistRequestOutput struct{ Body models.WishlistRequest }
+// wishlistResponse is the wire shape for a WishlistRequest — unlike the raw
+// model (whose Requester is a full models.User), it narrows the requester to
+// a safeUser and, when the request is anonymous, redacts it entirely for
+// anyone but the requester or an admin. Same reasoning as loanRequestCopyResponse
+// in loan_requests.go: never serialize models.User directly.
+type wishlistResponse struct {
+	ID              uint         `json:"id"`
+	RequesterID     uint         `json:"requester_id"`
+	Title           string       `json:"title"`
+	Author          string       `json:"author"`
+	ISBN            string       `json:"isbn"`
+	OLKey           string       `json:"ol_key"`
+	GoogleBooksID   string       `json:"google_books_id"`
+	CoverURL        string       `json:"cover_url"`
+	Notes           string       `json:"notes"`
+	Status          string       `json:"status"`
+	IsAnonymous     bool         `json:"is_anonymous"`
+	FulfilledBookID *uint        `json:"fulfilled_book_id"`
+	FulfilledAt     *time.Time   `json:"fulfilled_at"`
+	CreatedAt       time.Time    `json:"created_at"`
+	Requester       safeUser     `json:"requester"`
+	FulfilledBook   *models.Book `json:"fulfilled_book,omitempty"`
+}
+
+// toWishlistResponse redacts the requester's name when the request is
+// anonymous, unless the viewer is the requester themselves or an admin (who
+// still need the real identity for moderation).
+func toWishlistResponse(req models.WishlistRequest, viewerID uint, isAdmin bool) wishlistResponse {
+	requester := safeUser{ID: req.Requester.ID, Name: req.Requester.Name}
+	if req.IsAnonymous && req.RequesterID != viewerID && !isAdmin {
+		requester = safeUser{Name: "Anonymous member"}
+	}
+	return wishlistResponse{
+		ID:              req.ID,
+		RequesterID:     req.RequesterID,
+		Title:           req.Title,
+		Author:          req.Author,
+		ISBN:            req.ISBN,
+		OLKey:           req.OLKey,
+		GoogleBooksID:   req.GoogleBooksID,
+		CoverURL:        req.CoverURL,
+		Notes:           req.Notes,
+		Status:          req.Status,
+		IsAnonymous:     req.IsAnonymous,
+		FulfilledBookID: req.FulfilledBookID,
+		FulfilledAt:     req.FulfilledAt,
+		CreatedAt:       req.CreatedAt,
+		Requester:       requester,
+		FulfilledBook:   req.FulfilledBook,
+	}
+}
+
+type wishlistRequestOutput struct{ Body wishlistResponse }
 
 type listWishlistInput struct {
 	Q        string `query:"q" doc:"Search by title or author"`
@@ -52,15 +106,15 @@ type listWishlistInput struct {
 
 type listWishlistOutput struct {
 	Body struct {
-		Items      []models.WishlistRequest `json:"items"`
-		Total      int64                    `json:"total"`
-		Page       int                      `json:"page"`
-		PageSize   int                      `json:"page_size"`
-		TotalPages int                      `json:"total_pages"`
+		Items      []wishlistResponse `json:"items"`
+		Total      int64              `json:"total"`
+		Page       int                `json:"page"`
+		PageSize   int                `json:"page_size"`
+		TotalPages int                `json:"total_pages"`
 	}
 }
 
-type listMyWishlistOutput struct{ Body []models.WishlistRequest }
+type listMyWishlistOutput struct{ Body []wishlistResponse }
 
 type checkWishlistInput struct {
 	ISBN          string `query:"isbn" doc:"ISBN-13"`
@@ -73,7 +127,7 @@ type checkWishlistOutput struct {
 		// Match is the earliest open request already sharing one of the
 		// given keys, or null if none exists — lets the client warn a
 		// member before they post a duplicate.
-		Match *models.WishlistRequest `json:"match"`
+		Match *wishlistResponse `json:"match"`
 	}
 }
 
@@ -186,17 +240,20 @@ func (h *WishlistHandler) create(ctx context.Context, input *createWishlistReque
 		CoverURL:      input.Body.CoverURL,
 		Notes:         input.Body.Notes,
 		Status:        "open",
+		IsAnonymous:   input.Body.IsAnonymous,
 	}
 	if err := h.requests.Create(req); err != nil {
 		return nil, huma.Error500InternalServerError("could not create wishlist request")
 	}
-	return &wishlistRequestOutput{Body: *req}, nil
+	return &wishlistRequestOutput{Body: toWishlistResponse(*req, userID, false)}, nil
 }
 
 func (h *WishlistHandler) list(ctx context.Context, input *listWishlistInput) (*listWishlistOutput, error) {
-	if _, err := middleware.GetRequiredUserID(ctx); err != nil {
+	userID, err := middleware.GetRequiredUserID(ctx)
+	if err != nil {
 		return nil, huma.Error401Unauthorized("authentication required")
 	}
+	isAdmin := middleware.GetUserRole(ctx) == "admin"
 
 	page := input.Page
 	if page < 1 {
@@ -212,7 +269,10 @@ func (h *WishlistHandler) list(ctx context.Context, input *listWishlistInput) (*
 		return nil, huma.Error500InternalServerError("could not list wishlist requests")
 	}
 	var out listWishlistOutput
-	out.Body.Items = result.Items
+	out.Body.Items = make([]wishlistResponse, len(result.Items))
+	for i, item := range result.Items {
+		out.Body.Items[i] = toWishlistResponse(item, userID, isAdmin)
+	}
 	out.Body.Total = result.Total
 	out.Body.Page = result.Page
 	out.Body.PageSize = result.PageSize
@@ -221,15 +281,20 @@ func (h *WishlistHandler) list(ctx context.Context, input *listWishlistInput) (*
 }
 
 func (h *WishlistHandler) check(ctx context.Context, input *checkWishlistInput) (*checkWishlistOutput, error) {
-	if _, err := middleware.GetRequiredUserID(ctx); err != nil {
+	userID, err := middleware.GetRequiredUserID(ctx)
+	if err != nil {
 		return nil, huma.Error401Unauthorized("authentication required")
 	}
+	isAdmin := middleware.GetUserRole(ctx) == "admin"
 	match, err := h.requests.FindOpenMatch(input.ISBN, input.OLKey, input.GoogleBooksID)
 	if err != nil {
 		return nil, huma.Error500InternalServerError("could not check for an existing request")
 	}
 	out := &checkWishlistOutput{}
-	out.Body.Match = match
+	if match != nil {
+		resp := toWishlistResponse(*match, userID, isAdmin)
+		out.Body.Match = &resp
+	}
 	return out, nil
 }
 
@@ -242,13 +307,19 @@ func (h *WishlistHandler) listMine(ctx context.Context, _ *struct{}) (*listMyWis
 	if err != nil {
 		return nil, huma.Error500InternalServerError("could not list your wishlist requests")
 	}
-	return &listMyWishlistOutput{Body: items}, nil
+	out := make([]wishlistResponse, len(items))
+	for i, item := range items {
+		out[i] = toWishlistResponse(item, userID, false)
+	}
+	return &listMyWishlistOutput{Body: out}, nil
 }
 
 func (h *WishlistHandler) get(ctx context.Context, input *wishlistIDInput) (*wishlistRequestOutput, error) {
-	if _, err := middleware.GetRequiredUserID(ctx); err != nil {
+	userID, err := middleware.GetRequiredUserID(ctx)
+	if err != nil {
 		return nil, huma.Error401Unauthorized("authentication required")
 	}
+	isAdmin := middleware.GetUserRole(ctx) == "admin"
 	req, err := h.requests.GetByID(input.ID)
 	if err != nil {
 		if errors.Is(err, repository.ErrNotFound) {
@@ -256,7 +327,7 @@ func (h *WishlistHandler) get(ctx context.Context, input *wishlistIDInput) (*wis
 		}
 		return nil, huma.Error500InternalServerError("could not fetch wishlist request")
 	}
-	return &wishlistRequestOutput{Body: *req}, nil
+	return &wishlistRequestOutput{Body: toWishlistResponse(*req, userID, isAdmin)}, nil
 }
 
 func (h *WishlistHandler) cancel(ctx context.Context, input *wishlistIDInput) (*struct{}, error) {
@@ -291,9 +362,11 @@ func (h *WishlistHandler) cancel(ctx context.Context, input *wishlistIDInput) (*
 }
 
 func (h *WishlistHandler) fulfill(ctx context.Context, input *fulfillWishlistInput) (*wishlistRequestOutput, error) {
-	if _, err := middleware.GetRequiredUserID(ctx); err != nil {
+	userID, err := middleware.GetRequiredUserID(ctx)
+	if err != nil {
 		return nil, huma.Error401Unauthorized("authentication required")
 	}
+	isAdmin := middleware.GetUserRole(ctx) == "admin"
 
 	req, err := h.requests.GetByID(input.ID)
 	if err != nil {
@@ -316,5 +389,5 @@ func (h *WishlistHandler) fulfill(ctx context.Context, input *fulfillWishlistInp
 
 	h.workflow.OnFulfilled(ctx, req, book)
 
-	return &wishlistRequestOutput{Body: *req}, nil
+	return &wishlistRequestOutput{Body: toWishlistResponse(*req, userID, isAdmin)}, nil
 }

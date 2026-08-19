@@ -109,6 +109,7 @@ export interface WishlistRequest {
   cover_url: string;
   notes: string;
   status: WishlistStatus;
+  is_anonymous: boolean;
   fulfilled_book_id?: number;
   fulfilled_at?: string;
   created_at: string;

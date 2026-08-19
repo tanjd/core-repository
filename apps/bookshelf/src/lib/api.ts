@@ -529,6 +529,7 @@ export const api = {
     google_books_id?: string;
     cover_url?: string;
     notes?: string;
+    is_anonymous?: boolean;
   }) =>
     request<WishlistRequest>("/wishlist", {
       method: "POST",

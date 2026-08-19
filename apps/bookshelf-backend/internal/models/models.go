@@ -122,6 +122,7 @@ type WishlistRequest struct {
 	CoverURL        string     `json:"cover_url"`
 	Notes           string     `json:"notes"`
 	Status          string     `gorm:"not null;default:'open'" json:"status"`
+	IsAnonymous     bool       `gorm:"column:is_anonymous;not null;default:false" json:"is_anonymous"`
 	FulfilledBookID *uint      `json:"fulfilled_book_id"`
 	FulfilledAt     *time.Time `json:"fulfilled_at"`
 	CreatedAt       time.Time  `json:"created_at"`

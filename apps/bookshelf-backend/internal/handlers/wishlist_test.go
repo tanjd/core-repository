@@ -144,6 +144,65 @@ func TestCancelWishlistRequest(t *testing.T) {
 	})
 }
 
+func TestWishlistAnonymity(t *testing.T) {
+	h, repo, _, _, _ := newWishlistHandler()
+	req := &models.WishlistRequest{
+		RequesterID: 5,
+		Title:       "T",
+		Author:      "A",
+		OLKey:       "OL1",
+		Status:      "open",
+		IsAnonymous: true,
+		Requester:   models.User{ID: 5, Name: "Real Name"},
+	}
+	require.NoError(t, repo.Create(req))
+
+	t.Run("list redacts the requester's name for other members", func(t *testing.T) {
+		out, err := h.list(fakeAuthedCtx(t, 1, "user"), &listWishlistInput{})
+		require.NoError(t, err)
+		require.Len(t, out.Body.Items, 1)
+		assert.Equal(t, "Anonymous member", out.Body.Items[0].Requester.Name)
+		assert.Zero(t, out.Body.Items[0].Requester.ID)
+		// requester_id itself stays visible — it's needed for the
+		// requester's own "can I manage this" check on the frontend.
+		assert.Equal(t, uint(5), out.Body.Items[0].RequesterID)
+	})
+
+	t.Run("get reveals the real name to the requester themselves", func(t *testing.T) {
+		out, err := h.get(fakeAuthedCtx(t, 5, "user"), &wishlistIDInput{ID: req.ID})
+		require.NoError(t, err)
+		assert.Equal(t, "Real Name", out.Body.Requester.Name)
+	})
+
+	t.Run("get reveals the real name to an admin", func(t *testing.T) {
+		out, err := h.get(fakeAuthedCtx(t, 99, "admin"), &wishlistIDInput{ID: req.ID})
+		require.NoError(t, err)
+		assert.Equal(t, "Real Name", out.Body.Requester.Name)
+	})
+
+	t.Run("get redacts the real name from another member", func(t *testing.T) {
+		out, err := h.get(fakeAuthedCtx(t, 6, "user"), &wishlistIDInput{ID: req.ID})
+		require.NoError(t, err)
+		assert.Equal(t, "Anonymous member", out.Body.Requester.Name)
+	})
+
+	t.Run("non-anonymous requests are never redacted", func(t *testing.T) {
+		public := &models.WishlistRequest{
+			RequesterID: 7,
+			Title:       "T2",
+			Author:      "A",
+			OLKey:       "OL2",
+			Status:      "open",
+			Requester:   models.User{ID: 7, Name: "Public Name"},
+		}
+		require.NoError(t, repo.Create(public))
+
+		out, err := h.get(fakeAuthedCtx(t, 6, "user"), &wishlistIDInput{ID: public.ID})
+		require.NoError(t, err)
+		assert.Equal(t, "Public Name", out.Body.Requester.Name)
+	})
+}
+
 func TestFulfillWishlistRequest(t *testing.T) {
 	h, repo, notifs, users, books := newWishlistHandler()
 	require.NoError(t, users.Create(&models.User{Name: "Requester", Email: "req@example.com"}))

@@ -1,0 +1,4 @@
+-- No column drop: same rationale as 000003's down migration — SQLite can
+-- drop a column cheaply as of 3.35+, but no other migration in this repo
+-- drops one, so there's no established pattern to follow and the column is
+-- left in place here too.
