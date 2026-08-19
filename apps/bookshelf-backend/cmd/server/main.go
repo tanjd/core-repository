@@ -84,6 +84,7 @@ func main() {
 	adminRepo := gormrepo.NewAdminRepository(database)
 	waitlistRepo := gormrepo.NewWaitlistRepository(database)
 	regVerificationRepo := gormrepo.NewRegistrationVerificationRepository(database)
+	announcementRepo := gormrepo.NewAnnouncementRepository(database)
 
 	// Services
 	emailSvc := services.NewEmailService(cfg.SMTPHost, cfg.SMTPPort, cfg.SMTPUsername, cfg.SMTPPassword, cfg.EmailFrom, cfg.Env, cfg.DevEmailOverride)
@@ -114,6 +115,7 @@ func main() {
 	adminH := handlers.NewAdminHandler(adminRepo, cfg.GoogleBooksAPIKey)
 	jobsH := handlers.NewJobsHandler(scheduler)
 	waitlistH := handlers.NewWaitlistHandler(copyRepo, waitlistRepo)
+	announcementH := handlers.NewAnnouncementHandler(announcementRepo)
 
 	// Router
 	mux := http.NewServeMux()
@@ -162,6 +164,7 @@ func main() {
 	adminH.RegisterRoutes(api)
 	jobsH.RegisterRoutes(api)
 	waitlistH.RegisterRoutes(api)
+	announcementH.RegisterRoutes(api)
 
 	// Middleware chain: security headers → request logging → CORS → auth enrichment → mux
 	corsHandler := cors.New(cors.Options{

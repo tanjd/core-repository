@@ -52,7 +52,10 @@ const nextConfig: WithNxOptions = {
               // strict 'self'-only script-src blocks hydration on every route tested
               // (/, /login, /setup, /catalog, /register). Nonce-based CSP would remove
               // this relaxation but needs per-request middleware not present here.
-              "script-src 'self' 'unsafe-inline'",
+              // 'unsafe-eval' is added in dev only — next dev's webpack HMR/react-refresh
+              // runtime evals code to apply updates; the production standalone build
+              // doesn't need it.
+              `script-src 'self' 'unsafe-inline'${process.env.NODE_ENV === "production" ? "" : " 'unsafe-eval'"}`,
               // All backend calls are same-origin via src/app/api/[...path]/route.ts.
               "connect-src 'self'",
               "frame-ancestors 'none'",

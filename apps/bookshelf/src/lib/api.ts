@@ -4,6 +4,8 @@ import type {
   Copy,
   LoanRequest,
   Notification,
+  Announcement,
+  AnnouncementType,
   AuthResponse,
   AppSetting,
   BookMetadataResult,
@@ -21,6 +23,8 @@ export type {
   Copy,
   LoanRequest,
   Notification,
+  Announcement,
+  AnnouncementType,
   AuthResponse,
   AppSetting,
   BookMetadataResult,
@@ -452,6 +456,43 @@ export const api = {
     request<void>(`/notifications/${id}/read`, { method: "PATCH" }),
   markAllRead: () =>
     request<void>("/notifications/read-all", { method: "PATCH" }),
+
+  // Announcements
+  getActiveAnnouncements: () => request<Announcement[]>("/announcements"),
+  adminListAnnouncements: (params?: { page?: number; page_size?: number }) => {
+    const p: Record<string, string> = {};
+    if (params?.page) p.page = String(params.page);
+    if (params?.page_size) p.page_size = String(params.page_size);
+    const qs = new URLSearchParams(p).toString();
+    return request<PaginatedResult<Announcement>>(
+      `/admin/announcements${qs ? "?" + qs : ""}`,
+    );
+  },
+  adminCreateAnnouncement: (data: {
+    title: string;
+    body: string;
+    type: AnnouncementType;
+    active?: boolean;
+  }) =>
+    request<Announcement>("/admin/announcements", {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
+  adminUpdateAnnouncement: (
+    id: number,
+    data: {
+      title?: string;
+      body?: string;
+      type?: AnnouncementType;
+      active?: boolean;
+    },
+  ) =>
+    request<Announcement>(`/admin/announcements/${id}`, {
+      method: "PATCH",
+      body: JSON.stringify(data),
+    }),
+  adminDeleteAnnouncement: (id: number) =>
+    request<void>(`/admin/announcements/${id}`, { method: "DELETE" }),
 
   // Admin
   adminGetDashboardStats: () => request<DashboardStats>("/admin/dashboard"),

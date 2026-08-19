@@ -19,6 +19,17 @@ export interface AppSetting {
   updated_at: string;
 }
 
+export type AnnouncementType = "info" | "new_feature" | "known_issue";
+
+export interface Announcement {
+  id: number;
+  title: string;
+  body: string;
+  type: AnnouncementType;
+  active: boolean;
+  created_at: string;
+}
+
 export interface Book {
   id: number;
   title: string;

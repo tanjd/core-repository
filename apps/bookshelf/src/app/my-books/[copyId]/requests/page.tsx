@@ -1,6 +1,6 @@
 "use client";
 
-import { Fragment, useEffect, useState } from "react";
+import { Fragment, useEffect, useState, useRef } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { ArrowLeft, ChevronDown, ChevronRight } from "lucide-react";
 import { toast } from "sonner";
@@ -68,8 +68,10 @@ export default function CopyRequestsPage() {
     if (!token) router.push("/login");
   }, [router]);
 
+  const fetchedCopyIdRef = useRef<number | null>(null);
   useEffect(() => {
-    if (!copyId) return;
+    if (!copyId || fetchedCopyIdRef.current === copyId) return;
+    fetchedCopyIdRef.current = copyId;
     setLoading(true);
     api
       .getLoanRequestsByCopy(copyId)

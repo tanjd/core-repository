@@ -116,6 +116,20 @@ type NotificationRepository interface {
 	MarkAllReadForRecipient(recipientID uint) error
 }
 
+// AnnouncementRepository handles persistence for Announcement records.
+type AnnouncementRepository interface {
+	Create(a *models.Announcement) error
+	GetByID(id uint) (*models.Announcement, error)
+	Save(a *models.Announcement) error
+	Delete(id uint) error
+	// ListActive returns active announcements, newest first — used by the
+	// public-facing endpoint regular users fetch once on load.
+	ListActive() ([]models.Announcement, error)
+	// ListPaginated returns every announcement (active and inactive), newest
+	// first — used by the admin list view.
+	ListPaginated(page, pageSize int) (*PaginatedResult[models.Announcement], error)
+}
+
 // AdminRepository handles admin-level data access for user management and app settings.
 type AdminRepository interface {
 	ListUsers() ([]models.User, error)

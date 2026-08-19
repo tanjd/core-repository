@@ -1,25 +1,36 @@
 "use client";
 
-import { useRouter } from "next/navigation";
 import { Bell } from "lucide-react";
 import { useUnreadNotifications } from "@/hooks/useUnreadNotifications";
+import { useActiveAnnouncements } from "@/hooks/useActiveAnnouncements";
+import { NotificationPanel } from "@/components/NotificationPanel";
 
 export function NotificationBell() {
-  const router = useRouter();
-  const unreadCount = useUnreadNotifications();
+  const { unreadCount, refetch } = useUnreadNotifications();
+  const { announcement, dismiss } = useActiveAnnouncements();
+  const badgeCount = unreadCount + (announcement ? 1 : 0);
 
   return (
-    <button
-      onClick={() => router.push("/notifications")}
-      className="relative p-2 rounded-md hover:bg-accent transition-colors"
-      aria-label={`Notifications${unreadCount > 0 ? ` (${unreadCount} unread)` : ""}`}
-    >
-      <Bell className="size-5" />
-      {unreadCount > 0 && (
-        <span className="absolute top-1 right-1 flex size-4 items-center justify-center rounded-full bg-destructive text-[10px] font-bold text-white leading-none">
-          {unreadCount > 99 ? "99+" : unreadCount}
-        </span>
-      )}
-    </button>
+    <NotificationPanel
+      side="bottom"
+      align="end"
+      hasUnread={unreadCount > 0}
+      onNotificationsRead={refetch}
+      announcement={announcement}
+      onDismissAnnouncement={dismiss}
+      trigger={
+        <button
+          className="relative p-2 rounded-md hover:bg-accent transition-colors"
+          aria-label={`Notifications${badgeCount > 0 ? ` (${badgeCount} unread)` : ""}`}
+        >
+          <Bell className="size-5" />
+          {badgeCount > 0 && (
+            <span className="absolute top-1 right-1 flex size-4 items-center justify-center rounded-full bg-destructive text-[10px] font-bold text-white leading-none">
+              {badgeCount > 99 ? "99+" : badgeCount}
+            </span>
+          )}
+        </button>
+      }
+    />
   );
 }

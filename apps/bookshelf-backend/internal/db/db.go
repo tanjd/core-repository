@@ -60,10 +60,6 @@ func Open(dbPath string) (*gorm.DB, error) {
 }
 
 func runMigrations(sqlDB *sql.DB) error {
-	if err := ensureBaseline(sqlDB); err != nil {
-		return err
-	}
-
 	src, err := iofs.New(migrationsFS, "migrations")
 	if err != nil {
 		return err
@@ -79,48 +75,13 @@ func runMigrations(sqlDB *sql.DB) error {
 		return err
 	}
 
+	log.Info().Msg("running database migrations")
 	if err := m.Up(); err != nil && !errors.Is(err, migrate.ErrNoChange) {
+		log.Error().Err(err).Msg("database migration failed")
 		return err
 	}
 
 	log.Info().Msg("database schema up to date")
-	return nil
-}
-
-// ensureBaseline sets the migration version to 7 for databases that were
-// created by GORM AutoMigrate (all tables exist but no schema_migrations table).
-// Fresh databases have no tables, so this is a no-op and migrations run normally.
-func ensureBaseline(sqlDB *sql.DB) error {
-	ctx := context.Background()
-	var hasMigrationsTable int
-	if err := sqlDB.QueryRowContext(ctx,
-		`SELECT count(*) FROM sqlite_master WHERE type='table' AND name='schema_migrations'`,
-	).Scan(&hasMigrationsTable); err != nil {
-		return fmt.Errorf("check schema_migrations table: %w", err)
-	}
-	if hasMigrationsTable > 0 {
-		return nil // already tracking versions
-	}
-
-	var hasUsersTable int
-	if err := sqlDB.QueryRowContext(ctx,
-		`SELECT count(*) FROM sqlite_master WHERE type='table' AND name='users'`,
-	).Scan(&hasUsersTable); err != nil {
-		return fmt.Errorf("check users table: %w", err)
-	}
-	if hasUsersTable == 0 {
-		return nil // fresh install — let migrations run from 000001
-	}
-
-	// Existing DB from AutoMigrate: mark all migrations (000001-000007) as applied.
-	_, err := sqlDB.ExecContext(ctx,
-		`CREATE TABLE schema_migrations (version bigint NOT NULL, dirty boolean NOT NULL);
-         INSERT INTO schema_migrations (version, dirty) VALUES (7, false);`,
-	)
-	if err != nil {
-		return fmt.Errorf("ensureBaseline: %w", err)
-	}
-	log.Info().Int("version", 7).Msg("migration baseline set for existing database")
 	return nil
 }
 

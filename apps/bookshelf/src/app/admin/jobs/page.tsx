@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 import { RefreshCw, Play, Clock } from "lucide-react";
 import { toast } from "sonner";
 import { api } from "@/lib/api";
@@ -60,8 +60,12 @@ export default function AdminJobsPage() {
     }
   }, []);
 
+  const loadedRef = useRef(false);
   useEffect(() => {
-    loadJobs();
+    if (!loadedRef.current) {
+      loadedRef.current = true;
+      loadJobs();
+    }
     let interval: ReturnType<typeof setInterval> | null = null;
 
     function startPolling() {

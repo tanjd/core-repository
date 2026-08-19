@@ -26,6 +26,7 @@ func openTestDB(t *testing.T) *gorm.DB {
 	require.NoError(t, db.AutoMigrate(
 		&models.User{}, &models.Book{}, &models.Copy{},
 		&models.LoanRequest{}, &models.Notification{}, &models.WaitlistEntry{},
+		&models.Announcement{},
 	))
 	return db
 }

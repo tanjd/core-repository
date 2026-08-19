@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import Link from "next/link";
 import { useRouter, usePathname } from "next/navigation";
 import { BookOpen, LogOut } from "lucide-react";
@@ -23,16 +23,30 @@ export function NavBar() {
   const pathname = usePathname();
   const [isAuth, setIsAuth] = useState(false);
   const [isAdmin, setIsAdmin] = useState(false);
+  const prevAuthRef = useRef<{ isAuth: boolean; isAdmin: boolean } | null>(
+    null,
+  );
 
+  // Re-derived from localStorage on every pathname change (not just on
+  // mount) since login/logout navigates within the same NavBar instance —
+  // gated behind a ref comparison (rather than an unconditional setState) so
+  // it only re-renders when the derived auth state actually changed.
   useEffect(() => {
     const token = localStorage.getItem("bookshelf_token");
-    setIsAuth(!!token);
+    const nextIsAuth = !!token;
+    let nextIsAdmin = false;
     try {
       const stored = localStorage.getItem("bookshelf_user");
       const user = stored ? JSON.parse(stored) : null;
-      setIsAdmin(user?.role === "admin");
+      nextIsAdmin = user?.role === "admin";
     } catch {
-      setIsAdmin(false);
+      nextIsAdmin = false;
+    }
+    const prev = prevAuthRef.current;
+    if (!prev || prev.isAuth !== nextIsAuth || prev.isAdmin !== nextIsAdmin) {
+      prevAuthRef.current = { isAuth: nextIsAuth, isAdmin: nextIsAdmin };
+      setIsAuth(nextIsAuth);
+      setIsAdmin(nextIsAdmin);
     }
   }, [pathname]);
 

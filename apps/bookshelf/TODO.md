@@ -69,9 +69,14 @@ been fixed.
 
 ## Next — before opening to real community members
 
-- **Announcement board (admin)** — admin-authored banner/list so beta users see "new
-  feature," "known issue," etc. without a separate broadcast channel. New model + admin CRUD
-  - a spot on the frontend layout, similar shape to the existing `AppSetting`/admin config.
+- ~~**Announcement board (admin)**~~ — `models.Announcement` + `AnnouncementHandler`
+  (`internal/handlers/announcements.go`) give admins create/edit/toggle-active/delete CRUD at
+  `/admin/announcements` (`src/app/admin/announcements/page.tsx`), still supporting multiple
+  rows for scheduling/history. Community members only ever see the single newest active one
+  in the `NotificationPanel` dropdown's "Announcement" section (`useActiveAnnouncements`
+  picks `items[0]` off the `created_at desc`-ordered list) — deliberately not a stacked list;
+  an admin wanting to say two things at once folds them into one announcement's body. See the
+  "notification redesign" bullet under Later.
 - **Feedback mechanism** — in-app "send feedback" form, writes to a table, emails the admin
   via the existing `EmailService`. No new infra.
 - **Onboarding checklist** — surfaces the existing verification-status factors in the
@@ -83,9 +88,26 @@ been fixed.
 - **Loan history / "my shelf" view** — currently-held + past loans per user.
 - **"Report a problem" on a loan** — feeds into the existing `User.Suspended` field, which
   currently has no UI trigger.
+- **"Automatic backup"** - backup settings, database (something like jellyfin?)
+- **"Import settings"** - use yaml file to update settings
+- **"Export and import books"** - allow users to export and import the books they have
 
 ## Later — once there's real usage to react to
 
+- ~~**Surface announcements through the redesigned notification system**~~ — the
+  Instagram/Facebook-style `NotificationPanel` dropdown now has a labeled "Announcement"
+  section above the regular notification list (`useActiveAnnouncements` hook, fetched once
+  per mount — not polled — surfacing only the single newest active announcement, dismissed
+  client-side via `localStorage`, same as the deferred banner design; the bell/tab-bar badge
+  count is unread notifications + 0-or-1 for the announcement). **A version changelog notice
+  was intentionally left out of this pass** — see the new bullet below.
+- **Version changelog notice** — a new app version becomes a notification-like entry in the
+  same `NotificationPanel`; clicking it reveals the changelog, which should also be reachable
+  from the existing `v{NEXT_PUBLIC_VERSION}` string already rendered in the footer
+  (`src/app/layout.tsx`). Needs its own scoping pass: where changelog content comes from
+  (hand-written per release? derived from commit/PR history?) and how "new version since the
+  user's last visit" gets detected (compare `NEXT_PUBLIC_VERSION` against a value cached in
+  `localStorage`, mirroring the announcement-dismissal pattern, is the leading idea).
 - **Telegram bot: link account + receive notifications** — cheap relative to a from-scratch
   integration since `libs/telegram-bot-shared` and the bot generator already exist. Link via
   a deep-link token, forward `Notification` rows to Telegram alongside/instead of email.
@@ -98,10 +120,6 @@ been fixed.
 
 ## Someday / hold — don't build until there's proven demand
 
-- **Create communities (multi-tenant)** — `User` and every other model currently assume one
-  org (the `User` model's own comment says "member of the church community"). This is a real
-  architectural rewrite, not an incremental feature. Revisit only if a second group
-  explicitly asks to run their own instance.
 - **SSO** — only makes sense after the multi-tenant rewrite above; a single-community app
   with email/password + OTP doesn't need it.
 - Book ratings/reviews, digest email, genre/tag browsing — nice-to-haves, revisit once

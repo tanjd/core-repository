@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Image from "next/image";
 import { toast } from "sonner";
@@ -38,15 +38,20 @@ export default function BookDetailPage() {
   const [expectedReturnDate, setExpectedReturnDate] = useState("");
   const [requesting, setRequesting] = useState(false);
 
+  const identifiedRef = useRef(false);
   useEffect(() => {
+    if (identifiedRef.current) return;
+    identifiedRef.current = true;
     const stored = localStorage.getItem("bookshelf_user");
+    let user: User | null = null;
     if (stored) {
       try {
-        setCurrentUser(JSON.parse(stored));
+        user = JSON.parse(stored);
       } catch {
         // ignore
       }
     }
+    setCurrentUser(user);
   }, []);
 
   useEffect(() => {

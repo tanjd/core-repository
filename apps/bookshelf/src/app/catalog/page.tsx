@@ -54,7 +54,10 @@ export default function CatalogPage() {
   }
 
   // Initial load
+  const loadedRef = useRef(false);
   useEffect(() => {
+    if (loadedRef.current) return;
+    loadedRef.current = true;
     fetchBooks("", "title", false, 1);
   }, []);
 

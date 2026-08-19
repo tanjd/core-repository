@@ -67,22 +67,30 @@ export default function SharePage() {
   // window.location on mount (rather than useSearchParams) to avoid a
   // server/client hydration mismatch and the Suspense boundary that hook
   // requires.
+  const prefilledRef = useRef(false);
   useEffect(() => {
+    if (prefilledRef.current) return;
+    prefilledRef.current = true;
     const q = new URLSearchParams(window.location.search).get("q");
-    if (q) setQuery(q);
+    setQuery(q ?? "");
   }, []);
   const [searchResults, setSearchResults] = useState<BookMetadataResult[]>([]);
   const [searching, setSearching] = useState(false);
   const [searchError, setSearchError] = useState("");
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const cacheRef = useRef<Map<string, BookMetadataResult[]>>(new Map());
+  const clearedForShortQueryRef = useRef(false);
 
   useEffect(() => {
     const normalized = query.trim().toLowerCase();
     if (normalized.length < 3) {
-      setSearchResults([]);
+      if (!clearedForShortQueryRef.current) {
+        clearedForShortQueryRef.current = true;
+        setSearchResults([]);
+      }
       return;
     }
+    clearedForShortQueryRef.current = false;
     if (debounceRef.current) clearTimeout(debounceRef.current);
     debounceRef.current = setTimeout(async () => {
       if (cacheRef.current.has(normalized)) {

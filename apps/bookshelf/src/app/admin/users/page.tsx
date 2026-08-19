@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { Loader2 } from "lucide-react";
 import { api } from "@/lib/api";
 import type { User } from "@/lib/api";
@@ -23,14 +23,20 @@ export default function AdminUsersPage() {
     Record<number, UserAction | undefined>
   >({});
 
+  const identifiedRef = useRef(false);
   useEffect(() => {
-    const stored = localStorage.getItem("bookshelf_user");
-    if (stored) {
-      try {
-        setCurrentUserId(JSON.parse(stored).id);
-      } catch {
-        /* ignore */
+    if (!identifiedRef.current) {
+      identifiedRef.current = true;
+      const stored = localStorage.getItem("bookshelf_user");
+      let userId: number | null = null;
+      if (stored) {
+        try {
+          userId = JSON.parse(stored).id;
+        } catch {
+          /* ignore */
+        }
       }
+      setCurrentUserId(userId);
     }
     loadUsers(1);
   }, []);

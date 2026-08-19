@@ -28,18 +28,6 @@ source repo used a plain `NextConfig` export) — without it, `@nx/next:build` s
 `apps/food-maps/next.config.mjs`; `images.remotePatterns` (Open Library / Google Books cover
 hosts) and `output: "standalone"` were preserved from the source repo's config.
 
-## Known gaps
-
-- `eslint.config.mjs` downgrades `react-hooks/set-state-in-effect` to a warning. The source repo
-  pinned `eslint-config-next` 16.1.6; this workspace's shared root `next`/`eslint-config-next` is
-  16.2.12, whose bundled `eslint-plugin-react-hooks` added that rule as an error. It fires on 11
-  ported call sites — all "hydrate auth/fetched state on mount" patterns (e.g.
-  `src/components/auth/AdminGuard.tsx`, `src/components/auth/SetupGuard.tsx`,
-  `src/components/layout/NavBar.tsx`, most of `src/app/**/page.tsx`) — safe as written but flagged
-  as an anti-pattern by the newer rule. Rewriting 11 components' effect logic was out of scope for
-  a migration pass; consider addressing them (derive state during render, or gate with a ref)
-  and dropping the override as a follow-up.
-
 ## Frontend design
 
 See the source repo's original `CLAUDE.md` (not carried over verbatim — summarized here) for the

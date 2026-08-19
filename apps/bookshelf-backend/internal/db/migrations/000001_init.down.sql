@@ -1,0 +1,13 @@
+DROP TABLE IF EXISTS registration_verifications;
+DROP INDEX IF EXISTS idx_notifications_recipient_id;
+DROP INDEX IF EXISTS idx_loan_requests_borrower_id;
+DROP INDEX IF EXISTS idx_loan_requests_copy_id;
+DROP INDEX IF EXISTS idx_copies_owner_id;
+DROP INDEX IF EXISTS idx_copies_book_id;
+DROP TABLE IF EXISTS waitlist_entries;
+DROP TABLE IF EXISTS app_settings;
+DROP TABLE IF EXISTS notifications;
+DROP TABLE IF EXISTS loan_requests;
+DROP TABLE IF EXISTS copies;
+DROP TABLE IF EXISTS books;
+DROP TABLE IF EXISTS users;
