@@ -8,6 +8,7 @@ package repotest
 
 import (
 	"sort"
+	"strings"
 	"sync"
 	"time"
 
@@ -821,15 +822,59 @@ func (r *LoanRequestRepository) ListByBorrowerID(borrowerID uint) ([]models.Loan
 	return out, nil
 }
 
-// ListByBorrowerIDPaginated returns a page of loan requests made by borrowerID.
-func (r *LoanRequestRepository) ListByBorrowerIDPaginated(borrowerID uint, page, pageSize int) (*repository.PaginatedResult[models.LoanRequest], error) {
+// ListByBorrowerIDPaginated returns a page of loan requests made by
+// borrowerID, optionally filtered to the given statuses.
+func (r *LoanRequestRepository) ListByBorrowerIDPaginated(borrowerID uint, statuses []string, page, pageSize int) (*repository.PaginatedResult[models.LoanRequest], error) {
 	all, _ := r.ListByBorrowerID(borrowerID)
+	if len(statuses) > 0 {
+		set := map[string]bool{}
+		for _, s := range statuses {
+			set[s] = true
+		}
+		filtered := make([]models.LoanRequest, 0, len(all))
+		for _, lr := range all {
+			if set[lr.Status] {
+				filtered = append(filtered, lr)
+			}
+		}
+		all = filtered
+	}
 	start, end := paginationBounds(len(all), page, pageSize)
 	items := append([]models.LoanRequest{}, all[start:end]...)
 	return &repository.PaginatedResult[models.LoanRequest]{
 		Items: items, Total: int64(len(all)), Page: page, PageSize: pageSize,
 		TotalPages: totalPages(len(all), pageSize),
 	}, nil
+}
+
+// ListActiveByBorrowerID returns borrowerID's accepted loan requests,
+// mimicking the GORM implementation's due-date-ascending / NULLs-last order.
+func (r *LoanRequestRepository) ListActiveByBorrowerID(borrowerID uint) ([]models.LoanRequest, error) {
+	r.mu.Lock()
+	out := []models.LoanRequest{}
+	for _, lr := range r.byID {
+		if lr.BorrowerID == borrowerID && lr.Status == "accepted" {
+			out = append(out, *lr)
+		}
+	}
+	r.mu.Unlock()
+	for i := range out {
+		r.hydrate(&out[i])
+	}
+	sort.Slice(out, func(i, j int) bool {
+		a, b := out[i].ExpectedReturnDate, out[j].ExpectedReturnDate
+		if a == nil && b == nil {
+			return out[i].RequestedAt.Before(out[j].RequestedAt)
+		}
+		if a == nil {
+			return false
+		}
+		if b == nil {
+			return true
+		}
+		return a.Before(*b)
+	})
+	return out, nil
 }
 
 // Save inserts lr (assigning a new ID) if its ID is zero, else overwrites
@@ -897,6 +942,258 @@ func (r *LoanRequestRepository) CountActiveLoansByBorrower(borrowerID uint) (int
 	return count, nil
 }
 
+// BookRepository is an in-memory fake of repository.BookRepository. It only
+// implements the querying needed by wishlist's fulfill handler (GetByID
+// lookup, Create for test fixtures) — List/ListPaginated/ListRecent and the
+// available-copies counters return empty/zero, since nothing that consumes
+// this fake exercises them yet.
+type BookRepository struct {
+	mu     sync.Mutex
+	nextID uint
+	byID   map[uint]*models.Book
+}
+
+// NewBookRepository creates an empty fake BookRepository.
+func NewBookRepository() *BookRepository {
+	return &BookRepository{byID: map[uint]*models.Book{}}
+}
+
+// Create inserts book, assigning it a new ID.
+func (r *BookRepository) Create(book *models.Book) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.nextID++
+	book.ID = r.nextID
+	cp := *book
+	r.byID[book.ID] = &cp
+	return nil
+}
+
+// Save inserts book (assigning a new ID) if its ID is zero, else overwrites
+// the existing record.
+func (r *BookRepository) Save(book *models.Book) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if book.ID == 0 {
+		r.nextID++
+		book.ID = r.nextID
+	}
+	cp := *book
+	r.byID[book.ID] = &cp
+	return nil
+}
+
+// FindByOLKey returns the book with the given OLKey, or repository.ErrNotFound.
+func (r *BookRepository) FindByOLKey(olKey string) (*models.Book, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	for _, b := range r.byID {
+		if olKey != "" && b.OLKey == olKey {
+			cp := *b
+			return &cp, nil
+		}
+	}
+	return nil, repository.ErrNotFound
+}
+
+// FindByGoogleBooksID returns the book with the given GoogleBooksID, or repository.ErrNotFound.
+func (r *BookRepository) FindByGoogleBooksID(id string) (*models.Book, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	for _, b := range r.byID {
+		if id != "" && b.GoogleBooksID == id {
+			cp := *b
+			return &cp, nil
+		}
+	}
+	return nil, repository.ErrNotFound
+}
+
+// GetByIDWithCopies returns the book with the given ID, or repository.ErrNotFound.
+// The fake stores no Copies association — callers needing one must populate
+// it on the models.Book passed to Create.
+func (r *BookRepository) GetByIDWithCopies(id uint) (*models.Book, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	b, ok := r.byID[id]
+	if !ok {
+		return nil, repository.ErrNotFound
+	}
+	cp := *b
+	return &cp, nil
+}
+
+// List returns nil — not exercised by any test using this fake yet.
+func (r *BookRepository) List(_, _ string, _ bool) ([]models.Book, error) { return nil, nil }
+
+// ListPaginated returns an empty page — not exercised by any test using this fake yet.
+func (r *BookRepository) ListPaginated(_, _ string, _ bool, page, pageSize int) (*repository.PaginatedResult[models.Book], error) {
+	return &repository.PaginatedResult[models.Book]{Page: page, PageSize: pageSize}, nil
+}
+
+// ListRecent returns nil — not exercised by any test using this fake yet.
+func (r *BookRepository) ListRecent(_ int) ([]models.Book, error) { return nil, nil }
+
+// CountAvailableCopies returns 0 — not exercised by any test using this fake yet.
+func (r *BookRepository) CountAvailableCopies(_ uint) (int64, error) { return 0, nil }
+
+// CountAvailableCopiesBatch returns an empty map — not exercised by any test using this fake yet.
+func (r *BookRepository) CountAvailableCopiesBatch(_ []uint) (map[uint]int64, error) {
+	return map[uint]int64{}, nil
+}
+
+// WishlistRequestRepository is an in-memory fake of
+// repository.WishlistRequestRepository.
+type WishlistRequestRepository struct {
+	mu     sync.Mutex
+	nextID uint
+	byID   map[uint]*models.WishlistRequest
+}
+
+// NewWishlistRequestRepository creates an empty fake WishlistRequestRepository.
+func NewWishlistRequestRepository() *WishlistRequestRepository {
+	return &WishlistRequestRepository{byID: map[uint]*models.WishlistRequest{}}
+}
+
+// Create inserts req, assigning it a new ID.
+func (r *WishlistRequestRepository) Create(req *models.WishlistRequest) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.nextID++
+	req.ID = r.nextID
+	cp := *req
+	r.byID[req.ID] = &cp
+	return nil
+}
+
+// GetByID returns the request with the given ID, or repository.ErrNotFound.
+func (r *WishlistRequestRepository) GetByID(id uint) (*models.WishlistRequest, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	req, ok := r.byID[id]
+	if !ok {
+		return nil, repository.ErrNotFound
+	}
+	cp := *req
+	return &cp, nil
+}
+
+// Save inserts req (assigning a new ID) if its ID is zero, else overwrites
+// the existing record.
+func (r *WishlistRequestRepository) Save(req *models.WishlistRequest) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if req.ID == 0 {
+		r.nextID++
+		req.ID = r.nextID
+	}
+	cp := *req
+	r.byID[req.ID] = &cp
+	return nil
+}
+
+// ListOpenPaginated returns a page of open requests, optionally filtered by
+// a case-sensitive title/author substring search, newest first.
+func (r *WishlistRequestRepository) ListOpenPaginated(search string, page, pageSize int) (*repository.PaginatedResult[models.WishlistRequest], error) {
+	r.mu.Lock()
+	all := make([]models.WishlistRequest, 0, len(r.byID))
+	for _, req := range r.byID {
+		if req.Status != "open" {
+			continue
+		}
+		if search != "" && !strings.Contains(req.Title, search) && !strings.Contains(req.Author, search) {
+			continue
+		}
+		all = append(all, *req)
+	}
+	r.mu.Unlock()
+	sort.Slice(all, func(i, j int) bool { return all[i].CreatedAt.After(all[j].CreatedAt) })
+	start, end := paginationBounds(len(all), page, pageSize)
+	items := append([]models.WishlistRequest{}, all[start:end]...)
+	return &repository.PaginatedResult[models.WishlistRequest]{
+		Items: items, Total: int64(len(all)), Page: page, PageSize: pageSize,
+		TotalPages: totalPages(len(all), pageSize),
+	}, nil
+}
+
+// ListByRequesterID returns every request made by requesterID, newest first.
+func (r *WishlistRequestRepository) ListByRequesterID(requesterID uint) ([]models.WishlistRequest, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	out := []models.WishlistRequest{}
+	for _, req := range r.byID {
+		if req.RequesterID == requesterID {
+			out = append(out, *req)
+		}
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].CreatedAt.After(out[j].CreatedAt) })
+	return out, nil
+}
+
+// FindOpenByOLKey returns every open request with the given OLKey.
+func (r *WishlistRequestRepository) FindOpenByOLKey(olKey string) ([]models.WishlistRequest, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	out := []models.WishlistRequest{}
+	if olKey == "" {
+		return out, nil
+	}
+	for _, req := range r.byID {
+		if req.Status == "open" && req.OLKey == olKey {
+			out = append(out, *req)
+		}
+	}
+	return out, nil
+}
+
+// FindOpenByGoogleBooksID returns every open request with the given GoogleBooksID.
+func (r *WishlistRequestRepository) FindOpenByGoogleBooksID(googleBooksID string) ([]models.WishlistRequest, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	out := []models.WishlistRequest{}
+	if googleBooksID == "" {
+		return out, nil
+	}
+	for _, req := range r.byID {
+		if req.Status == "open" && req.GoogleBooksID == googleBooksID {
+			out = append(out, *req)
+		}
+	}
+	return out, nil
+}
+
+// wishlistMatchesAnyKey reports whether req shares any of the given
+// non-empty external keys.
+func wishlistMatchesAnyKey(req *models.WishlistRequest, isbn, olKey, googleBooksID string) bool {
+	return (isbn != "" && req.ISBN == isbn) ||
+		(olKey != "" && req.OLKey == olKey) ||
+		(googleBooksID != "" && req.GoogleBooksID == googleBooksID)
+}
+
+// FindOpenMatch returns the earliest open request matching any of the given
+// external keys, or nil if no key is given or none match.
+func (r *WishlistRequestRepository) FindOpenMatch(isbn, olKey, googleBooksID string) (*models.WishlistRequest, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if isbn == "" && olKey == "" && googleBooksID == "" {
+		return nil, nil
+	}
+	var match *models.WishlistRequest
+	for _, req := range r.byID {
+		if req.Status != "open" || !wishlistMatchesAnyKey(req, isbn, olKey, googleBooksID) {
+			continue
+		}
+		if match == nil || req.CreatedAt.Before(match.CreatedAt) {
+			match = req
+		}
+	}
+	if match == nil {
+		return nil, nil
+	}
+	cp := *match
+	return &cp, nil
+}
+
 // paginationBounds returns the [start, end) slice bounds for page/pageSize
 // over a collection of the given length.
 func paginationBounds(length, page, pageSize int) (start, end int) {
@@ -928,4 +1225,6 @@ var (
 	_ repository.WaitlistRepository                 = (*WaitlistRepository)(nil)
 	_ repository.LoanRequestRepository              = (*LoanRequestRepository)(nil)
 	_ repository.RegistrationVerificationRepository = (*RegistrationVerificationRepository)(nil)
+	_ repository.WishlistRequestRepository          = (*WishlistRequestRepository)(nil)
+	_ repository.BookRepository                     = (*BookRepository)(nil)
 )

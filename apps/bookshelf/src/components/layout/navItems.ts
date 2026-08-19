@@ -4,6 +4,7 @@ import {
   PlusCircle,
   Library,
   ListChecks,
+  Search,
   ShieldCheck,
   UserRound,
 } from "lucide-react";
@@ -50,6 +51,14 @@ export const primaryNavItems: NavItem[] = [
     shortLabel: "Requests",
     icon: ListChecks,
     isActive: (p) => p === "/my-requests",
+  },
+  {
+    href: "/wishlist",
+    label: "Wishlist",
+    shortLabel: "Wishlist",
+    icon: Search,
+    isActive: (p) => p === "/wishlist",
+    mobileTab: false,
   },
 ];
 

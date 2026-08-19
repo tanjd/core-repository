@@ -10,6 +10,7 @@ export const notificationTypeLabel: Record<Notification["type"], string> = {
   waitlist_available: "Copy now available",
   copy_transferred_in: "Copy transferred to you",
   copy_transferred_out: "Copy transfer sent",
+  wishlist_fulfilled: "A book you wanted is available",
 };
 
 // Resolves where a click on a notification should navigate, mirroring the
@@ -18,6 +19,18 @@ export const notificationTypeLabel: Record<Notification["type"], string> = {
 export async function notificationDestination(
   n: Notification,
 ): Promise<string | null> {
+  if (n.type === "wishlist_fulfilled") {
+    if (!n.wishlist_request_id) return null;
+    try {
+      const req = await api.getWishlistRequest(n.wishlist_request_id);
+      return req.fulfilled_book_id
+        ? `/catalog/${req.fulfilled_book_id}`
+        : "/wishlist";
+    } catch {
+      return "/wishlist";
+    }
+  }
+
   if (!n.loan_request_id) return null;
 
   if (n.type === "request_received") {

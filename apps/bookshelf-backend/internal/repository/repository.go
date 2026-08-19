@@ -96,7 +96,13 @@ type LoanRequestRepository interface {
 	GetByIDWithCopyOwnerAndBorrower(id uint) (*models.LoanRequest, error)
 	ListByCopyID(copyID uint) ([]models.LoanRequest, error)
 	ListByBorrowerID(borrowerID uint) ([]models.LoanRequest, error)
-	ListByBorrowerIDPaginated(borrowerID uint, page, pageSize int) (*PaginatedResult[models.LoanRequest], error)
+	// ListByBorrowerIDPaginated returns a page of borrowerID's loan requests,
+	// optionally filtered to the given statuses (empty/nil = no filter, i.e.
+	// every status).
+	ListByBorrowerIDPaginated(borrowerID uint, statuses []string, page, pageSize int) (*PaginatedResult[models.LoanRequest], error)
+	// ListActiveByBorrowerID returns borrowerID's currently-held loans
+	// (status "accepted"), due-soonest first with no-due-date requests last.
+	ListActiveByBorrowerID(borrowerID uint) ([]models.LoanRequest, error)
 	Save(lr *models.LoanRequest) error
 	// RejectCompetingAndUpdateCopy atomically rejects all other pending requests
 	// for copyID, creates rejection notifications for their borrowers, and sets
@@ -181,4 +187,26 @@ type WaitlistRepository interface {
 	Count(copyID uint) (int64, error)
 	IsOnWaitlist(copyID, userID uint) (bool, error)
 	DeleteByCopyID(copyID uint) error
+}
+
+// WishlistRequestRepository handles persistence for WishlistRequest records.
+type WishlistRequestRepository interface {
+	Create(r *models.WishlistRequest) error
+	GetByID(id uint) (*models.WishlistRequest, error)
+	Save(r *models.WishlistRequest) error
+	// ListOpenPaginated returns open (status="open") requests, optionally
+	// filtered by a title/author search, newest first — powers the browse board.
+	ListOpenPaginated(search string, page, pageSize int) (*PaginatedResult[models.WishlistRequest], error)
+	ListByRequesterID(requesterID uint) ([]models.WishlistRequest, error)
+	// FindOpenByOLKey and FindOpenByGoogleBooksID power the auto-match hook in
+	// createBook — they return every open request sharing the key, since
+	// multiple members can separately be looking for the same book.
+	FindOpenByOLKey(olKey string) ([]models.WishlistRequest, error)
+	FindOpenByGoogleBooksID(googleBooksID string) ([]models.WishlistRequest, error)
+	// FindOpenMatch returns the earliest open request matching any of the
+	// given external keys (ISBN, OL key, Google Books ID), with its
+	// Requester preloaded — powers the create-time dedup check so a member
+	// can join an existing request instead of posting a duplicate. Returns
+	// (nil, nil) if no key is given or none match.
+	FindOpenMatch(isbn, olKey, googleBooksID string) (*models.WishlistRequest, error)
 }

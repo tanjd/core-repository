@@ -370,3 +370,113 @@ func TestListLoanRequests_OnlyOwnerCanList(t *testing.T) {
 		assertStatus(t, err, 403)
 	})
 }
+
+func TestListMine_ViewFilter(t *testing.T) {
+	d := newLoanRequestHandler()
+	owner, borrower, copy1 := seedOwnerAndBorrower(t, d)
+
+	makeCopy := func() *models.Copy {
+		c := &models.Copy{OwnerID: owner.ID, Owner: *owner, Book: models.Book{Title: "Another Book"}, Status: "available"}
+		require.NoError(t, d.copies.Create(c))
+		return c
+	}
+	copy2, copy3, copy4, copy5 := makeCopy(), makeCopy(), makeCopy(), makeCopy()
+
+	create := func(c *models.Copy) uint {
+		in := &createLoanRequestInput{}
+		in.Body.CopyID = c.ID
+		out, err := d.handler.createLoanRequest(fakeAuthedCtx(t, borrower.ID, "user"), in)
+		require.NoError(t, err)
+		return out.Body.ID
+	}
+	accept := func(id uint) {
+		in := &updateLoanRequestInput{ID: id}
+		in.Body.Status = "accepted"
+		_, err := d.handler.updateLoanRequest(fakeAuthedCtx(t, owner.ID, "user"), in)
+		require.NoError(t, err)
+	}
+
+	_ = create(copy1) // left pending
+	acceptedID := create(copy2)
+	accept(acceptedID)
+
+	rejectedID := create(copy3)
+	rejectIn := &updateLoanRequestInput{ID: rejectedID}
+	rejectIn.Body.Status = "rejected"
+	_, err := d.handler.updateLoanRequest(fakeAuthedCtx(t, owner.ID, "user"), rejectIn)
+	require.NoError(t, err)
+
+	cancelledID := create(copy4)
+	cancelIn := &updateLoanRequestInput{ID: cancelledID}
+	cancelIn.Body.Status = "cancelled"
+	_, err = d.handler.updateLoanRequest(fakeAuthedCtx(t, borrower.ID, "user"), cancelIn)
+	require.NoError(t, err)
+
+	returnedID := create(copy5)
+	accept(returnedID)
+	returnIn := &updateLoanRequestInput{ID: returnedID}
+	returnIn.Body.Status = "returned"
+	_, err = d.handler.updateLoanRequest(fakeAuthedCtx(t, owner.ID, "user"), returnIn)
+	require.NoError(t, err)
+
+	t.Run("no view returns every status", func(t *testing.T) {
+		out, err := d.handler.listMine(fakeAuthedCtx(t, borrower.ID, "user"), &listMineInput{})
+		require.NoError(t, err)
+		assert.Equal(t, int64(5), out.Body.Total)
+	})
+
+	t.Run("current view returns only pending and accepted", func(t *testing.T) {
+		out, err := d.handler.listMine(fakeAuthedCtx(t, borrower.ID, "user"), &listMineInput{View: "current"})
+		require.NoError(t, err)
+		assert.Equal(t, int64(2), out.Body.Total)
+		for _, item := range out.Body.Items {
+			assert.Contains(t, []string{"pending", "accepted"}, item.Status)
+		}
+	})
+
+	t.Run("history view returns only returned, rejected, and cancelled", func(t *testing.T) {
+		out, err := d.handler.listMine(fakeAuthedCtx(t, borrower.ID, "user"), &listMineInput{View: "history"})
+		require.NoError(t, err)
+		assert.Equal(t, int64(3), out.Body.Total)
+		for _, item := range out.Body.Items {
+			assert.Contains(t, []string{"returned", "rejected", "cancelled"}, item.Status)
+		}
+	})
+}
+
+func TestListMineActive(t *testing.T) {
+	d := newLoanRequestHandler()
+	owner, borrower, bookCopy := seedOwnerAndBorrower(t, d)
+
+	pendingCopy := &models.Copy{OwnerID: owner.ID, Owner: *owner, Book: models.Book{Title: "Pending Book"}, Status: "available"}
+	require.NoError(t, d.copies.Create(pendingCopy))
+
+	createInput := &createLoanRequestInput{}
+	createInput.Body.CopyID = bookCopy.ID
+	created, err := d.handler.createLoanRequest(fakeAuthedCtx(t, borrower.ID, "user"), createInput)
+	require.NoError(t, err)
+
+	acceptInput := &updateLoanRequestInput{ID: created.Body.ID}
+	acceptInput.Body.Status = "accepted"
+	_, err = d.handler.updateLoanRequest(fakeAuthedCtx(t, owner.ID, "user"), acceptInput)
+	require.NoError(t, err)
+
+	pendingInput := &createLoanRequestInput{}
+	pendingInput.Body.CopyID = pendingCopy.ID
+	_, err = d.handler.createLoanRequest(fakeAuthedCtx(t, borrower.ID, "user"), pendingInput)
+	require.NoError(t, err)
+
+	t.Run("only returns accepted loans, with contact info revealed", func(t *testing.T) {
+		out, err := d.handler.listMineActive(fakeAuthedCtx(t, borrower.ID, "user"), &struct{}{})
+		require.NoError(t, err)
+		require.Len(t, out.Body.Items, 1)
+		item := out.Body.Items[0]
+		assert.Equal(t, "accepted", item.Status)
+		assert.Equal(t, owner.Email, item.Copy.Owner.Email, "owner contact should be revealed for an accepted loan")
+	})
+
+	t.Run("unauthenticated is unauthorized", func(t *testing.T) {
+		_, err := d.handler.listMineActive(fakeAuthedCtxNone(), &struct{}{})
+		assertStatus(t, err, 401)
+	})
+}

@@ -88,10 +88,32 @@ export interface Notification {
     | "marked_returned"
     | "waitlist_available"
     | "copy_transferred_in"
-    | "copy_transferred_out";
+    | "copy_transferred_out"
+    | "wishlist_fulfilled";
   loan_request_id?: number;
+  wishlist_request_id?: number;
   read: boolean;
   created_at: string;
+}
+
+export type WishlistStatus = "open" | "fulfilled" | "cancelled";
+
+export interface WishlistRequest {
+  id: number;
+  requester_id: number;
+  title: string;
+  author: string;
+  isbn: string;
+  ol_key: string;
+  google_books_id: string;
+  cover_url: string;
+  notes: string;
+  status: WishlistStatus;
+  fulfilled_book_id?: number;
+  fulfilled_at?: string;
+  created_at: string;
+  requester?: { id: number; name: string };
+  fulfilled_book?: Book;
 }
 
 export interface WaitlistEntry {

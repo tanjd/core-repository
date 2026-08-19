@@ -96,8 +96,9 @@ type listLoanRequestsInput struct {
 type listLoanRequestsOutput struct{ Body []getLoanRequestBody }
 
 type listMineInput struct {
-	Page     int `query:"page" minimum:"1" doc:"Page number (default 1)"`
-	PageSize int `query:"page_size" minimum:"1" maximum:"100" doc:"Items per page (default 20)"`
+	Page     int    `query:"page" minimum:"1" doc:"Page number (default 1)"`
+	PageSize int    `query:"page_size" minimum:"1" maximum:"100" doc:"Items per page (default 20)"`
+	View     string `query:"view" doc:"Filter: current (pending+accepted) or history (returned+rejected+cancelled); omit for all"`
 }
 
 type listMineOutput struct {
@@ -107,6 +108,12 @@ type listMineOutput struct {
 		Page       int                  `json:"page"`
 		PageSize   int                  `json:"page_size"`
 		TotalPages int                  `json:"total_pages"`
+	}
+}
+
+type listMineActiveOutput struct {
+	Body struct {
+		Items []getLoanRequestBody `json:"items"`
 	}
 }
 
@@ -132,6 +139,15 @@ func (h *LoanRequestHandler) RegisterRoutes(api huma.API) {
 		Summary:     "List all loan requests made by the authenticated user (paginated)",
 		Security:    []map[string][]string{{"bearer": {}}},
 	}, h.listMine)
+
+	huma.Register(api, huma.Operation{
+		OperationID: "list-my-active-loans",
+		Method:      "GET",
+		Path:        "/loan-requests/mine/active",
+		Tags:        []string{"loan-requests"},
+		Summary:     "List the authenticated user's currently-held (accepted) loans",
+		Security:    []map[string][]string{{"bearer": {}}},
+	}, h.listMineActive)
 
 	huma.Register(api, huma.Operation{
 		OperationID: "list-loan-requests",
@@ -173,6 +189,55 @@ func (h *LoanRequestHandler) RegisterRoutes(api huma.API) {
 
 // --- Handlers ---
 
+// toGetLoanRequestBody maps a LoanRequest to its API response body,
+// redacting borrower/owner contact info unless the loan is accepted.
+func toGetLoanRequestBody(lr models.LoanRequest) getLoanRequestBody {
+	borrowerResp := safeUser{ID: lr.Borrower.ID, Name: lr.Borrower.Name}
+	ownerResp := safeUser{ID: lr.Copy.Owner.ID, Name: lr.Copy.Owner.Name}
+	if lr.Status == "accepted" {
+		borrowerResp.Email = lr.Borrower.Email
+		borrowerResp.Phone = lr.Borrower.Phone
+		ownerResp.Email = lr.Copy.Owner.Email
+		ownerResp.Phone = lr.Copy.Owner.Phone
+	}
+	return getLoanRequestBody{
+		ID:                 lr.ID,
+		CopyID:             lr.CopyID,
+		BorrowerID:         lr.BorrowerID,
+		Message:            lr.Message,
+		Status:             lr.Status,
+		RequestedAt:        lr.RequestedAt,
+		RespondedAt:        lr.RespondedAt,
+		LoanedAt:           lr.LoanedAt,
+		ReturnedAt:         lr.ReturnedAt,
+		ExpectedReturnDate: lr.ExpectedReturnDate,
+		Copy: loanRequestCopyResponse{
+			ID:        lr.Copy.ID,
+			BookID:    lr.Copy.BookID,
+			OwnerID:   lr.Copy.OwnerID,
+			Condition: lr.Copy.Condition,
+			Notes:     lr.Copy.Notes,
+			Status:    lr.Copy.Status,
+			Book:      lr.Copy.Book,
+			Owner:     ownerResp,
+		},
+		Borrower: borrowerResp,
+	}
+}
+
+// statusesForView maps the "view" query param to a status filter set for
+// listMine. Unknown/empty values return nil (no filter, i.e. every status).
+func statusesForView(view string) []string {
+	switch view {
+	case "current":
+		return []string{"pending", "accepted"}
+	case "history":
+		return []string{"returned", "rejected", "cancelled"}
+	default:
+		return nil
+	}
+}
+
 func (h *LoanRequestHandler) listMine(ctx context.Context, input *listMineInput) (*listMineOutput, error) {
 	callerID, err := middleware.GetRequiredUserID(ctx)
 	if err != nil {
@@ -188,44 +253,14 @@ func (h *LoanRequestHandler) listMine(ctx context.Context, input *listMineInput)
 		pageSize = 20
 	}
 
-	result, err := h.loanReqs.ListByBorrowerIDPaginated(callerID, page, pageSize)
+	result, err := h.loanReqs.ListByBorrowerIDPaginated(callerID, statusesForView(input.View), page, pageSize)
 	if err != nil {
 		return nil, huma.Error500InternalServerError("could not fetch loan requests")
 	}
 
 	bodies := make([]getLoanRequestBody, len(result.Items))
 	for i, lr := range result.Items {
-		borrowerResp := safeUser{ID: lr.Borrower.ID, Name: lr.Borrower.Name}
-		ownerResp := safeUser{ID: lr.Copy.Owner.ID, Name: lr.Copy.Owner.Name}
-		if lr.Status == "accepted" {
-			borrowerResp.Email = lr.Borrower.Email
-			borrowerResp.Phone = lr.Borrower.Phone
-			ownerResp.Email = lr.Copy.Owner.Email
-			ownerResp.Phone = lr.Copy.Owner.Phone
-		}
-		bodies[i] = getLoanRequestBody{
-			ID:                 lr.ID,
-			CopyID:             lr.CopyID,
-			BorrowerID:         lr.BorrowerID,
-			Message:            lr.Message,
-			Status:             lr.Status,
-			RequestedAt:        lr.RequestedAt,
-			RespondedAt:        lr.RespondedAt,
-			LoanedAt:           lr.LoanedAt,
-			ReturnedAt:         lr.ReturnedAt,
-			ExpectedReturnDate: lr.ExpectedReturnDate,
-			Copy: loanRequestCopyResponse{
-				ID:        lr.Copy.ID,
-				BookID:    lr.Copy.BookID,
-				OwnerID:   lr.Copy.OwnerID,
-				Condition: lr.Copy.Condition,
-				Notes:     lr.Copy.Notes,
-				Status:    lr.Copy.Status,
-				Book:      lr.Copy.Book,
-				Owner:     ownerResp,
-			},
-			Borrower: borrowerResp,
-		}
+		bodies[i] = toGetLoanRequestBody(lr)
 	}
 
 	var out listMineOutput
@@ -234,6 +269,27 @@ func (h *LoanRequestHandler) listMine(ctx context.Context, input *listMineInput)
 	out.Body.Page = result.Page
 	out.Body.PageSize = result.PageSize
 	out.Body.TotalPages = result.TotalPages
+	return &out, nil
+}
+
+func (h *LoanRequestHandler) listMineActive(ctx context.Context, _ *struct{}) (*listMineActiveOutput, error) {
+	callerID, err := middleware.GetRequiredUserID(ctx)
+	if err != nil {
+		return nil, huma.Error401Unauthorized("authentication required")
+	}
+
+	items, err := h.loanReqs.ListActiveByBorrowerID(callerID)
+	if err != nil {
+		return nil, huma.Error500InternalServerError("could not fetch active loans")
+	}
+
+	bodies := make([]getLoanRequestBody, len(items))
+	for i, lr := range items {
+		bodies[i] = toGetLoanRequestBody(lr)
+	}
+
+	var out listMineActiveOutput
+	out.Body.Items = bodies
 	return &out, nil
 }
 

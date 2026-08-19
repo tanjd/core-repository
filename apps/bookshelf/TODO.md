@@ -69,20 +69,8 @@ been fixed.
 
 ## Next — before opening to real community members
 
-- ~~**Announcement board (admin)**~~ — `models.Announcement` + `AnnouncementHandler`
-  (`internal/handlers/announcements.go`) give admins create/edit/toggle-active/delete CRUD at
-  `/admin/announcements` (`src/app/admin/announcements/page.tsx`), still supporting multiple
-  rows for scheduling/history. Community members only ever see the single newest active one
-  in the `NotificationPanel` dropdown's "Announcement" section (`useActiveAnnouncements`
-  picks `items[0]` off the `created_at desc`-ordered list) — deliberately not a stacked list;
-  an admin wanting to say two things at once folds them into one announcement's body. See the
-  "notification redesign" bullet under Later.
 - **Feedback mechanism** — in-app "send feedback" form, writes to a table, emails the admin
   via the existing `EmailService`. No new infra.
-- **Onboarding checklist** — surfaces the existing verification-status factors in the
-  frontend; mostly UI, no new backend.
-- **"Looking for" board** — the waitlist only works for a copy that already exists in the
-  system; this covers "does anyone have X" for a book nobody's added yet.
 - **Bulk/CSV import** and **ISBN scan-to-add** — reduces the friction of listing an entire
   shelf by hand; metadata lookup (Open Library/Google Books) already exists per-book.
 - **Loan history / "my shelf" view** — currently-held + past loans per user.

@@ -15,6 +15,7 @@ import type {
   JobStatus,
   VerificationStatus,
   DashboardStats,
+  WishlistRequest,
 } from "./types";
 
 export type {
@@ -33,6 +34,7 @@ export type {
   PaginatedResult,
   VerificationStatus,
   DashboardStats,
+  WishlistRequest,
 };
 
 // Mirrors internal/handlers/auth.go's minPasswordLength/maxPasswordLength —
@@ -407,15 +409,22 @@ export const api = {
     request<void>(`/copies/${copyId}/waitlist`, { method: "DELETE" }),
 
   // Loan requests
-  getMyLoanRequests: (params?: { page?: number; page_size?: number }) => {
+  getMyLoanRequests: (params?: {
+    page?: number;
+    page_size?: number;
+    view?: "current" | "history";
+  }) => {
     const p: Record<string, string> = {};
     if (params?.page) p.page = String(params.page);
     if (params?.page_size) p.page_size = String(params.page_size);
+    if (params?.view) p.view = params.view;
     const qs = new URLSearchParams(p).toString();
     return request<PaginatedResult<LoanRequest>>(
       `/loan-requests/mine${qs ? "?" + qs : ""}`,
     );
   },
+  getMyActiveLoans: () =>
+    request<{ items: LoanRequest[] }>("/loan-requests/mine/active"),
   getLoanRequestsByCopy: (copyId: number) =>
     request<LoanRequest[]>(`/loan-requests?copy_id=${copyId}`),
   createLoanRequest: (data: {
@@ -493,6 +502,59 @@ export const api = {
     }),
   adminDeleteAnnouncement: (id: number) =>
     request<void>(`/admin/announcements/${id}`, { method: "DELETE" }),
+
+  // Wishlist
+  getWishlistRequests: (params?: {
+    q?: string;
+    page?: number;
+    page_size?: number;
+  }) => {
+    const p: Record<string, string> = {};
+    if (params?.q) p.q = params.q;
+    if (params?.page) p.page = String(params.page);
+    if (params?.page_size) p.page_size = String(params.page_size);
+    const qs = new URLSearchParams(p).toString();
+    return request<PaginatedResult<WishlistRequest>>(
+      `/wishlist${qs ? "?" + qs : ""}`,
+    );
+  },
+  getMyWishlistRequests: () => request<WishlistRequest[]>("/wishlist/mine"),
+  getWishlistRequest: (id: number) =>
+    request<WishlistRequest>(`/wishlist/${id}`),
+  createWishlistRequest: (data: {
+    title: string;
+    author: string;
+    isbn?: string;
+    ol_key?: string;
+    google_books_id?: string;
+    cover_url?: string;
+    notes?: string;
+  }) =>
+    request<WishlistRequest>("/wishlist", {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
+  checkWishlistRequest: (params: {
+    isbn?: string;
+    ol_key?: string;
+    google_books_id?: string;
+  }) => {
+    const p: Record<string, string> = {};
+    if (params.isbn) p.isbn = params.isbn;
+    if (params.ol_key) p.ol_key = params.ol_key;
+    if (params.google_books_id) p.google_books_id = params.google_books_id;
+    const qs = new URLSearchParams(p).toString();
+    return request<{ match: WishlistRequest | null }>(
+      `/wishlist/check${qs ? "?" + qs : ""}`,
+    );
+  },
+  cancelWishlistRequest: (id: number) =>
+    request<void>(`/wishlist/${id}`, { method: "DELETE" }),
+  fulfillWishlistRequest: (id: number, bookId: number) =>
+    request<WishlistRequest>(`/wishlist/${id}/fulfill`, {
+      method: "POST",
+      body: JSON.stringify({ book_id: bookId }),
+    }),
 
   // Admin
   adminGetDashboardStats: () => request<DashboardStats>("/admin/dashboard"),
