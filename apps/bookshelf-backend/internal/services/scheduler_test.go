@@ -6,6 +6,7 @@ import (
 	"net/http/httptest"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/tanjd/core-repository/apps/bookshelf-backend/internal/models"
 	"github.com/tanjd/core-repository/apps/bookshelf-backend/internal/repository"
@@ -59,5 +60,52 @@ func TestRefreshCovers_ConcurrentDownloadsSaveAllBooks(t *testing.T) {
 	defer repo.mu.Unlock()
 	if repo.saved != n {
 		t.Fatalf("expected %d books saved, got %d", n, repo.saved)
+	}
+}
+
+func TestScheduler_RegisterJob_StatusIncludesEveryJob(t *testing.T) {
+	sched := NewScheduler(&stubBookRepo{}, stubAdminRepo{}, t.TempDir(), "24h")
+	sched.RegisterJob("backup", "backup_interval", time.Hour, func(context.Context) string {
+		return "ok"
+	})
+
+	statuses := sched.Status()
+	if len(statuses) != 2 {
+		t.Fatalf("expected 2 job statuses, got %d", len(statuses))
+	}
+	if statuses[0].Name != "cover-refresh" {
+		t.Fatalf("expected first status to be cover-refresh, got %q", statuses[0].Name)
+	}
+	if statuses[1].Name != "backup" {
+		t.Fatalf("expected second status to be backup, got %q", statuses[1].Name)
+	}
+	if statuses[1].Interval != "1h0m0s" {
+		t.Fatalf("expected backup job's fallback interval, got %q", statuses[1].Interval)
+	}
+}
+
+func TestScheduler_TriggerNow_RunsRegisteredJobAndReportsUnknown(t *testing.T) {
+	sched := NewScheduler(&stubBookRepo{}, stubAdminRepo{}, t.TempDir(), "24h")
+	ran := make(chan struct{}, 1)
+	sched.RegisterJob("backup", "backup_interval", time.Hour, func(context.Context) string {
+		ran <- struct{}{}
+		return "done"
+	})
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	go sched.runJobLoop(ctx, sched.extra[0])
+
+	if !sched.TriggerNow("backup") {
+		t.Fatal("expected TriggerNow(\"backup\") to find the registered job")
+	}
+	select {
+	case <-ran:
+	case <-time.After(2 * time.Second):
+		t.Fatal("timed out waiting for triggered job to run")
+	}
+
+	if sched.TriggerNow("no-such-job") {
+		t.Fatal("expected TriggerNow for an unknown job name to return false")
 	}
 }

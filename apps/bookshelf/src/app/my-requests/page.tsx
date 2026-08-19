@@ -10,8 +10,17 @@ import { api } from "@/lib/api";
 import type { LoanRequest } from "@/lib/types";
 import { ContactReveal } from "@/components/ContactReveal";
 import { CurrentlyBorrowedCard } from "@/components/CurrentlyBorrowedCard";
+import { ReturnDateCell } from "@/components/ReturnDateCell";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter,
+} from "@/components/ui/dialog";
 import { Pagination } from "@/components/ui/Pagination";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
@@ -25,6 +34,8 @@ import {
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 
 const PAGE_SIZE = 20;
+
+type Condition = "good" | "fair" | "worn";
 
 const statusVariant: Record<
   string,
@@ -65,6 +76,14 @@ export default function MyRequestsPage() {
   const [activeLoading, setActiveLoading] = useState(true);
   const [tab, setTab] = useState<RequestsView>("current");
   const tabMountRef = useRef(true);
+
+  // Return + condition dialog
+  const [returnDialog, setReturnDialog] = useState<{
+    requestId: number;
+    currentCondition: string;
+  } | null>(null);
+  const [returnCondition, setReturnCondition] = useState<Condition>("good");
+  const [returning, setReturning] = useState(false);
 
   useEffect(() => {
     const token = localStorage.getItem("bookshelf_token");
@@ -140,6 +159,33 @@ export default function MyRequestsPage() {
     } finally {
       setCancelling(null);
     }
+  }
+
+  function openReturnDialog(requestId: number, currentCondition: string) {
+    setReturnCondition((currentCondition as Condition) || "good");
+    setReturnDialog({ requestId, currentCondition });
+  }
+
+  async function handleReturn() {
+    if (!returnDialog) return;
+    setReturning(true);
+    try {
+      await api.updateLoanRequest(returnDialog.requestId, {
+        status: "returned",
+        new_condition: returnCondition,
+      });
+      await Promise.all([loadRequests(page, tab), loadActiveLoans()]);
+      toast.success("Marked as returned");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to return");
+    } finally {
+      setReturning(false);
+      setReturnDialog(null);
+    }
+  }
+
+  function handleRequestUpdated(updated: LoanRequest) {
+    setRequests((prev) => prev.map((r) => (r.id === updated.id ? updated : r)));
   }
 
   const emptyStateCopy =
@@ -292,11 +338,10 @@ export default function MyRequestsPage() {
                             {new Date(req.requested_at).toLocaleDateString()}
                           </TableCell>
                           <TableCell className="text-muted-foreground">
-                            {req.expected_return_date
-                              ? new Date(
-                                  req.expected_return_date,
-                                ).toLocaleDateString()
-                              : "—"}
+                            <ReturnDateCell
+                              request={req}
+                              onUpdated={handleRequestUpdated}
+                            />
                           </TableCell>
                           <TableCell
                             className="text-right"
@@ -312,6 +357,20 @@ export default function MyRequestsPage() {
                                 {cancelling === req.id
                                   ? "Cancelling…"
                                   : "Cancel"}
+                              </Button>
+                            )}
+                            {req.status === "accepted" && (
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() =>
+                                  openReturnDialog(
+                                    req.id,
+                                    req.copy?.condition ?? "good",
+                                  )
+                                }
+                              >
+                                Mark as Returned
                               </Button>
                             )}
                           </TableCell>
@@ -357,6 +416,10 @@ export default function MyRequestsPage() {
                                         : req.returned_at
                                           ? `Returned ${new Date(req.returned_at).toLocaleDateString()}`
                                           : "Return date not recorded"}
+                                      {req.returned_by != null &&
+                                        (req.returned_by === req.borrower_id
+                                          ? " · returned by you"
+                                          : " · returned by the owner")}
                                     </p>
                                   </div>
                                 )}
@@ -381,6 +444,47 @@ export default function MyRequestsPage() {
           )}
         </TabsContent>
       </Tabs>
+
+      {/* Return condition dialog */}
+      <Dialog
+        open={!!returnDialog}
+        onOpenChange={(open) => !open && setReturnDialog(null)}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Mark as Returned</DialogTitle>
+            <DialogDescription>
+              Record the condition of the book when you returned it.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex flex-col gap-1.5">
+            <label className="text-sm font-medium">Condition on return</label>
+            <div className="flex gap-4">
+              {(["good", "fair", "worn"] as Condition[]).map((c) => (
+                <label
+                  key={c}
+                  className="flex items-center gap-1.5 cursor-pointer"
+                >
+                  <input
+                    type="radio"
+                    name="return-condition"
+                    value={c}
+                    checked={returnCondition === c}
+                    onChange={() => setReturnCondition(c)}
+                    className="accent-primary"
+                  />
+                  <span className="text-sm capitalize">{c}</span>
+                </label>
+              ))}
+            </div>
+          </div>
+          <DialogFooter showCloseButton>
+            <Button onClick={handleReturn} disabled={returning}>
+              {returning ? "Saving…" : "Confirm Return"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

@@ -140,6 +140,7 @@ type AnnouncementRepository interface {
 type AdminRepository interface {
 	ListUsers() ([]models.User, error)
 	ListUsersPaginated(page, pageSize int) (*PaginatedResult[models.User], error)
+	ListByRole(role string) ([]models.User, error)
 	FindUserByID(id uint) (*models.User, error)
 	SaveUser(user *models.User) error
 	DeleteUser(id uint) error

@@ -11,6 +11,9 @@ export interface User {
   created_at: string;
   google_books_key_configured: boolean;
   pending_email?: string;
+  email_notifications_enabled: boolean;
+  telegram_username?: string;
+  whatsapp_username?: string;
 }
 
 export interface AppSetting {
@@ -72,6 +75,7 @@ export interface LoanRequest {
   responded_at?: string;
   loaned_at?: string;
   returned_at?: string;
+  returned_by?: number;
   expected_return_date?: string;
   copy?: Copy;
   borrower?: { id: number; name: string; email?: string; phone?: string };
@@ -86,12 +90,15 @@ export interface Notification {
     | "request_rejected"
     | "marked_loaned"
     | "marked_returned"
+    | "return_undone"
     | "waitlist_available"
     | "copy_transferred_in"
     | "copy_transferred_out"
-    | "wishlist_fulfilled";
+    | "wishlist_fulfilled"
+    | "user_pending_approval";
   loan_request_id?: number;
   wishlist_request_id?: number;
+  pending_user_id?: number;
   read: boolean;
   created_at: string;
 }
@@ -109,6 +116,7 @@ export interface WishlistRequest {
   cover_url: string;
   notes: string;
   status: WishlistStatus;
+  is_anonymous: boolean;
   fulfilled_book_id?: number;
   fulfilled_at?: string;
   created_at: string;
@@ -134,7 +142,14 @@ export interface JobStatus {
   running: boolean;
   interval: string;
   last_run_at: string | null;
+  next_run_at: string | null;
   last_result: string;
+}
+
+export interface BackupInfo {
+  filename: string;
+  size_bytes: number;
+  created_at: string;
 }
 
 export interface PaginatedResult<T> {

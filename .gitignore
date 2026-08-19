@@ -128,6 +128,9 @@ apps/bookshelf/.env.local
 # bookshelf-backend: cached book cover images written to disk at runtime
 apps/bookshelf-backend/data/covers/
 
+# bookshelf-backend: local DB backup archives written to disk at runtime
+apps/bookshelf-backend/data/backups/
+
 .nx/polygraph
 
 .nx/self-healing

@@ -13,6 +13,7 @@ import type {
   WaitlistStatus,
   PaginatedResult,
   JobStatus,
+  BackupInfo,
   VerificationStatus,
   DashboardStats,
   WishlistRequest,
@@ -224,6 +225,31 @@ function getToken(): string | null {
   return localStorage.getItem("bookshelf_token");
 }
 
+/**
+ * Downloads a backup archive and saves it via the browser, same UX as
+ * handleExport() in the settings page — but sourced from a real binary
+ * response instead of a JSON `{content}` string, so it can't go through
+ * request<T>(), which always calls res.json().
+ */
+export async function downloadBackup(filename: string): Promise<void> {
+  const token = getToken();
+  const res = await fetch(
+    `${BASE}/admin/backups/${encodeURIComponent(filename)}/download`,
+    { headers: token ? { Authorization: `Bearer ${token}` } : {} },
+  );
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: res.statusText }));
+    throw new Error(err.detail ?? "Download failed");
+  }
+  const blob = await res.blob();
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
 async function request<T>(path: string, options?: RequestInit): Promise<T> {
   const token = getToken();
   const headers: HeadersInit = {
@@ -289,12 +315,30 @@ export const api = {
       method: "POST",
       body: JSON.stringify(data),
     }),
+  forgotPassword: (email: string) =>
+    request<{ debug_code?: string }>("/auth/forgot-password", {
+      method: "POST",
+      body: JSON.stringify({ email }),
+    }),
+  resetPassword: (data: {
+    email: string;
+    code: string;
+    new_password: string;
+    confirm_password: string;
+  }) =>
+    request<void>("/auth/reset-password", {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
   me: () => request<User>("/auth/me"),
   updateMe: (data: {
     name?: string;
     phone?: string;
     email?: string;
     google_books_api_key?: string;
+    email_notifications_enabled?: boolean;
+    telegram_username?: string;
+    whatsapp_username?: string;
   }) =>
     request<User>("/auth/me", { method: "PATCH", body: JSON.stringify(data) }),
   changePassword: (data: {
@@ -445,6 +489,11 @@ export const api = {
       method: "PATCH",
       body: JSON.stringify(data),
     }),
+  updateExpectedReturnDate: (id: number, expectedReturnDate: string) =>
+    request<LoanRequest>(`/loan-requests/${id}/expected-return-date`, {
+      method: "PATCH",
+      body: JSON.stringify({ expected_return_date: expectedReturnDate }),
+    }),
 
   // Notifications
   getNotifications: (params?: {
@@ -529,6 +578,7 @@ export const api = {
     google_books_id?: string;
     cover_url?: string;
     notes?: string;
+    is_anonymous?: boolean;
   }) =>
     request<WishlistRequest>("/wishlist", {
       method: "POST",
@@ -592,6 +642,13 @@ export const api = {
   adminGetJobs: () => request<JobStatus[]>("/admin/jobs"),
   adminRunJob: (job: string) =>
     request<void>(`/admin/jobs/${job}/run`, { method: "POST" }),
+
+  // Backups
+  adminListBackups: () => request<BackupInfo[]>("/admin/backups"),
+  adminDeleteBackup: (filename: string) =>
+    request<void>(`/admin/backups/${encodeURIComponent(filename)}`, {
+      method: "DELETE",
+    }),
 
   // Metadata provider status
   adminGetMetadataStatus: () =>

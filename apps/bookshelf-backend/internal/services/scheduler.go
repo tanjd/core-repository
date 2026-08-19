@@ -33,10 +33,25 @@ type JobStatus struct {
 	Running    bool       `json:"running"`
 	Interval   string     `json:"interval"`
 	LastRunAt  *time.Time `json:"last_run_at"`
+	NextRunAt  *time.Time `json:"next_run_at"`
 	LastResult string     `json:"last_result"`
 }
 
-// Scheduler runs periodic background tasks such as refreshing book cover images.
+// nextRunAt computes when a job is next due, given its last run time and
+// configured interval. Returns nil if it has never run yet (the scheduler
+// runs every job once shortly after boot, so this only applies briefly).
+func nextRunAt(lastRunAt *time.Time, interval time.Duration) *time.Time {
+	if lastRunAt == nil {
+		return nil
+	}
+	next := lastRunAt.Add(interval)
+	return &next
+}
+
+// Scheduler runs periodic background tasks such as refreshing book cover
+// images. Cover-refresh is the scheduler's original built-in job; additional
+// named jobs (e.g. "backup") are attached via RegisterJob, sharing the same
+// ticker/trigger/status machinery via the job type below.
 type Scheduler struct {
 	books     repository.BookRepository
 	admin     repository.AdminRepository
@@ -44,6 +59,22 @@ type Scheduler struct {
 	fallback  time.Duration // interval used when setting is absent/invalid
 	client    *http.Client
 	trigger   chan struct{}
+
+	mu         sync.RWMutex
+	running    bool
+	lastRunAt  *time.Time
+	lastResult string
+
+	extra []*job
+}
+
+// job holds the ticker state for one RegisterJob-added background task.
+type job struct {
+	name       string
+	settingKey string
+	fallback   time.Duration
+	run        func(ctx context.Context) string
+	trigger    chan struct{}
 
 	mu         sync.RWMutex
 	running    bool
@@ -81,25 +112,94 @@ func (s *Scheduler) interval() time.Duration {
 	return s.fallback
 }
 
-// Status returns the current status of the cover-refresh job.
-func (s *Scheduler) Status() JobStatus {
+// RegisterJob attaches an additional named background job to the scheduler,
+// alongside the built-in cover-refresh job. settingKey names the
+// AdminRepository setting holding its configured interval (as a Go duration
+// string); fallback is used when that setting is absent/invalid. run
+// performs one job execution and returns a human-readable result string for
+// JobStatus.LastResult. Must be called before Start.
+func (s *Scheduler) RegisterJob(name, settingKey string, fallback time.Duration, run func(ctx context.Context) string) {
+	s.extra = append(s.extra, &job{
+		name:       name,
+		settingKey: settingKey,
+		fallback:   fallback,
+		run:        run,
+		trigger:    make(chan struct{}, 1),
+	})
+}
+
+// Status returns the current status of every job — the built-in
+// cover-refresh job first, then any RegisterJob-added jobs in registration order.
+func (s *Scheduler) Status() []JobStatus {
+	statuses := []JobStatus{s.coverRefreshStatus()}
+	for _, j := range s.extra {
+		statuses = append(statuses, j.status(s.jobInterval(j)))
+	}
+	return statuses
+}
+
+func (s *Scheduler) coverRefreshStatus() JobStatus {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
+	interval := s.interval()
 	return JobStatus{
 		Name:       "cover-refresh",
 		Running:    s.running,
-		Interval:   s.interval().String(),
+		Interval:   interval.String(),
 		LastRunAt:  s.lastRunAt,
+		NextRunAt:  nextRunAt(s.lastRunAt, interval),
 		LastResult: s.lastResult,
 	}
 }
 
-// TriggerNow requests an immediate run. Non-blocking; ignored if already queued.
-func (s *Scheduler) TriggerNow() {
-	select {
-	case s.trigger <- struct{}{}:
-	default:
+func (j *job) status(interval time.Duration) JobStatus {
+	j.mu.RLock()
+	defer j.mu.RUnlock()
+	return JobStatus{
+		Name:       j.name,
+		Running:    j.running,
+		Interval:   interval.String(),
+		LastRunAt:  j.lastRunAt,
+		NextRunAt:  nextRunAt(j.lastRunAt, interval),
+		LastResult: j.lastResult,
 	}
+}
+
+// jobInterval reads the configured interval for j from admin settings,
+// falling back to j.fallback.
+func (s *Scheduler) jobInterval(j *job) time.Duration {
+	if s.admin != nil {
+		if val, err := s.admin.GetSetting(j.settingKey); err == nil && val != "" {
+			if d, err := time.ParseDuration(val); err == nil && d > 0 {
+				return d
+			}
+		}
+	}
+	return j.fallback
+}
+
+// TriggerNow requests an immediate run of the named job ("cover-refresh" or
+// any name passed to RegisterJob). Non-blocking; ignored if already queued.
+// Returns false if no job with that name is registered.
+func (s *Scheduler) TriggerNow(name string) bool {
+	if name == "cover-refresh" {
+		select {
+		case s.trigger <- struct{}{}:
+		default:
+		}
+		return true
+	}
+	for _, j := range s.extra {
+		if j.name != name {
+			continue
+		}
+		select {
+		case j.trigger <- struct{}{}:
+		default:
+		}
+		return true
+	}
+	return false
 }
 
 // Start launches the scheduler goroutine. It runs until ctx is cancelled.
@@ -107,6 +207,16 @@ func (s *Scheduler) TriggerNow() {
 // so interval changes take effect within a minute.
 func (s *Scheduler) Start(ctx context.Context) {
 	log.Info().Dur("interval", s.interval()).Msg("scheduler started")
+
+	var extraWg sync.WaitGroup
+	for _, j := range s.extra {
+		extraWg.Add(1)
+		go func(j *job) {
+			defer extraWg.Done()
+			s.runJobLoop(ctx, j)
+		}(j)
+	}
+
 	ticker := time.NewTicker(time.Minute)
 	defer ticker.Stop()
 
@@ -134,9 +244,68 @@ func (s *Scheduler) Start(ctx context.Context) {
 			s.refreshCovers(ctx)
 		case <-ctx.Done():
 			log.Info().Msg("scheduler stopped")
+			extraWg.Wait()
 			return
 		}
 	}
+}
+
+// runJobLoop drives one RegisterJob-added job's ticker/trigger loop, mirroring
+// the built-in cover-refresh loop in Start above.
+func (s *Scheduler) runJobLoop(ctx context.Context, j *job) {
+	interval := s.jobInterval(j)
+	log.Info().Str("job", j.name).Dur("interval", interval).Msg("scheduler: job registered")
+	ticker := time.NewTicker(time.Minute)
+	defer ticker.Stop()
+
+	go func() {
+		select {
+		case <-time.After(30 * time.Second):
+			s.runJob(ctx, j)
+		case <-ctx.Done():
+		}
+	}()
+
+	for {
+		select {
+		case <-ticker.C:
+			j.mu.RLock()
+			last := j.lastRunAt
+			j.mu.RUnlock()
+			if last != nil && time.Since(*last) < s.jobInterval(j) {
+				continue
+			}
+			s.runJob(ctx, j)
+		case <-j.trigger:
+			s.runJob(ctx, j)
+		case <-ctx.Done():
+			log.Info().Str("job", j.name).Msg("scheduler: job stopped")
+			return
+		}
+	}
+}
+
+// runJob executes j.run once, recording running/lastRunAt/lastResult.
+// Skips the run (logging instead) if j is already running.
+func (s *Scheduler) runJob(ctx context.Context, j *job) {
+	j.mu.Lock()
+	if j.running {
+		j.mu.Unlock()
+		log.Info().Str("job", j.name).Msg("scheduler: job already running, skipping")
+		return
+	}
+	j.running = true
+	now := time.Now()
+	j.lastRunAt = &now
+	j.lastResult = "running…"
+	j.mu.Unlock()
+
+	result := j.run(ctx)
+
+	j.mu.Lock()
+	j.running = false
+	j.lastResult = result
+	j.mu.Unlock()
 }
 
 // refreshCovers downloads and caches cover images for books that still have

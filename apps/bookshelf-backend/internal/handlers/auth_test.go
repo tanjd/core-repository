@@ -13,6 +13,7 @@ import (
 	"github.com/tanjd/core-repository/apps/bookshelf-backend/internal/models"
 	"github.com/tanjd/core-repository/apps/bookshelf-backend/internal/repository"
 	"github.com/tanjd/core-repository/apps/bookshelf-backend/internal/repotest"
+	"github.com/tanjd/core-repository/apps/bookshelf-backend/internal/services"
 )
 
 func newAuthHandler() (*AuthHandler, *repotest.UserRepository, *repotest.AdminRepository) {
@@ -25,7 +26,8 @@ func newAuthHandlerWithVerifications() (*AuthHandler, *repotest.UserRepository, 
 	admin := repotest.NewAdminRepository()
 	copies := repotest.NewCopyRepository()
 	regVerifications := repotest.NewRegistrationVerificationRepository()
-	h := NewAuthHandler(users, admin, copies, regVerifications, testJWTSecret, "encryption-secret", noopEmail(), noopSMS(), "dev")
+	registration := services.NewRegistrationWorkflow(admin, repotest.NewNotificationRepository(), noopEmail())
+	h := NewAuthHandler(users, admin, copies, regVerifications, testJWTSecret, "encryption-secret", noopEmail(), noopSMS(), registration, "dev")
 	return h, users, admin, regVerifications
 }
 
@@ -55,6 +57,7 @@ func TestRegister(t *testing.T) {
 		assert.Equal(t, "Ada Lovelace", out.Body.User.Name)
 		assert.Equal(t, "user", out.Body.User.Role)
 		assert.True(t, out.Body.User.Verified, "email is verified at registration time now")
+		assert.True(t, out.Body.User.EmailNotificationsEnabled, "email notifications default to on")
 
 		stored, err := users.FindByEmail("ada@example.com")
 		require.NoError(t, err)
@@ -176,8 +179,15 @@ func TestRegister(t *testing.T) {
 	})
 
 	t.Run("creates a pending, token-less account when approval is required", func(t *testing.T) {
-		h, users, admin := newAuthHandler()
+		users := repotest.NewUserRepository()
+		admin := repotest.NewAdminRepository()
+		copies := repotest.NewCopyRepository()
+		regVerifications := repotest.NewRegistrationVerificationRepository()
+		notifs := repotest.NewNotificationRepository()
+		registration := services.NewRegistrationWorkflow(admin, notifs, noopEmail())
+		h := NewAuthHandler(users, admin, copies, regVerifications, testJWTSecret, "encryption-secret", noopEmail(), noopSMS(), registration, "dev")
 		require.NoError(t, admin.UpsertSetting("require_registration_approval", "true"))
+		require.NoError(t, admin.SaveUser(&models.User{ID: 1, Name: "Site Admin", Email: "admin@example.com", Role: "admin"}))
 
 		input := &registerInput{}
 		input.Body.Name = "Ada"
@@ -194,6 +204,13 @@ func TestRegister(t *testing.T) {
 		stored, findErr := users.FindByEmail("ada4@example.com")
 		require.NoError(t, findErr)
 		assert.True(t, stored.PendingApproval)
+
+		adminNotifs, notifErr := notifs.FindByRecipient(1, false)
+		require.NoError(t, notifErr)
+		require.Len(t, adminNotifs, 1)
+		assert.Equal(t, "user_pending_approval", adminNotifs[0].Type)
+		require.NotNil(t, adminNotifs[0].PendingUserID)
+		assert.Equal(t, stored.ID, *adminNotifs[0].PendingUserID)
 	})
 }
 
@@ -450,6 +467,165 @@ func TestChangePassword(t *testing.T) {
 	})
 }
 
+func TestForgotPassword(t *testing.T) {
+	t.Run("generates a reset code for a registered email", func(t *testing.T) {
+		h, users, _ := newAuthHandler()
+		user := &models.User{Name: "Ada", Email: "ada@example.com", Password: "x"}
+		require.NoError(t, users.Create(user))
+
+		input := &forgotPasswordInput{}
+		input.Body.Email = "ada@example.com"
+
+		out, err := h.forgotPassword(context.Background(), input)
+
+		require.NoError(t, err)
+		assert.NotEmpty(t, out.Body.DebugCode, "ENV=dev should echo the code")
+
+		reloaded, findErr := users.FindByEmail("ada@example.com")
+		require.NoError(t, findErr)
+		assert.Equal(t, out.Body.DebugCode, reloaded.ResetPasswordOTPCode)
+		require.NotNil(t, reloaded.ResetPasswordOTPExpiry)
+	})
+
+	t.Run("responds successfully for an unregistered email, without a code", func(t *testing.T) {
+		h, _, _ := newAuthHandler()
+		input := &forgotPasswordInput{}
+		input.Body.Email = "nobody@example.com"
+
+		out, err := h.forgotPassword(context.Background(), input)
+
+		require.NoError(t, err, "must not reveal whether the email is registered")
+		assert.Empty(t, out.Body.DebugCode)
+	})
+}
+
+func TestResetPassword(t *testing.T) {
+	setup := func(t *testing.T) (*AuthHandler, *repotest.UserRepository, *models.User) {
+		h, users, _ := newAuthHandler()
+		expiry := time.Now().Add(15 * time.Minute)
+		user := &models.User{
+			Name: "Ada", Email: "ada@example.com", Password: "x",
+			ResetPasswordOTPCode: "123456", ResetPasswordOTPExpiry: &expiry,
+		}
+		require.NoError(t, users.Create(user))
+		return h, users, user
+	}
+
+	t.Run("resets the password with a correct code", func(t *testing.T) {
+		h, users, user := setup(t)
+		input := &resetPasswordInput{}
+		input.Body.Email = "ada@example.com"
+		input.Body.Code = "123456"
+		input.Body.NewPassword = "NewPassw0rd1"
+		input.Body.ConfirmPassword = "NewPassw0rd1"
+
+		_, err := h.resetPassword(context.Background(), input)
+
+		require.NoError(t, err)
+		reloaded, findErr := users.FindByID(user.ID)
+		require.NoError(t, findErr)
+		assert.Empty(t, reloaded.ResetPasswordOTPCode, "the code must be consumed on success")
+		assert.NoError(t, bcrypt.CompareHashAndPassword([]byte(reloaded.Password), []byte("NewPassw0rd1")))
+	})
+
+	t.Run("wrong code is rejected and invalidates the reset code", func(t *testing.T) {
+		h, users, user := setup(t)
+		input := &resetPasswordInput{}
+		input.Body.Email = "ada@example.com"
+		input.Body.Code = "000000"
+		input.Body.NewPassword = "NewPassw0rd1"
+		input.Body.ConfirmPassword = "NewPassw0rd1"
+
+		_, err := h.resetPassword(context.Background(), input)
+
+		require.Error(t, err)
+		assertStatus(t, err, 400)
+		reloaded, findErr := users.FindByID(user.ID)
+		require.NoError(t, findErr)
+		assert.Empty(t, reloaded.ResetPasswordOTPCode, "a failed attempt should invalidate the code")
+	})
+
+	t.Run("expired code is rejected", func(t *testing.T) {
+		h, users, _ := newAuthHandler()
+		expiry := time.Now().Add(-time.Minute)
+		user := &models.User{
+			Name: "Bob", Email: "bob@example.com", Password: "x",
+			ResetPasswordOTPCode: "123456", ResetPasswordOTPExpiry: &expiry,
+		}
+		require.NoError(t, users.Create(user))
+
+		input := &resetPasswordInput{}
+		input.Body.Email = "bob@example.com"
+		input.Body.Code = "123456"
+		input.Body.NewPassword = "NewPassw0rd1"
+		input.Body.ConfirmPassword = "NewPassw0rd1"
+
+		_, err := h.resetPassword(context.Background(), input)
+
+		require.Error(t, err)
+		assertStatus(t, err, 400)
+	})
+
+	t.Run("no code requested is rejected", func(t *testing.T) {
+		h, users, _ := newAuthHandler()
+		user := &models.User{Name: "Carl", Email: "carl@example.com", Password: "x"}
+		require.NoError(t, users.Create(user))
+
+		input := &resetPasswordInput{}
+		input.Body.Email = "carl@example.com"
+		input.Body.Code = "123456"
+		input.Body.NewPassword = "NewPassw0rd1"
+		input.Body.ConfirmPassword = "NewPassw0rd1"
+
+		_, err := h.resetPassword(context.Background(), input)
+
+		require.Error(t, err)
+		assertStatus(t, err, 400)
+	})
+
+	t.Run("unregistered email is rejected with the same error as a bad code", func(t *testing.T) {
+		h, _, _ := newAuthHandler()
+		input := &resetPasswordInput{}
+		input.Body.Email = "nobody@example.com"
+		input.Body.Code = "123456"
+		input.Body.NewPassword = "NewPassw0rd1"
+		input.Body.ConfirmPassword = "NewPassw0rd1"
+
+		_, err := h.resetPassword(context.Background(), input)
+
+		require.Error(t, err)
+		assertStatus(t, err, 400)
+	})
+
+	t.Run("rejects mismatched confirmation", func(t *testing.T) {
+		h, _, _ := setup(t)
+		input := &resetPasswordInput{}
+		input.Body.Email = "ada@example.com"
+		input.Body.Code = "123456"
+		input.Body.NewPassword = "NewPassw0rd1"
+		input.Body.ConfirmPassword = "Different1"
+
+		_, err := h.resetPassword(context.Background(), input)
+
+		require.Error(t, err)
+		assertStatus(t, err, 400)
+	})
+
+	t.Run("rejects a weak new password", func(t *testing.T) {
+		h, _, _ := setup(t)
+		input := &resetPasswordInput{}
+		input.Body.Email = "ada@example.com"
+		input.Body.Code = "123456"
+		input.Body.NewPassword = "weak"
+		input.Body.ConfirmPassword = "weak"
+
+		_, err := h.resetPassword(context.Background(), input)
+
+		require.Error(t, err)
+		assertStatus(t, err, 400)
+	})
+}
+
 func TestVerifyOTP(t *testing.T) {
 	h, users, _ := newAuthHandler()
 	expiry := time.Now().Add(15 * time.Minute)
@@ -586,6 +762,69 @@ func TestUpdateMePhoneChange(t *testing.T) {
 	})
 }
 
+func TestUpdateMeContactPrefs(t *testing.T) {
+	t.Run("sets email notification preference and messaging usernames", func(t *testing.T) {
+		h, users, _ := newAuthHandler()
+		user := &models.User{Name: "Ada", Email: "ada@example.com", Password: "x", EmailNotificationsEnabled: true}
+		require.NoError(t, users.Create(user))
+
+		input := &updateMeInput{}
+		disabled := false
+		telegram := "@ada"
+		whatsapp := "+15550100"
+		input.Body.EmailNotificationsEnabled = &disabled
+		input.Body.TelegramUsername = &telegram
+		input.Body.WhatsAppUsername = &whatsapp
+
+		out, err := h.updateMe(fakeAuthedCtx(t, user.ID, "user"), input)
+
+		require.NoError(t, err)
+		assert.False(t, out.Body.EmailNotificationsEnabled)
+		assert.Equal(t, "@ada", out.Body.TelegramUsername)
+		assert.Equal(t, "+15550100", out.Body.WhatsAppUsername)
+
+		reloaded, findErr := users.FindByID(user.ID)
+		require.NoError(t, findErr)
+		assert.False(t, reloaded.EmailNotificationsEnabled)
+		assert.Equal(t, "@ada", reloaded.TelegramUsername)
+		assert.Equal(t, "+15550100", reloaded.WhatsAppUsername)
+	})
+
+	t.Run("empty string clears a previously set username", func(t *testing.T) {
+		h, users, _ := newAuthHandler()
+		user := &models.User{Name: "Ada", Email: "ada2@example.com", Password: "x", TelegramUsername: "@ada"}
+		require.NoError(t, users.Create(user))
+
+		input := &updateMeInput{}
+		empty := ""
+		input.Body.TelegramUsername = &empty
+
+		out, err := h.updateMe(fakeAuthedCtx(t, user.ID, "user"), input)
+
+		require.NoError(t, err)
+		assert.Empty(t, out.Body.TelegramUsername)
+	})
+
+	t.Run("leaves fields untouched when omitted", func(t *testing.T) {
+		h, users, _ := newAuthHandler()
+		user := &models.User{
+			Name: "Ada", Email: "ada3@example.com", Password: "x",
+			EmailNotificationsEnabled: true, TelegramUsername: "@ada",
+		}
+		require.NoError(t, users.Create(user))
+
+		input := &updateMeInput{}
+		newName := "Ada Lovelace"
+		input.Body.Name = &newName
+
+		out, err := h.updateMe(fakeAuthedCtx(t, user.ID, "user"), input)
+
+		require.NoError(t, err)
+		assert.True(t, out.Body.EmailNotificationsEnabled)
+		assert.Equal(t, "@ada", out.Body.TelegramUsername)
+	})
+}
+
 func TestConfirmEmailChange(t *testing.T) {
 	setup := func(t *testing.T) (*AuthHandler, *repotest.UserRepository, *models.User) {
 		h, users, admin := newAuthHandler()
@@ -681,7 +920,8 @@ func TestSendVerifyRegisterEmailOTP(t *testing.T) {
 		admin := repotest.NewAdminRepository()
 		copies := repotest.NewCopyRepository()
 		regVerifications := repotest.NewRegistrationVerificationRepository()
-		h := NewAuthHandler(users, admin, copies, regVerifications, testJWTSecret, "encryption-secret", noopEmail(), noopSMS(), "prd")
+		registration := services.NewRegistrationWorkflow(admin, repotest.NewNotificationRepository(), noopEmail())
+		h := NewAuthHandler(users, admin, copies, regVerifications, testJWTSecret, "encryption-secret", noopEmail(), noopSMS(), registration, "prd")
 
 		sendIn := &sendRegisterEmailOTPInput{}
 		sendIn.Body.Email = "prod-user@example.com"

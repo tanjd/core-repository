@@ -112,3 +112,19 @@ func TestOnFulfilled_ManualLink(t *testing.T) {
 	assert.Equal(t, book.ID, *reloaded.FulfilledBookID)
 	assert.Equal(t, 1, d.notifs.Count())
 }
+
+func TestOnFulfilled_NotifiesRequesterRegardlessOfEmailPreference(t *testing.T) {
+	d := newWishlistWorkflow()
+	requester := &models.User{Name: "Requester", Email: "req@example.com", EmailNotificationsEnabled: false}
+	require.NoError(t, d.users.Create(requester))
+	req := &models.WishlistRequest{RequesterID: requester.ID, Title: "Wanted Book", Author: "A", ISBN: "1234", Status: "open"}
+	require.NoError(t, d.requests.Create(req))
+
+	book := &models.Book{ID: 99, Title: "A Different Edition", Author: "A"}
+	d.workflow.OnFulfilled(context.Background(), req, book)
+
+	reloaded, err := d.requests.GetByID(req.ID)
+	require.NoError(t, err)
+	assert.Equal(t, "fulfilled", reloaded.Status)
+	assert.Equal(t, 1, d.notifs.Count())
+}

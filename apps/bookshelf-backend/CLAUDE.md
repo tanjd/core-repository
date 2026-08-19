@@ -97,6 +97,49 @@ as-is to a different SQL dialect. `ListByBorrowerIDPaginated` also gained an opt
 `statuses []string` filter (empty/nil = no filter) so the frontend can split "current" vs.
 "history" tabs without new endpoints.
 
+## Backup and restore
+
+`internal/services/backup.go` (`BackupService`) creates a snapshot of the database plus the
+cover-image cache, bundled into one `bookshelf-backup-<UTC-timestamp>.tar.gz` archive per run —
+`bookshelf.db` (built via SQLite's `VACUUM INTO`, so it's a clean, WAL-safe single file with no
+`-wal`/`-shm` sidecars to also copy) plus everything under `data/covers/`. Snapshots live in
+`data/backups/`, created at boot the same way as `data/covers/` — this is **inside the existing
+`bookshelf-data` Docker volume**, so no `docker-compose.example.yml`/`compose/*.yml` change was
+needed to add it.
+
+- Runs as a second job on the existing `Scheduler` (`internal/services/scheduler.go`), alongside
+  cover-refresh — `AppSetting` keys `backup_interval` (default `24h`) and
+  `backup_retention_count` (default `7`) control it, editable from the admin UI's Jobs/Backups
+  pages same as `cover_refresh_interval`. `BackupService.CreateSnapshot` prunes down to the
+  retention count after every run (keeps the newest N, deletes the rest).
+- `internal/handlers/backup.go` exposes `GET /admin/backups` (list), `DELETE
+/admin/backups/{filename}` (delete), and `GET /admin/backups/{filename}/download` (streams the
+  archive via `huma.StreamResponse` — the one place this app returns a raw binary body through
+  huma rather than JSON). Creating a snapshot on demand and configuring the schedule intentionally
+  reuse the existing `POST /admin/jobs/backup/run` and `PATCH /admin/settings` endpoints rather
+  than duplicating that surface.
+- No DB table tracks backup history — `data/backups/` on disk is the source of truth (`ListSnapshots`
+  reads the directory), matching how cover images have no DB-backed inventory either. Every
+  filename-taking operation (download/delete) routes through `BackupService.ResolvePath`, which
+  validates the name against a strict `bookshelf-backup-YYYYMMDDTHHMMSSZ.tar.gz` regex before
+  touching the filesystem — the single guard against path traversal on this admin-controlled file
+  I/O surface.
+- **Restore is a manual, documented ops procedure — there is no in-app restore endpoint.**
+  Swapping a live SQLite DB out from under a running server safely (in-flight requests, WAL state)
+  isn't worth the risk for a single-admin self-hosted app; stopping the container first is simpler
+  and safer:
+  1. `docker compose stop bookshelf-backend` (the frontend can stay up; it'll show fetch errors
+     until the backend restarts).
+  2. Extract the chosen archive on the host: `tar -xzf bookshelf-backup-<ts>.tar.gz -C /tmp/restore`.
+  3. Copy the volume's current contents aside as a safety net — it's a named volume, not a bind
+     mount: `docker run --rm -v bookshelf-data:/data -v $(pwd)/pre-restore-backup:/backup alpine
+cp -r /data/. /backup/`.
+  4. Replace `bookshelf.db` and `covers/` inside the volume with the extracted ones, same
+     `docker run -v bookshelf-data:/data ...` pattern as step 3.
+  5. `docker compose start bookshelf-backend`.
+  6. Verify via `GET /health`, then spot-check book/user counts against expectations in the admin
+     dashboard.
+
 ## Known gaps
 
 Dockerized (GHCR) and versioned independently via `nx release` (`release.projects` in root

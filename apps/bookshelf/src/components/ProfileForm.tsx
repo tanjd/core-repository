@@ -12,6 +12,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Separator } from "@/components/ui/separator";
+import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   Card,
@@ -32,6 +33,10 @@ export function ProfileForm() {
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [phone, setPhone] = useState("");
+  const [emailNotificationsEnabled, setEmailNotificationsEnabled] =
+    useState(true);
+  const [telegramUsername, setTelegramUsername] = useState("");
+  const [whatsappUsername, setWhatsappUsername] = useState("");
   const [saving, setSaving] = useState(false);
 
   // Change password
@@ -75,6 +80,9 @@ export function ProfileForm() {
             ? u.phone.slice(3).trim()
             : (u.phone ?? ""),
         );
+        setEmailNotificationsEnabled(u.email_notifications_enabled);
+        setTelegramUsername(u.telegram_username ?? "");
+        setWhatsappUsername(u.whatsapp_username ?? "");
         if (u.pending_email) {
           setEmailChangePending(true);
           setPendingEmailTarget(u.pending_email);
@@ -98,6 +106,9 @@ export function ProfileForm() {
         name: name.trim() || undefined,
         email: email.trim() || undefined,
         phone: fullPhone,
+        email_notifications_enabled: emailNotificationsEnabled,
+        telegram_username: telegramUsername.trim(),
+        whatsapp_username: whatsappUsername.trim(),
       });
       if (updated.pending_email) {
         setUser(updated);
@@ -326,7 +337,8 @@ export function ProfileForm() {
             <CardHeader>
               <CardTitle className="text-base">Personal information</CardTitle>
               <CardDescription>
-                Update your name, email, and phone number
+                Update your name, email, phone number, and messaging contact
+                info
               </CardDescription>
             </CardHeader>
             <CardContent>
@@ -443,6 +455,55 @@ export function ProfileForm() {
                         placeholder="9123 4567"
                       />
                     </div>
+                  </div>
+                  <div className="flex flex-col gap-1.5">
+                    <label
+                      htmlFor="profile-telegram"
+                      className="text-sm font-medium"
+                    >
+                      Telegram username
+                    </label>
+                    <Input
+                      id="profile-telegram"
+                      type="text"
+                      value={telegramUsername}
+                      onChange={(e) => setTelegramUsername(e.target.value)}
+                      placeholder="@yourusername"
+                    />
+                  </div>
+                  <div className="flex flex-col gap-1.5">
+                    <label
+                      htmlFor="profile-whatsapp"
+                      className="text-sm font-medium"
+                    >
+                      WhatsApp username
+                    </label>
+                    <Input
+                      id="profile-whatsapp"
+                      type="text"
+                      value={whatsappUsername}
+                      onChange={(e) => setWhatsappUsername(e.target.value)}
+                      placeholder="Your WhatsApp handle or number"
+                    />
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-sm font-medium">Email notifications</p>
+                      <p className="text-xs text-muted-foreground mt-0.5">
+                        Receive an email when someone requests to borrow your
+                        book, your request is accepted, or a book on your
+                        wishlist is added.
+                      </p>
+                    </div>
+                    <Switch
+                      checked={emailNotificationsEnabled}
+                      onCheckedChange={setEmailNotificationsEnabled}
+                      aria-label={
+                        emailNotificationsEnabled
+                          ? "Disable email notifications"
+                          : "Enable email notifications"
+                      }
+                    />
                   </div>
                   <div>
                     <Button type="submit" disabled={saving}>
