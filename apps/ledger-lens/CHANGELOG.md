@@ -1,3 +1,7 @@
+## 1.7.2 (2026-08-19)
+
+This was a version bump only for ledger-lens to align it with other projects, there were no code changes.
+
 ## 1.7.1 (2026-08-17)
 
 ### 🩹 Fixes

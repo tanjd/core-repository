@@ -1,3 +1,13 @@
+## 0.4.4 (2026-08-19)
+
+### 🚀 Features
+
+- **bookshelf:** add admin-authored announcements with notification panel redesign ([#47](https://github.com/tanjd/core-repository/pull/47))
+
+### ❤️ Thank You
+
+- Jeddy Tan @tanjd
+
 ## 0.4.3 (2026-08-18)
 
 ### 🩹 Fixes
