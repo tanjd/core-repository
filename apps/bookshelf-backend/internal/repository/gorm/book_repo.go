@@ -41,6 +41,19 @@ func (r *BookRepository) FindByOLKey(olKey string) (*models.Book, error) {
 	return &book, nil
 }
 
+// FindByISBN returns the book with the given ISBN, or repository.ErrNotFound.
+// Excludes empty-string ISBNs so two books that both lack one don't collide.
+func (r *BookRepository) FindByISBN(isbn string) (*models.Book, error) {
+	var book models.Book
+	if err := r.db.Where("isbn = ? AND isbn != ''", isbn).First(&book).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, repository.ErrNotFound
+		}
+		return nil, err
+	}
+	return &book, nil
+}
+
 func (r *BookRepository) buildListQuery(search, sort string, availableOnly bool) *gorm.DB {
 	tx := r.db.Model(&models.Book{})
 	if search != "" {

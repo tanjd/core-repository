@@ -39,6 +39,7 @@
     "@typescript-eslint/eslint-plugin": "8.65.0",
     "@typescript-eslint/parser": "8.65.0",
     "@vitejs/plugin-react": "^4.3.4",
+    "@zxing/browser": "^0.1.5",
     "autoprefixer": "10.4.13",
     "babel-jest": "30.0.5",
     "class-variance-authority": "^0.7.1",

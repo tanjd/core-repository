@@ -1023,6 +1023,20 @@ func (r *BookRepository) FindByGoogleBooksID(id string) (*models.Book, error) {
 	return nil, repository.ErrNotFound
 }
 
+// FindByISBN returns the book with the given ISBN, or repository.ErrNotFound.
+// Excludes empty-string ISBNs so two books that both lack one don't collide.
+func (r *BookRepository) FindByISBN(isbn string) (*models.Book, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	for _, b := range r.byID {
+		if isbn != "" && b.ISBN == isbn {
+			cp := *b
+			return &cp, nil
+		}
+	}
+	return nil, repository.ErrNotFound
+}
+
 // GetByIDWithCopies returns the book with the given ID, or repository.ErrNotFound.
 // The fake stores no Copies association — callers needing one must populate
 // it on the models.Book passed to Create.
@@ -1039,6 +1053,14 @@ func (r *BookRepository) GetByIDWithCopies(id uint) (*models.Book, error) {
 
 // List returns nil — not exercised by any test using this fake yet.
 func (r *BookRepository) List(_, _ string, _ bool) ([]models.Book, error) { return nil, nil }
+
+// Count returns the number of stored books — a test helper, not part of the
+// repository.BookRepository interface.
+func (r *BookRepository) Count() int {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return len(r.byID)
+}
 
 // ListPaginated returns an empty page — not exercised by any test using this fake yet.
 func (r *BookRepository) ListPaginated(_, _ string, _ bool, page, pageSize int) (*repository.PaginatedResult[models.Book], error) {

@@ -226,16 +226,8 @@ func (h *BookHandler) createBook(ctx context.Context, input *createBookInput) (*
 		return nil, huma.Error401Unauthorized("authentication required")
 	}
 
-	// Upsert by ol_key or google_books_id: return existing record when known.
-	if input.Body.OLKey != "" {
-		if existing, err := h.books.FindByOLKey(input.Body.OLKey); err == nil {
-			return &createBookOutput{Body: *existing}, nil
-		}
-	}
-	if input.Body.GoogleBooksID != "" {
-		if existing, err := h.books.FindByGoogleBooksID(input.Body.GoogleBooksID); err == nil {
-			return &createBookOutput{Body: *existing}, nil
-		}
+	if existing, err := h.findExistingBook(input.Body.OLKey, input.Body.GoogleBooksID, input.Body.ISBN); err == nil {
+		return &createBookOutput{Body: *existing}, nil
 	}
 
 	coverURL := input.Body.CoverURL
@@ -269,6 +261,39 @@ func (h *BookHandler) createBook(ctx context.Context, input *createBookInput) (*
 	}
 
 	return &createBookOutput{Body: book}, nil
+}
+
+// findExistingBook implements createBook's upsert precedence. A strong
+// external key (OL key or Google Books ID) is trusted first and, when
+// present, an ISBN match is never even consulted — ISBN alone can be shared
+// across distinct editions/omnibuses, so unconditionally matching on it
+// risks merging books that a strong key would have kept separate. ISBN is
+// used only as a fallback when the request carries neither strong key —
+// exactly the case metadata search's BookBrainz source hits (it never sets
+// OLKey/GoogleBooksID) and the case a raw scanned/manually-entered ISBN
+// hits. This is a deliberate, narrower-scoped divergence from
+// WishlistWorkflow.OnBookCreated's stricter OLKey/GoogleBooksID-only
+// matching (see apps/bookshelf-backend/CLAUDE.md) — that auto-match
+// silently notifies a requester their book arrived, a much higher-stakes
+// mistake than this dedup only affecting whether a second Copy attaches to
+// an existing Book.
+func (h *BookHandler) findExistingBook(olKey, googleBooksID, isbn string) (*models.Book, error) {
+	if olKey != "" {
+		if b, err := h.books.FindByOLKey(olKey); err == nil {
+			return b, nil
+		}
+	}
+	if googleBooksID != "" {
+		if b, err := h.books.FindByGoogleBooksID(googleBooksID); err == nil {
+			return b, nil
+		}
+	}
+	if olKey == "" && googleBooksID == "" && isbn != "" {
+		if b, err := h.books.FindByISBN(isbn); err == nil {
+			return b, nil
+		}
+	}
+	return nil, repository.ErrNotFound
 }
 
 // toBookResponse computes the available_copies count for a single book.
