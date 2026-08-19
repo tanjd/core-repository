@@ -61,6 +61,10 @@ jobs:
           cacheFrom: ${{ env.IMAGE }}
           push: always
           runCmd: |
+            # Nx daemon (enabled locally via devcontainer.json's containerEnv for
+            # interactive dev) is flaky in this ephemeral, single-command CI
+            # container - disable it here rather than for local dev.
+            export NX_DAEMON=false
             pnpm install --frozen-lockfile
             pnpm format
             pre-commit run --all-files
