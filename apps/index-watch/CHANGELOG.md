@@ -1,3 +1,13 @@
+## 1.2.3 (2026-08-19)
+
+### 🚀 Features
+
+- **otobr-buddy:** migrate app into monorepo, stop bot-token log leak ([#48](https://github.com/tanjd/core-repository/pull/48))
+
+### ❤️ Thank You
+
+- Jeddy Tan @tanjd
+
 ## 1.2.2 (2026-08-19)
 
 This was a version bump only for index-watch to align it with other projects, there were no code changes.

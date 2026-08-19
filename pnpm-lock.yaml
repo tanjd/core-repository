@@ -305,6 +305,8 @@ importers:
 
   apps/ledger-lens-backend: {}
 
+  apps/otobr-buddy: {}
+
   apps/table-talks: {}
 
 packages:
