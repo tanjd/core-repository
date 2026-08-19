@@ -52,6 +52,27 @@ const (
 // stays valid.
 const registrationOTPExpiry = 15 * time.Minute
 
+// passwordResetOTPRateLimitAttempts/Window cap forgot-password requests per
+// email address — same identifier-keyed rationale as loginRateLimit above,
+// and the same send-cadence as the registration OTP limiters.
+const (
+	passwordResetOTPRateLimitAttempts = 3
+	passwordResetOTPRateLimitWindow   = 5 * time.Minute
+)
+
+// passwordResetAttemptRateLimitAttempts/Window cap reset-password submissions
+// (code + new password) per email address. A wrong code already invalidates
+// itself (see resetPassword), so this mainly guards against a burst of
+// requests exhausting the enumeration-safe "always 200" response on
+// forgotPassword's sibling endpoint.
+const (
+	passwordResetAttemptRateLimitAttempts = 5
+	passwordResetAttemptRateLimitWindow   = 15 * time.Minute
+)
+
+// passwordResetOTPExpiry is how long a forgot-password OTP code stays valid.
+const passwordResetOTPExpiry = 15 * time.Minute
+
 // registrationVerificationTokenTTL is how long a verify-email-otp/
 // verify-phone-otp success token remains valid for the subsequent register
 // call — long enough to fill out the rest of the signup form.
@@ -213,6 +234,8 @@ type AuthHandler struct {
 	phoneOTPLimiter           *ratelimit.Limiter
 	registerLimiter           *middleware.RateLimiter
 	otpLimiter                *middleware.RateLimiter
+	forgotPasswordLimiter     *ratelimit.Limiter
+	resetPasswordLimiter      *ratelimit.Limiter
 }
 
 // NewAuthHandler creates a new AuthHandler.
@@ -247,7 +270,9 @@ func NewAuthHandler(
 		// 3 immediately, refilling one every 5min — OTP codes last 15min so
 		// legitimate resends are rare; keyed by user ID since this endpoint is
 		// already authenticated.
-		otpLimiter: middleware.NewRateLimiter(rate.Every(5*time.Minute), 3),
+		otpLimiter:            middleware.NewRateLimiter(rate.Every(5*time.Minute), 3),
+		forgotPasswordLimiter: ratelimit.New(passwordResetOTPRateLimitAttempts, passwordResetOTPRateLimitWindow),
+		resetPasswordLimiter:  ratelimit.New(passwordResetAttemptRateLimitAttempts, passwordResetAttemptRateLimitWindow),
 	}
 }
 
@@ -337,6 +362,27 @@ type authResponse struct {
 }
 
 type authOutput struct{ Body authResponse }
+
+type forgotPasswordInput struct {
+	Body struct {
+		Email string `json:"email" required:"true" format:"email" doc:"Account email address"`
+	}
+}
+
+type forgotPasswordOutput struct {
+	Body struct {
+		DebugCode string `json:"debug_code,omitempty" doc:"Only present when ENV=dev: the code, so local development doesn't require SMTP"`
+	}
+}
+
+type resetPasswordInput struct {
+	Body struct {
+		Email           string `json:"email" required:"true" format:"email" doc:"Account email address"`
+		Code            string `json:"code" required:"true" doc:"6-digit code sent to the account's email"`
+		NewPassword     string `json:"new_password" required:"true" minLength:"12" doc:"New password (min 12 chars, mixed case + digit)"`
+		ConfirmPassword string `json:"confirm_password" required:"true" minLength:"1" doc:"Must match new_password"`
+	}
+}
 
 type meBody struct {
 	models.User
@@ -472,6 +518,22 @@ func (h *AuthHandler) RegisterRoutes(api huma.API) {
 		Tags:        []string{"auth"},
 		Summary:     "Log in and receive a JWT",
 	}, h.login)
+
+	huma.Register(api, huma.Operation{
+		OperationID: "forgot-password",
+		Method:      "POST",
+		Path:        "/auth/forgot-password",
+		Tags:        []string{"auth"},
+		Summary:     "Request a password reset code by email. Always responds successfully, whether or not the email is registered.",
+	}, h.forgotPassword)
+
+	huma.Register(api, huma.Operation{
+		OperationID: "reset-password",
+		Method:      "POST",
+		Path:        "/auth/reset-password",
+		Tags:        []string{"auth"},
+		Summary:     "Reset a forgotten password using the code sent by /auth/forgot-password",
+	}, h.resetPassword)
 
 	huma.Register(api, huma.Operation{
 		OperationID: "get-me",
@@ -820,6 +882,107 @@ func (h *AuthHandler) login(_ context.Context, input *loginInput) (*authOutput, 
 	}
 
 	return &authOutput{Body: authResponse{Token: token, User: *user}}, nil
+}
+
+// forgotPassword generates and emails a 6-digit reset code for the given
+// email address, if an account for it exists. It always returns a
+// successful (non-error) response regardless of whether the account exists,
+// so a caller can't use this endpoint to enumerate registered emails — the
+// same reason login/register error messages are kept generic elsewhere in
+// this file.
+func (h *AuthHandler) forgotPassword(ctx context.Context, input *forgotPasswordInput) (*forgotPasswordOutput, error) {
+	email := normalizeEmail(input.Body.Email)
+	if !h.forgotPasswordLimiter.Allow(email) {
+		return nil, huma.Error429TooManyRequests("too many requests — try again later")
+	}
+
+	out := &forgotPasswordOutput{}
+
+	user, err := h.users.FindByEmail(input.Body.Email)
+	if err != nil {
+		return out, nil
+	}
+
+	code, err := generateOTPCode()
+	if err != nil {
+		return nil, huma.Error500InternalServerError("could not generate reset code")
+	}
+	expiry := time.Now().Add(passwordResetOTPExpiry)
+
+	user.ResetPasswordOTPCode = code
+	user.ResetPasswordOTPExpiry = &expiry
+	if err := h.users.Save(user); err != nil {
+		return nil, huma.Error500InternalServerError("could not save reset code")
+	}
+
+	body := fmt.Sprintf(
+		"<p>Hi %s,</p><p>Your Bookshelf password reset code is: <strong>%s</strong></p><p>This code expires in 15 minutes. If you didn't request this, you can safely ignore this email — your password won't change.</p>",
+		html.EscapeString(user.Name), code,
+	)
+	h.email.SendEmailAsync(ctx, user.Email, "Reset your Bookshelf password", body)
+
+	if h.env == "dev" {
+		out.Body.DebugCode = code
+	}
+	return out, nil
+}
+
+// resetPassword completes a forgot-password flow: it checks the emailed code
+// (constant-time compare, invalidate-on-wrong-attempt — same anti-enumeration
+// shape as verifyOTP/checkRegistrationOTP) and, on success, sets the new
+// password. Errors are deliberately identical for "no such account", "no
+// code was requested", "code expired", and "code doesn't match", so a caller
+// can't distinguish an unregistered email from a wrong code.
+func (h *AuthHandler) resetPassword(ctx context.Context, input *resetPasswordInput) (*struct{}, error) {
+	email := normalizeEmail(input.Body.Email)
+	if !h.resetPasswordLimiter.Allow(email) {
+		return nil, huma.Error429TooManyRequests("too many attempts — try again later")
+	}
+
+	invalidCodeErr := huma.Error400BadRequest("invalid or expired code")
+
+	user, err := h.users.FindByEmail(input.Body.Email)
+	if err != nil {
+		return nil, invalidCodeErr
+	}
+
+	if user.ResetPasswordOTPCode == "" || user.ResetPasswordOTPExpiry == nil {
+		return nil, invalidCodeErr
+	}
+	if time.Now().After(*user.ResetPasswordOTPExpiry) {
+		user.ResetPasswordOTPCode = ""
+		user.ResetPasswordOTPExpiry = nil
+		_ = h.users.Save(user) //nolint:errcheck
+		return nil, invalidCodeErr
+	}
+	if subtle.ConstantTimeCompare([]byte(user.ResetPasswordOTPCode), []byte(input.Body.Code)) != 1 {
+		user.ResetPasswordOTPCode = ""
+		user.ResetPasswordOTPExpiry = nil
+		_ = h.users.Save(user) //nolint:errcheck
+		return nil, invalidCodeErr
+	}
+
+	if input.Body.NewPassword != input.Body.ConfirmPassword {
+		return nil, huma.Error400BadRequest("new passwords do not match")
+	}
+	if msg := validatePasswordComplexity(input.Body.NewPassword, user.Name, emailLocalPart(user.Email)); msg != "" {
+		return nil, huma.Error400BadRequest(msg)
+	}
+
+	hash, err := bcrypt.GenerateFromPassword([]byte(input.Body.NewPassword), 12)
+	if err != nil {
+		return nil, huma.Error500InternalServerError("could not hash password")
+	}
+
+	user.Password = string(hash)
+	user.ResetPasswordOTPCode = ""
+	user.ResetPasswordOTPExpiry = nil
+	if err := h.users.Save(user); err != nil {
+		return nil, huma.Error500InternalServerError("could not update password")
+	}
+
+	zerolog.Ctx(ctx).Info().Uint("user_id", user.ID).Msg("password reset via forgot-password flow")
+	return nil, nil
 }
 
 func (h *AuthHandler) me(ctx context.Context, _ *struct{}) (*meOutput, error) {

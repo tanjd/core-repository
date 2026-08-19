@@ -23,6 +23,9 @@ type User struct {
 	PendingEmail          string     `gorm:"column:pending_email" json:"pending_email,omitempty"`
 	PendingEmailOTPCode   string     `gorm:"column:pending_email_otp_code" json:"-"`
 	PendingEmailOTPExpiry *time.Time `gorm:"column:pending_email_otp_expiry" json:"-"`
+
+	ResetPasswordOTPCode   string     `gorm:"column:reset_password_otp_code" json:"-"`
+	ResetPasswordOTPExpiry *time.Time `gorm:"column:reset_password_otp_expiry" json:"-"`
 }
 
 // RegistrationVerification holds a short-lived OTP code proving control of an

@@ -289,6 +289,21 @@ export const api = {
       method: "POST",
       body: JSON.stringify(data),
     }),
+  forgotPassword: (email: string) =>
+    request<{ debug_code?: string }>("/auth/forgot-password", {
+      method: "POST",
+      body: JSON.stringify({ email }),
+    }),
+  resetPassword: (data: {
+    email: string;
+    code: string;
+    new_password: string;
+    confirm_password: string;
+  }) =>
+    request<void>("/auth/reset-password", {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
   me: () => request<User>("/auth/me"),
   updateMe: (data: {
     name?: string;

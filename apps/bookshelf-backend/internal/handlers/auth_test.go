@@ -450,6 +450,165 @@ func TestChangePassword(t *testing.T) {
 	})
 }
 
+func TestForgotPassword(t *testing.T) {
+	t.Run("generates a reset code for a registered email", func(t *testing.T) {
+		h, users, _ := newAuthHandler()
+		user := &models.User{Name: "Ada", Email: "ada@example.com", Password: "x"}
+		require.NoError(t, users.Create(user))
+
+		input := &forgotPasswordInput{}
+		input.Body.Email = "ada@example.com"
+
+		out, err := h.forgotPassword(context.Background(), input)
+
+		require.NoError(t, err)
+		assert.NotEmpty(t, out.Body.DebugCode, "ENV=dev should echo the code")
+
+		reloaded, findErr := users.FindByEmail("ada@example.com")
+		require.NoError(t, findErr)
+		assert.Equal(t, out.Body.DebugCode, reloaded.ResetPasswordOTPCode)
+		require.NotNil(t, reloaded.ResetPasswordOTPExpiry)
+	})
+
+	t.Run("responds successfully for an unregistered email, without a code", func(t *testing.T) {
+		h, _, _ := newAuthHandler()
+		input := &forgotPasswordInput{}
+		input.Body.Email = "nobody@example.com"
+
+		out, err := h.forgotPassword(context.Background(), input)
+
+		require.NoError(t, err, "must not reveal whether the email is registered")
+		assert.Empty(t, out.Body.DebugCode)
+	})
+}
+
+func TestResetPassword(t *testing.T) {
+	setup := func(t *testing.T) (*AuthHandler, *repotest.UserRepository, *models.User) {
+		h, users, _ := newAuthHandler()
+		expiry := time.Now().Add(15 * time.Minute)
+		user := &models.User{
+			Name: "Ada", Email: "ada@example.com", Password: "x",
+			ResetPasswordOTPCode: "123456", ResetPasswordOTPExpiry: &expiry,
+		}
+		require.NoError(t, users.Create(user))
+		return h, users, user
+	}
+
+	t.Run("resets the password with a correct code", func(t *testing.T) {
+		h, users, user := setup(t)
+		input := &resetPasswordInput{}
+		input.Body.Email = "ada@example.com"
+		input.Body.Code = "123456"
+		input.Body.NewPassword = "NewPassw0rd1"
+		input.Body.ConfirmPassword = "NewPassw0rd1"
+
+		_, err := h.resetPassword(context.Background(), input)
+
+		require.NoError(t, err)
+		reloaded, findErr := users.FindByID(user.ID)
+		require.NoError(t, findErr)
+		assert.Empty(t, reloaded.ResetPasswordOTPCode, "the code must be consumed on success")
+		assert.NoError(t, bcrypt.CompareHashAndPassword([]byte(reloaded.Password), []byte("NewPassw0rd1")))
+	})
+
+	t.Run("wrong code is rejected and invalidates the reset code", func(t *testing.T) {
+		h, users, user := setup(t)
+		input := &resetPasswordInput{}
+		input.Body.Email = "ada@example.com"
+		input.Body.Code = "000000"
+		input.Body.NewPassword = "NewPassw0rd1"
+		input.Body.ConfirmPassword = "NewPassw0rd1"
+
+		_, err := h.resetPassword(context.Background(), input)
+
+		require.Error(t, err)
+		assertStatus(t, err, 400)
+		reloaded, findErr := users.FindByID(user.ID)
+		require.NoError(t, findErr)
+		assert.Empty(t, reloaded.ResetPasswordOTPCode, "a failed attempt should invalidate the code")
+	})
+
+	t.Run("expired code is rejected", func(t *testing.T) {
+		h, users, _ := newAuthHandler()
+		expiry := time.Now().Add(-time.Minute)
+		user := &models.User{
+			Name: "Bob", Email: "bob@example.com", Password: "x",
+			ResetPasswordOTPCode: "123456", ResetPasswordOTPExpiry: &expiry,
+		}
+		require.NoError(t, users.Create(user))
+
+		input := &resetPasswordInput{}
+		input.Body.Email = "bob@example.com"
+		input.Body.Code = "123456"
+		input.Body.NewPassword = "NewPassw0rd1"
+		input.Body.ConfirmPassword = "NewPassw0rd1"
+
+		_, err := h.resetPassword(context.Background(), input)
+
+		require.Error(t, err)
+		assertStatus(t, err, 400)
+	})
+
+	t.Run("no code requested is rejected", func(t *testing.T) {
+		h, users, _ := newAuthHandler()
+		user := &models.User{Name: "Carl", Email: "carl@example.com", Password: "x"}
+		require.NoError(t, users.Create(user))
+
+		input := &resetPasswordInput{}
+		input.Body.Email = "carl@example.com"
+		input.Body.Code = "123456"
+		input.Body.NewPassword = "NewPassw0rd1"
+		input.Body.ConfirmPassword = "NewPassw0rd1"
+
+		_, err := h.resetPassword(context.Background(), input)
+
+		require.Error(t, err)
+		assertStatus(t, err, 400)
+	})
+
+	t.Run("unregistered email is rejected with the same error as a bad code", func(t *testing.T) {
+		h, _, _ := newAuthHandler()
+		input := &resetPasswordInput{}
+		input.Body.Email = "nobody@example.com"
+		input.Body.Code = "123456"
+		input.Body.NewPassword = "NewPassw0rd1"
+		input.Body.ConfirmPassword = "NewPassw0rd1"
+
+		_, err := h.resetPassword(context.Background(), input)
+
+		require.Error(t, err)
+		assertStatus(t, err, 400)
+	})
+
+	t.Run("rejects mismatched confirmation", func(t *testing.T) {
+		h, _, _ := setup(t)
+		input := &resetPasswordInput{}
+		input.Body.Email = "ada@example.com"
+		input.Body.Code = "123456"
+		input.Body.NewPassword = "NewPassw0rd1"
+		input.Body.ConfirmPassword = "Different1"
+
+		_, err := h.resetPassword(context.Background(), input)
+
+		require.Error(t, err)
+		assertStatus(t, err, 400)
+	})
+
+	t.Run("rejects a weak new password", func(t *testing.T) {
+		h, _, _ := setup(t)
+		input := &resetPasswordInput{}
+		input.Body.Email = "ada@example.com"
+		input.Body.Code = "123456"
+		input.Body.NewPassword = "weak"
+		input.Body.ConfirmPassword = "weak"
+
+		_, err := h.resetPassword(context.Background(), input)
+
+		require.Error(t, err)
+		assertStatus(t, err, 400)
+	})
+}
+
 func TestVerifyOTP(t *testing.T) {
 	h, users, _ := newAuthHandler()
 	expiry := time.Now().Add(15 * time.Minute)
