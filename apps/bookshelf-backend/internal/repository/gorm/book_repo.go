@@ -4,6 +4,7 @@ import (
 	"errors"
 
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 
 	"github.com/tanjd/core-repository/apps/bookshelf-backend/internal/models"
 	"github.com/tanjd/core-repository/apps/bookshelf-backend/internal/repository"
@@ -73,6 +74,23 @@ func (r *BookRepository) buildListQuery(search, sort string, availableOnly bool)
 		tx = tx.Order("author ASC, title ASC")
 	case "newest":
 		tx = tx.Order("books.created_at DESC")
+	case "relevance":
+		// Only meaningful alongside a search term — a prefix match on
+		// title or author ranks above a mid-string substring match, so a
+		// query like "harry" surfaces "Harry Potter" before "The Harried
+		// Reader". Falls back to title order for an empty query, same as
+		// the default case.
+		if search == "" {
+			tx = tx.Order("title ASC")
+		} else {
+			prefix := search + "%"
+			tx = tx.Clauses(clause.OrderBy{
+				Expression: clause.Expr{
+					SQL:  "CASE WHEN title LIKE ? THEN 0 WHEN author LIKE ? THEN 1 ELSE 2 END, title ASC",
+					Vars: []any{prefix, prefix},
+				},
+			})
+		}
 	default:
 		tx = tx.Order("title ASC")
 	}

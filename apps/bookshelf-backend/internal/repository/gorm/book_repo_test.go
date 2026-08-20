@@ -64,6 +64,33 @@ func TestBookRepository_ListPaginated_ExcludesBooksWithNoCopies(t *testing.T) {
 	assert.EqualValues(t, 1, result.Total)
 }
 
+func TestBookRepository_ListPaginated_RelevanceSort(t *testing.T) {
+	db := openTestDB(t)
+	books := NewBookRepository(db)
+	copies := NewCopyRepository(db)
+
+	owner := models.User{Name: "Owner", Email: "owner@example.com"}
+	require.NoError(t, db.Create(&owner).Error)
+
+	for _, title := range []string{"The Harried Reader", "Harry Potter", "A History of Time"} {
+		book := models.Book{Title: title, Author: "A"}
+		require.NoError(t, books.Create(&book))
+		require.NoError(t, copies.Create(&models.Copy{BookID: book.ID, OwnerID: owner.ID, Condition: "good", Status: "available"}))
+	}
+
+	result, err := books.ListPaginated("harr", "relevance", false, 1, 20)
+	require.NoError(t, err)
+
+	var titles []string
+	for _, b := range result.Items {
+		titles = append(titles, b.Title)
+	}
+	// "Harry Potter" is a prefix match and should rank above the
+	// substring-only match "The Harried Reader"; "A History of Time"
+	// doesn't match "harr" at all and is excluded by the search filter.
+	require.Equal(t, []string{"Harry Potter", "The Harried Reader"}, titles)
+}
+
 func TestBookRepository_Delete(t *testing.T) {
 	db := openTestDB(t)
 	books := NewBookRepository(db)
