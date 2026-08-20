@@ -66,9 +66,11 @@ jobs:
             # container - disable it here rather than for local dev.
             export NX_DAEMON=false
             pnpm install --frozen-lockfile
+            pnpm exec playwright install --with-deps chromium
             pnpm format
             pre-commit run --all-files
             npx nx affected --base=${{ env.NX_BASE }} --head=${{ env.NX_HEAD }} -t lint test --verbose
+            npx nx affected --base=${{ env.NX_BASE }} --head=${{ env.NX_HEAD }} -t e2e --verbose
 
   docker-build:
     timeout-minutes: 15

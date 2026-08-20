@@ -10,3 +10,23 @@
 .devcontainer
 .vscode
 .cursor
+
+# secrets — real env files must never enter a build context (apps/*/.env.example and
+# apps/*/.env.compose.example are checked-in templates, not secrets, and are unaffected —
+# their filenames don't end in ".env")
+**/.env
+**/*.env
+
+# runtime SQLite state — not build input; changes on every local dev run, which would
+# otherwise bust the layer cache for any Dockerfile that copies its app dir wholesale
+apps/bookshelf-backend/data
+apps/food-maps-backend/data
+apps/ledger-lens-backend/data
+apps/index-watch/data
+
+# defense-in-depth: catch stray db files anywhere else in the tree
+**/*.db
+**/*.db-shm
+**/*.db-wal
+**/*.sqlite
+**/*.sqlite3

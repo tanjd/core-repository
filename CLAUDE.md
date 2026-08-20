@@ -38,6 +38,8 @@ release process); the list below is just an index into the per-app files.
   `apps/bookshelf-backend/CLAUDE.md`.
 - `apps/bookshelf` — Next.js + Tailwind CSS + shadcn/ui frontend for the above. See
   `apps/bookshelf/CLAUDE.md`.
+- `apps/bookshelf-e2e` — Playwright E2E tests for `bookshelf` + `bookshelf-backend`, against real
+  servers rather than mocks. See `apps/bookshelf-e2e/CLAUDE.md`.
 - `tools/generators/telegram-bot` — local Nx generator for scaffolding new bots.
 
 ## Common commands
@@ -84,6 +86,21 @@ merge can land changes the hook never saw. Branch protection on `main`
 requires the `main`, `docker-build`, and `validate` (PR Title) checks to pass
 and the PR branch to be up to date before merging — `enforce_admins` is off,
 so this can still be bypassed manually if needed.
+
+## Verifying changes
+
+When an app has an `*-e2e` project (e.g. `apps/bookshelf-e2e`), verify a UI change by running or
+extending that suite (`pnpm nx e2e <app>-e2e`) instead of writing a one-off headless-browser
+script — a spec is reusable the next time this area changes; a scratch script is thrown away
+after one use. `apps/bookshelf-e2e` boots real servers (backend + frontend, not route mocks) for
+exactly this reason — see its `CLAUDE.md` for the pattern (Playwright's array-form `webServer`,
+a seeded-auth `setup` project) to follow when bringing another app's e2e suite up to the same
+standard. `apps/food-maps-e2e` exists but hasn't been upgraded yet — treat it as a template to
+extend, not a finished reference.
+
+For an app with no e2e project at all, falling back to `nx serve <app>` and a scratch script to
+verify a change is still fine — the point is to reach for an existing suite before reaching for a
+scratch script, not to block work on one existing everywhere.
 
 ## Nx conventions
 

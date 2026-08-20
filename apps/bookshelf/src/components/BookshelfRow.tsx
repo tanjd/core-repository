@@ -41,7 +41,7 @@ function BookSpine({ book, ownedByMe }: { book: Book; ownedByMe: boolean }) {
       </div>
 
       {/* Metadata below shelf plank */}
-      <div className="pt-2 space-y-0.5">
+      <div className="pt-2 flex flex-1 flex-col space-y-0.5">
         <p className="text-xs font-medium line-clamp-2 leading-tight">
           {book.title}
         </p>
@@ -51,7 +51,7 @@ function BookSpine({ book, ownedByMe }: { book: Book; ownedByMe: boolean }) {
         {typeof book.available_copies === "number" && (
           <Badge
             variant={book.available_copies > 0 ? "success" : "secondary"}
-            className="text-[9px] px-1 py-0 h-4"
+            className="text-[9px] px-1 py-0 h-4 mt-auto self-start"
           >
             {book.available_copies > 0
               ? `${book.available_copies} avail.`
