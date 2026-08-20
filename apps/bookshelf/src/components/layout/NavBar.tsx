@@ -67,7 +67,7 @@ export function NavBar() {
           <div className="flex h-14 items-center justify-between">
             {/* Brand */}
             <Link
-              href="/catalog"
+              href={isAuth ? "/catalog" : "/"}
               className="flex items-center gap-2 font-semibold text-lg"
             >
               <BookOpen className="size-5" />

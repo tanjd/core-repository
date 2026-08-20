@@ -37,7 +37,7 @@ export function BookCard({ book, ownedByMe }: BookCardProps) {
             </div>
           )}
         </div>
-        <CardContent className="px-3 py-3 flex flex-col gap-1">
+        <CardContent className="px-3 py-3 flex flex-1 flex-col gap-1">
           <p className="font-medium text-sm leading-snug line-clamp-2">
             {book.title}
           </p>
@@ -47,7 +47,7 @@ export function BookCard({ book, ownedByMe }: BookCardProps) {
             </p>
           )}
           {typeof book.available_copies === "number" && (
-            <div className="mt-1">
+            <div className="mt-auto pt-1">
               <Badge
                 variant={book.available_copies > 0 ? "success" : "secondary"}
               >

@@ -9,7 +9,7 @@ help: ## Show this help message
 
 ##@ Development
 
-setup: ## Install deps (frozen lockfile), goimports, and rtk (Claude/Cursor token-saving hooks)
+setup: ## Install deps (frozen lockfile), goimports, rtk (Claude/Cursor token-saving hooks), and Playwright's chromium
 	pnpm install --frozen-lockfile
 	go install golang.org/x/tools/cmd/goimports@latest
 	curl -fsSL https://raw.githubusercontent.com/rtk-ai/rtk/master/install.sh | RTK_VERSION=v0.44.1 sh
@@ -17,6 +17,7 @@ setup: ## Install deps (frozen lockfile), goimports, and rtk (Claude/Cursor toke
 	rtk init -g --auto-patch
 	mkdir -p $(HOME)/.cursor
 	rtk init -g --agent cursor --auto-patch
+	pnpm exec playwright install --with-deps chromium
 
 verify: ## Build, lint, and test every project (full local CI equivalent)
 	pnpm nx run-many -t build lint test

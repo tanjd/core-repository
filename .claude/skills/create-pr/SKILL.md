@@ -24,10 +24,11 @@ but not in the shipped image. Fixed by manually cutting
 `bookshelf-backend@0.3.0` — see `apps/bookshelf-backend/CHANGELOG.md`'s 0.3.0
 entry and the `release-and-deployment` skill.
 
-`.github/workflows/pr-title.yml` enforces this format as a check on every PR,
-but that check isn't wired up as a _required_ status check yet (branch
-protection on `main` isn't enabled — see root `CLAUDE.md`'s "Known gaps"), so
-don't rely on it alone: get the title right before creating/updating the PR.
+`.github/workflows/pr-title.yml` enforces this format as a check on every PR, and its `validate`
+job is a **required** status check on `main`'s branch protection (alongside `main` and
+`docker-build`) — a non-conventional title blocks merging outright. `enforce_admins` is off
+though, so it's still bypassable manually; don't rely on the check catching a bad title, get it
+right before creating/updating the PR.
 
 ## Steps
 
@@ -42,16 +43,18 @@ don't rely on it alone: get the title right before creating/updating the PR.
    - `type(scope): imperative-mood summary` (≤72 chars total, no period).
    - **type**: `feat`, `fix`, `refactor`, `test`, `chore`, `docs`, or `perf`
      (same set the `commit` skill uses).
-   - **scope**: the primary app/lib touched (e.g. `bookshelf-backend`,
-     `docker`, `index-watch`). Omit only if the change spans many areas with
-     no clear primary — but prefer picking one, since an unscoped title still
-     satisfies `nx release` fine as long as the type is present.
+   - **scope**: every nx project with real code changes across all commits on the branch,
+     comma-separated (e.g. `feat(bookshelf,bookshelf-backend): ...`) — not just the most
+     obviously-affected one. `nx release`'s `conventionalCommits.useCommitScope` defaults to
+     `true`, so a project touched by the PR but not named in its scope only gets an indirect
+     patch-level bump, never the real `feat`/`fix`-implied bump, even though the change is real
+     (this has happened repeatedly — see `pr-title.yml`'s comment block for the specific PRs).
+     Don't scope a project only touched by docs/CLAUDE.md updates supporting another project's
+     change. Omit scope entirely only if the change spans many areas with no clear owning
+     project(s).
    - Say what the change achieves, not what you did while coding.
-   - If the branch's changes touch multiple unrelated concerns spanning
-     different projects, that's a sign the PR itself should be split — a
-     single title can't accurately describe two projects' unrelated
-     changes, and one non-conventional-shaped title silently costs _all_ the
-     touched projects their release.
+   - If the branch's commits already use a `type(scope):` prefix (check `git log`), match that
+     scope rather than re-deriving it — the title should describe the same change the commits do.
 
 3. If a PR already exists, ask the user whether to update its title/description or stop.
 

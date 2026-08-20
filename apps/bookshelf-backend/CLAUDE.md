@@ -60,6 +60,15 @@ apps/bookshelf-backend/Dockerfile .`) and switched from the source repo's `golan
 - `nx run bookshelf-backend:lint` depends on `golangci-lint` (see `nx.json` →
   `targetDefaults.lint.dependsOn`), so a plain `nx affected -t lint` genuinely gates on it, not
   just `go vet`/`go fmt`.
+- `./data/screenshot-seed.db` (gitignored, same `*.db` rule) is a pre-seeded DB for taking
+  `apps/bookshelf` landing-page screenshots against real-looking data instead of an empty
+  catalogue: 10 real books (real Open Library/Google Books covers/metadata, via
+  `/books/metadata/search`) split across two accounts —
+  `admin@bookshelf.local` / `jamie@bookshelf.local`, both password `ScreenshotDemo42!` — so the
+  catalogue reads as a multi-person community rather than one account's shelf. Point `DB_PATH` at
+  it (`DB_PATH=./data/screenshot-seed.db go run ./cmd/server`) instead of reseeding from scratch;
+  copy the `.db`/`-shm`/`-wal` trio together since it was last stopped mid-WAL rather than cleanly
+  checkpointed.
 
 ## Wishlist board
 

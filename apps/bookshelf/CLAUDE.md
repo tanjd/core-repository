@@ -9,6 +9,10 @@ as every other app migration in this repo. All calls go through `src/app/api/[..
 a Next.js proxy that forwards to `BACKEND_URL` (read at request time, not baked into the build) so
 the same image works across environments without a rebuild.
 
+See `apps/bookshelf-e2e/CLAUDE.md` for this app's e2e conventions — including the standing
+instruction to verify UI changes through that Playwright suite rather than an ad hoc
+headless-browser script.
+
 Its `Dockerfile` follows `apps/ledger-lens`'s sub-pattern rather than a plain `npm ci`/`npm run
 build`: this app's `package.json` is a bare version manifest like every other TS app here (no
 per-app dependencies; see the repo-root `CLAUDE.md`'s "Release versioning" section), so the image
