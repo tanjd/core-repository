@@ -21,17 +21,28 @@ export default defineConfig({
   },
   /* Two real servers, not mocks: the backend on :8000 (matching the
    * frontend's default BACKEND_URL, so no extra env wiring is needed) and
-   * `next dev` on :3000. `auth.setup.ts` seeds an admin account once both
-   * are up — see apps/bookshelf-e2e/CLAUDE.md for the full rationale.
+   * a production `next build && next start` on :3000. `auth.setup.ts` seeds
+   * an admin account once both are up — see apps/bookshelf-e2e/CLAUDE.md for
+   * the full rationale.
    *
-   * Both commands invoke the underlying tool directly (`go run`, `next dev`)
-   * rather than going through `nx run bookshelf-backend:serve` /
-   * `nx run bookshelf:serve`: Nx's continuous-task executor forks its own
-   * `run-executor.js` helper to launch the real process — when Playwright
-   * tree-kills the process it spawned on teardown, that helper (and
-   * whatever it launched) can be left orphaned instead of dying with it.
-   * Calling the tool directly makes it the process Playwright owns, so
-   * teardown reliably kills the whole tree. */
+   * The frontend deliberately runs a production build, not `next dev`:
+   * dev's on-demand route compilation raced hard navigations (stale bundle)
+   * and sometimes aborted them outright (net::ERR_ABORTED) — the dominant
+   * source of flakiness in this suite, see apps/bookshelf-e2e/CLAUDE.md's
+   * "Frontend runs a production build" section for the history. A
+   * production build has no on-demand compilation, so that whole class of
+   * flake doesn't happen — it costs a build up front (see this entry's
+   * `timeout`) in exchange for not racing every navigation in every spec
+   * run after.
+   *
+   * Both commands invoke the underlying tool directly (`go run`, `next
+   * build`/`next start`) rather than going through `nx run
+   * bookshelf-backend:serve` / `nx run bookshelf:serve`: Nx's continuous-task
+   * executor forks its own `run-executor.js` helper to launch the real
+   * process — when Playwright tree-kills the process it spawned on
+   * teardown, that helper (and whatever it launched) can be left orphaned
+   * instead of dying with it. Calling the tool directly makes it the
+   * process Playwright owns, so teardown reliably kills the whole tree. */
   webServer: [
     {
       // DB_PATH is wiped before every run so each e2e run starts from a
@@ -59,10 +70,15 @@ export default defineConfig({
       },
     },
     {
-      command: "pnpm exec next dev apps/bookshelf --port 3000 --webpack",
+      command:
+        "pnpm exec next build apps/bookshelf --webpack && pnpm exec next start apps/bookshelf --port 3000",
       url: "http://localhost:3000",
       reuseExistingServer: !process.env.CI,
       cwd: workspaceRoot,
+      // Playwright's webServer default timeout (60s) covers next dev's
+      // near-instant boot but not a production build first — bump it so a
+      // cold `next build` doesn't get killed mid-build on a slower CI runner.
+      timeout: 180_000,
     },
   ],
   projects: [

@@ -959,7 +959,11 @@ func (h *AuthHandler) forgotPassword(ctx context.Context, input *forgotPasswordI
 		html.EscapeString(user.Name), code,
 	)
 	resetPath := ""
-	if linkToken, tokenErr := h.issueOTPLinkToken(otpLinkPurposeResetPassword, email, code); tokenErr == nil {
+	// user.Email, not the normalized `email` above: resetPassword's
+	// token path feeds this identifier straight into FindByEmail, a
+	// case-sensitive lookup — a lowercased identifier would fail to find
+	// an account whose stored email contains uppercase characters.
+	if linkToken, tokenErr := h.issueOTPLinkToken(otpLinkPurposeResetPassword, user.Email, code); tokenErr == nil {
 		resetPath = fmt.Sprintf("/forgot-password?resetToken=%s", url.QueryEscape(linkToken))
 		body += h.email.Button(resetPath, "Reset password")
 	}

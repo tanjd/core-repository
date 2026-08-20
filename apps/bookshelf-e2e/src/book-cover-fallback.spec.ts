@@ -27,6 +27,17 @@ test("a book with no cover renders a generated cover fallback across the catalog
     data: { title, author },
   });
   expect(createResponse.ok()).toBeTruthy();
+  const book = await createResponse.json();
+
+  // A book with no copies never surfaces in the catalog (see
+  // BookRepository.List/ListRecent's `EXISTS (SELECT 1 FROM copies ...)`
+  // filter in bookshelf-backend) — same createBook + createCopy pairing the
+  // "Share a Book" page does (src/app/share/page.tsx).
+  const createCopyResponse = await page.request.post("/api/copies", {
+    headers: { Authorization: `Bearer ${token}` },
+    data: { book_id: book.id },
+  });
+  expect(createCopyResponse.ok()).toBeTruthy();
 
   const coverPlaceholder = page.getByRole("img", {
     name: `Cover placeholder for ${title}, by ${author}`,

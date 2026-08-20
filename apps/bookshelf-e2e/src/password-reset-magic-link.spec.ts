@@ -64,10 +64,9 @@ test("password reset via magic link requires no code entry", async ({
   // The magic-link path skips code entry entirely.
   await expect(page.getByLabel("Reset code")).toHaveCount(0);
 
-  await page.getByLabel("New password").fill(newPassword);
+  await page.getByLabel("New password", { exact: true }).fill(newPassword);
   await page.getByLabel("Confirm new password").fill(newPassword);
   await page.getByRole("button", { name: "Reset password" }).click();
-
   await expect(page).toHaveURL("/login");
 
   // The new password actually works — the old one no longer would.
