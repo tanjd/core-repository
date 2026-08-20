@@ -24,12 +24,14 @@ type exportSettingsOutput struct {
 // AdminHandler holds dependencies for admin routes.
 type AdminHandler struct {
 	admin             repository.AdminRepository
+	copies            repository.CopyRepository
+	loans             repository.LoanRequestRepository
 	googleBooksAPIKey string
 }
 
 // NewAdminHandler creates a new AdminHandler.
-func NewAdminHandler(admin repository.AdminRepository, googleBooksAPIKey string) *AdminHandler {
-	return &AdminHandler{admin: admin, googleBooksAPIKey: googleBooksAPIKey}
+func NewAdminHandler(admin repository.AdminRepository, copies repository.CopyRepository, loans repository.LoanRequestRepository, googleBooksAPIKey string) *AdminHandler {
+	return &AdminHandler{admin: admin, copies: copies, loans: loans, googleBooksAPIKey: googleBooksAPIKey}
 }
 
 // --- Input / Output types ---
@@ -322,6 +324,25 @@ func (h *AdminHandler) deleteUser(ctx context.Context, input *adminUserIDInput) 
 		if count <= 1 {
 			return nil, huma.Error400BadRequest("cannot delete the last admin")
 		}
+	}
+
+	// Deleting the user would otherwise orphan any copies they own and any
+	// loan requests they're a party to, since neither has an ON DELETE
+	// behavior enforced at the DB or ORM level — require an admin to resolve
+	// those first rather than silently leaving dangling references.
+	copyCount, err := h.copies.CountByOwnerID(input.ID)
+	if err != nil {
+		return nil, huma.Error500InternalServerError("could not check owned copies")
+	}
+	if copyCount > 0 {
+		return nil, huma.Error409Conflict("cannot delete a user who still owns copies — transfer or remove them first")
+	}
+	activeLoanCount, err := h.loans.CountActiveLoansByBorrower(input.ID)
+	if err != nil {
+		return nil, huma.Error500InternalServerError("could not check active loan requests")
+	}
+	if activeLoanCount > 0 {
+		return nil, huma.Error409Conflict("cannot delete a user with active loan requests — resolve them first")
 	}
 
 	if err := h.admin.DeleteUser(input.ID); err != nil {

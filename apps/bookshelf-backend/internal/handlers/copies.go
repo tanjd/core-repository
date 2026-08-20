@@ -119,6 +119,15 @@ func (h *CopyHandler) RegisterRoutes(api huma.API) {
 	}, h.listMyOwnedBookIDs)
 
 	huma.Register(api, huma.Operation{
+		OperationID: "export-my-copies",
+		Method:      "GET",
+		Path:        "/copies/mine/export",
+		Tags:        []string{"copies"},
+		Summary:     "Export the authenticated user's owned copies as JSON, YAML, or CSV",
+		Security:    []map[string][]string{{"bearer": {}}},
+	}, h.exportMyCopies)
+
+	huma.Register(api, huma.Operation{
 		OperationID:   "create-copy",
 		Method:        "POST",
 		Path:          "/copies",

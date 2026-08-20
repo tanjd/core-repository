@@ -5,8 +5,16 @@ import Link from "next/link";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { Plus, Pencil, Trash2, BookOpen, ArrowRightLeft } from "lucide-react";
-import { api } from "@/lib/api";
+import {
+  Plus,
+  Pencil,
+  Trash2,
+  BookOpen,
+  ArrowRightLeft,
+  Download,
+} from "lucide-react";
+import { api, downloadMyCopiesExport } from "@/lib/api";
+import type { MyCopiesExportFormat } from "@/lib/api";
 import type { Copy } from "@/lib/types";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -92,6 +100,12 @@ export default function MyBooksPage() {
   // Delete confirm dialog
   const [deleteCopy, setDeleteCopy] = useState<MyCopy | null>(null);
   const [deleteSubmitting, setDeleteSubmitting] = useState(false);
+
+  // Export dialog
+  const [exportOpen, setExportOpen] = useState(false);
+  const [exportFormat, setExportFormat] =
+    useState<MyCopiesExportFormat>("json");
+  const [exportSubmitting, setExportSubmitting] = useState(false);
 
   // Fetched separately, after the main copies list renders — per-copy
   // pending-request counts and active-loan details aren't returned by
@@ -229,6 +243,18 @@ export default function MyBooksPage() {
     }
   }
 
+  async function handleExport() {
+    setExportSubmitting(true);
+    try {
+      await downloadMyCopiesExport(exportFormat);
+      setExportOpen(false);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Export failed");
+    } finally {
+      setExportSubmitting(false);
+    }
+  }
+
   async function handleTransfer() {
     if (!transferCopy || !transferEmail.trim()) return;
     setTransferSubmitting(true);
@@ -272,12 +298,22 @@ export default function MyBooksPage() {
             Copies you&apos;ve shared with the community
           </p>
         </div>
-        <Link href="/share">
-          <Button>
-            <Plus className="size-4" />
-            Share a Book
+        <div className="flex items-center gap-2">
+          <Button
+            variant="outline"
+            disabled={totalCopies === 0}
+            onClick={() => setExportOpen(true)}
+          >
+            <Download className="size-4" />
+            Export
           </Button>
-        </Link>
+          <Link href="/share">
+            <Button>
+              <Plus className="size-4" />
+              Share a Book
+            </Button>
+          </Link>
+        </div>
       </div>
 
       {totalCopies > 0 && (
@@ -608,6 +644,45 @@ export default function MyBooksPage() {
               disabled={transferSubmitting || !transferEmail.trim()}
             >
               {transferSubmitting ? "Transferring…" : "Transfer Copy"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Export dialog */}
+      <Dialog open={exportOpen} onOpenChange={setExportOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Export My Books</DialogTitle>
+            <DialogDescription>
+              Download the books you own as a file, in the format of your
+              choice.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex flex-col gap-1.5">
+            <Label>Format</Label>
+            <RadioGroup
+              value={exportFormat}
+              onValueChange={(v) => setExportFormat(v as MyCopiesExportFormat)}
+              className="flex gap-4"
+            >
+              {(["json", "yaml", "csv"] as MyCopiesExportFormat[]).map((f) => (
+                <div key={f} className="flex items-center gap-1.5">
+                  <RadioGroupItem value={f} id={`export-format-${f}`} />
+                  <Label
+                    htmlFor={`export-format-${f}`}
+                    className="text-sm font-normal uppercase cursor-pointer"
+                  >
+                    {f}
+                  </Label>
+                </div>
+              ))}
+            </RadioGroup>
+          </div>
+          <DialogFooter showCloseButton>
+            <Button onClick={handleExport} disabled={exportSubmitting}>
+              <Download className="size-4" />
+              {exportSubmitting ? "Exporting…" : "Export"}
             </Button>
           </DialogFooter>
         </DialogContent>

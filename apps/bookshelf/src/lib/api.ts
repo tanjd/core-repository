@@ -226,28 +226,46 @@ function getToken(): string | null {
 }
 
 /**
- * Downloads a backup archive and saves it via the browser, same UX as
- * handleExport() in the settings page — but sourced from a real binary
- * response instead of a JSON `{content}` string, so it can't go through
+ * Fetches url with the auth header and saves the response via the browser as
+ * filename — for binary/attachment responses, which can't go through
  * request<T>(), which always calls res.json().
  */
-export async function downloadBackup(filename: string): Promise<void> {
+async function downloadAuthed(url: string, filename: string): Promise<void> {
   const token = getToken();
-  const res = await fetch(
-    `${BASE}/admin/backups/${encodeURIComponent(filename)}/download`,
-    { headers: token ? { Authorization: `Bearer ${token}` } : {} },
-  );
+  const res = await fetch(url, {
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+  });
   if (!res.ok) {
     const err = await res.json().catch(() => ({ detail: res.statusText }));
     throw new Error(err.detail ?? "Download failed");
   }
   const blob = await res.blob();
-  const url = URL.createObjectURL(blob);
+  const objectUrl = URL.createObjectURL(blob);
   const a = document.createElement("a");
-  a.href = url;
+  a.href = objectUrl;
   a.download = filename;
   a.click();
-  URL.revokeObjectURL(url);
+  URL.revokeObjectURL(objectUrl);
+}
+
+/** Downloads a backup archive, same UX as handleExport() in the settings page. */
+export async function downloadBackup(filename: string): Promise<void> {
+  return downloadAuthed(
+    `${BASE}/admin/backups/${encodeURIComponent(filename)}/download`,
+    filename,
+  );
+}
+
+export type MyCopiesExportFormat = "json" | "yaml" | "csv";
+
+/** Downloads the caller's owned copies in the given export format. */
+export async function downloadMyCopiesExport(
+  format: MyCopiesExportFormat,
+): Promise<void> {
+  return downloadAuthed(
+    `${BASE}/copies/mine/export?format=${format}`,
+    `my-books.${format}`,
+  );
 }
 
 async function request<T>(path: string, options?: RequestInit): Promise<T> {

@@ -155,3 +155,17 @@ Dockerized (GHCR) and versioned independently via `nx release` (`release.project
 `nx.json`) — this is its first release; the version starts at `0.1.0` rather than continuing the
 source repo's own version history (that history wasn't preserved either, per the migration
 decision above).
+
+- **Deleting a `Copy` orphans its `loan_requests.copy_id` history.** SQLite FK enforcement is off
+  (no `PRAGMA foreign_keys=ON`), and that column has no `ON DELETE` action in the migration
+  (`internal/db/migrations/000001_init.up.sql`), so `deleteCopy` (`internal/handlers/copies.go`)
+  hard-deletes a copy while its past loan requests keep pointing at a now-missing ID. Considered
+  low-stakes and left as-is: unlike the equivalent user-deletion gap (fixed — see `deleteUser`'s
+  owned-copies/active-loans guard in `internal/handlers/admin.go`), an orphaned loan record is
+  inert history, not an active-state problem, and GORM's `Preload` degrades to a zero-value `Copy`
+  rather than erroring, so nothing currently breaks in practice. If this needs closing later, scope
+  it to an `ON DELETE SET NULL`/`CASCADE` migration on that one FK — not a blanket
+  `PRAGMA foreign_keys=ON` in `internal/db/db.go` (would also start enforcing every other
+  no-`ON DELETE` FK in the schema, breaking `deleteCopy` outright instead of just leaving stale
+  rows) and not a blocking guard on `deleteCopy` (would make any previously-borrowed copy nearly
+  impossible to remove).

@@ -128,7 +128,7 @@ func main() {
 	copyH := handlers.NewCopyHandler(copyRepo, userRepo, notifRepo, waitlistRepo, adminRepo, bookRepo, wishlistRepo, coversDir)
 	loanH := handlers.NewLoanRequestHandler(copyRepo, loanRepo, adminRepo, userRepo, workflow)
 	notifH := handlers.NewNotificationHandler(notifRepo)
-	adminH := handlers.NewAdminHandler(adminRepo, cfg.GoogleBooksAPIKey)
+	adminH := handlers.NewAdminHandler(adminRepo, copyRepo, loanRepo, cfg.GoogleBooksAPIKey)
 	jobsH := handlers.NewJobsHandler(scheduler)
 	backupH := handlers.NewBackupHandler(backupSvc)
 	waitlistH := handlers.NewWaitlistHandler(copyRepo, waitlistRepo)

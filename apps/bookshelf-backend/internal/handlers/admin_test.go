@@ -11,8 +11,15 @@ import (
 )
 
 func newAdminHandler() (*AdminHandler, *repotest.AdminRepository) {
+	h, admin, _, _ := newAdminHandlerWithCopiesAndLoans()
+	return h, admin
+}
+
+func newAdminHandlerWithCopiesAndLoans() (*AdminHandler, *repotest.AdminRepository, *repotest.CopyRepository, *repotest.LoanRequestRepository) {
 	admin := repotest.NewAdminRepository()
-	return NewAdminHandler(admin, ""), admin
+	copies := repotest.NewCopyRepository()
+	loans := repotest.NewLoanRequestRepository(copies, repotest.NewNotificationRepository(), repotest.NewUserRepository())
+	return NewAdminHandler(admin, copies, loans, ""), admin, copies, loans
 }
 
 func TestAdminHandler_RequiresAdmin(t *testing.T) {
@@ -201,6 +208,35 @@ func TestDeleteUser(t *testing.T) {
 		require.NoError(t, err)
 		_, findErr := admin.FindUserByID(2)
 		assert.Error(t, findErr)
+	})
+
+	t.Run("cannot delete a user who still owns copies", func(t *testing.T) {
+		h, admin, copies, _ := newAdminHandlerWithCopiesAndLoans()
+		require.NoError(t, admin.SaveUser(&models.User{ID: 1, Role: "admin"}))
+		require.NoError(t, admin.SaveUser(&models.User{ID: 2, Role: "user"}))
+		require.NoError(t, copies.Create(&models.Copy{BookID: 1, OwnerID: 2}))
+
+		_, err := h.deleteUser(fakeAuthedCtx(t, 1, "admin"), &adminUserIDInput{ID: 2})
+
+		require.Error(t, err)
+		assertStatus(t, err, 409)
+		_, findErr := admin.FindUserByID(2)
+		require.NoError(t, findErr)
+	})
+
+	t.Run("cannot delete a user with an active loan request", func(t *testing.T) {
+		h, admin, copies, loans := newAdminHandlerWithCopiesAndLoans()
+		require.NoError(t, admin.SaveUser(&models.User{ID: 1, Role: "admin"}))
+		require.NoError(t, admin.SaveUser(&models.User{ID: 2, Role: "user"}))
+		require.NoError(t, copies.Create(&models.Copy{BookID: 1, OwnerID: 1}))
+		require.NoError(t, loans.Create(&models.LoanRequest{CopyID: 1, BorrowerID: 2, Status: "accepted"}))
+
+		_, err := h.deleteUser(fakeAuthedCtx(t, 1, "admin"), &adminUserIDInput{ID: 2})
+
+		require.Error(t, err)
+		assertStatus(t, err, 409)
+		_, findErr := admin.FindUserByID(2)
+		require.NoError(t, findErr)
 	})
 }
 
