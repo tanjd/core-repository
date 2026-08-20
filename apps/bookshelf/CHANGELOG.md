@@ -1,3 +1,13 @@
+## 0.11.0 (2026-08-20)
+
+### 🚀 Features
+
+- **bookshelf,bookshelf-backend,bookshelf-e2e:** require phone at registration when community demands it ([#57](https://github.com/tanjd/core-repository/pull/57))
+
+### ❤️ Thank You
+
+- Jeddy Tan @tanjd
+
 ## 0.10.0 (2026-08-20)
 
 ### 🚀 Features
