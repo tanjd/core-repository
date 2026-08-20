@@ -1,3 +1,13 @@
+## 0.11.0 (2026-08-20)
+
+### 🚀 Features
+
+- **bookshelf,bookshelf-backend:** catalog UX polish + My Books search ([#59](https://github.com/tanjd/core-repository/pull/59))
+
+### ❤️ Thank You
+
+- Jeddy Tan @tanjd
+
 ## 0.10.0 (2026-08-20)
 
 ### 🚀 Features
