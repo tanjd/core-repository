@@ -226,7 +226,7 @@ func (h *BookHandler) createBook(ctx context.Context, input *createBookInput) (*
 		return nil, huma.Error401Unauthorized("authentication required")
 	}
 
-	if existing, err := h.findExistingBook(input.Body.OLKey, input.Body.GoogleBooksID, input.Body.ISBN); err == nil {
+	if existing, err := findExistingBook(h.books, input.Body.OLKey, input.Body.GoogleBooksID, input.Body.ISBN); err == nil {
 		return &createBookOutput{Body: *existing}, nil
 	}
 
@@ -263,33 +263,34 @@ func (h *BookHandler) createBook(ctx context.Context, input *createBookInput) (*
 	return &createBookOutput{Body: book}, nil
 }
 
-// findExistingBook implements createBook's upsert precedence. A strong
-// external key (OL key or Google Books ID) is trusted first and, when
-// present, an ISBN match is never even consulted — ISBN alone can be shared
-// across distinct editions/omnibuses, so unconditionally matching on it
-// risks merging books that a strong key would have kept separate. ISBN is
-// used only as a fallback when the request carries neither strong key —
-// exactly the case metadata search's BookBrainz source hits (it never sets
-// OLKey/GoogleBooksID) and the case a raw scanned/manually-entered ISBN
-// hits. This is a deliberate, narrower-scoped divergence from
-// WishlistWorkflow.OnBookCreated's stricter OLKey/GoogleBooksID-only
-// matching (see apps/bookshelf-backend/CLAUDE.md) — that auto-match
-// silently notifies a requester their book arrived, a much higher-stakes
-// mistake than this dedup only affecting whether a second Copy attaches to
-// an existing Book.
-func (h *BookHandler) findExistingBook(olKey, googleBooksID, isbn string) (*models.Book, error) {
+// findExistingBook implements createBook's upsert precedence — also reused
+// by CopyHandler's book-import path (copies_import.go) so both entry points
+// dedup against the catalog identically. A strong external key (OL key or
+// Google Books ID) is trusted first and, when present, an ISBN match is
+// never even consulted — ISBN alone can be shared across distinct
+// editions/omnibuses, so unconditionally matching on it risks merging books
+// that a strong key would have kept separate. ISBN is used only as a
+// fallback when neither strong key is present — exactly the case metadata
+// search's BookBrainz source hits (it never sets OLKey/GoogleBooksID) and
+// the case a raw scanned/manually-entered ISBN hits. This is a deliberate,
+// narrower-scoped divergence from WishlistWorkflow.OnBookCreated's stricter
+// OLKey/GoogleBooksID-only matching (see apps/bookshelf-backend/CLAUDE.md) —
+// that auto-match silently notifies a requester their book arrived, a much
+// higher-stakes mistake than this dedup only affecting whether a second Copy
+// attaches to an existing Book.
+func findExistingBook(books repository.BookRepository, olKey, googleBooksID, isbn string) (*models.Book, error) {
 	if olKey != "" {
-		if b, err := h.books.FindByOLKey(olKey); err == nil {
+		if b, err := books.FindByOLKey(olKey); err == nil {
 			return b, nil
 		}
 	}
 	if googleBooksID != "" {
-		if b, err := h.books.FindByGoogleBooksID(googleBooksID); err == nil {
+		if b, err := books.FindByGoogleBooksID(googleBooksID); err == nil {
 			return b, nil
 		}
 	}
 	if olKey == "" && googleBooksID == "" && isbn != "" {
-		if b, err := h.books.FindByISBN(isbn); err == nil {
+		if b, err := books.FindByISBN(isbn); err == nil {
 			return b, nil
 		}
 	}

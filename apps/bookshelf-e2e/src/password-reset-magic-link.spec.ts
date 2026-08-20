@@ -1,39 +1,5 @@
 import { test, expect } from "@playwright/test";
-import { login } from "./auth-helpers";
-
-// Registers a fresh user directly against the backend (bypassing the
-// registration UI wizard — same direct-POST pattern as auth.setup.ts) so
-// this spec's own forgot-password/reset-password round trip doesn't collide
-// with the shared e2e admin account other specs depend on.
-async function registerTestUser(
-  request: import("@playwright/test").APIRequestContext,
-  email: string,
-  password: string,
-) {
-  const sendOtp = await request.post(
-    "http://localhost:8000/auth/register/send-email-otp",
-    { data: { email } },
-  );
-  expect(sendOtp.ok()).toBeTruthy();
-  const { debug_code } = await sendOtp.json();
-
-  const verifyOtp = await request.post(
-    "http://localhost:8000/auth/register/verify-email-otp",
-    { data: { email, code: debug_code } },
-  );
-  expect(verifyOtp.ok()).toBeTruthy();
-  const { verification_token } = await verifyOtp.json();
-
-  const register = await request.post("http://localhost:8000/auth/register", {
-    data: {
-      name: "Magic Link Tester",
-      email,
-      password,
-      email_verification_token: verification_token,
-    },
-  });
-  expect(register.ok()).toBeTruthy();
-}
+import { login, registerTestUser } from "./auth-helpers";
 
 test("password reset via magic link requires no code entry", async ({
   page,
@@ -43,7 +9,7 @@ test("password reset via magic link requires no code entry", async ({
   const originalPassword = "OriginalPassw0rd1";
   const newPassword = "ResetViaLinkPassw0rd9";
 
-  await registerTestUser(request, email, originalPassword);
+  await registerTestUser(request, email, originalPassword, "Magic Link Tester");
 
   // Request a reset and pull the magic link straight from the dev-only
   // debug field — no SMTP configured for this e2e run (see

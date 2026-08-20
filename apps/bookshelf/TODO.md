@@ -16,15 +16,9 @@ testing setup `apps/bookshelf-backend/docker-compose.example.yml` still document
 
 ## Next — before opening to real community members
 
-- **Dynamic phone requirement at registration** — when a community's
-  `verification_requires_phone` setting is on, the registration page should require and
-  enforce a verified phone number instead of always labeling it "(optional)" and letting
-  users skip it, only to hit the borrowing-requirements wall later. Full spec:
-  `docs/specs/bookshelf-dynamic-phone-requirement.md`.
 - **Feedback mechanism** — in-app "send feedback" form, writes to a table, emails the admin
   via the existing `EmailService`. No new infra.
 - **"Import settings"** - use yaml file to update settings
-- **"Export and import books"** - allow users to export and import the books they have
 
 ## Later — once there's real usage to react to
 

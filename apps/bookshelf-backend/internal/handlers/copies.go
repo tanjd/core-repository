@@ -15,6 +15,7 @@ import (
 	"github.com/tanjd/core-repository/apps/bookshelf-backend/internal/middleware"
 	"github.com/tanjd/core-repository/apps/bookshelf-backend/internal/models"
 	"github.com/tanjd/core-repository/apps/bookshelf-backend/internal/repository"
+	"github.com/tanjd/core-repository/apps/bookshelf-backend/internal/services"
 )
 
 // CopyHandler holds dependencies for copy routes.
@@ -27,6 +28,9 @@ type CopyHandler struct {
 	books     repository.BookRepository
 	wishlists repository.WishlistRequestRepository
 	coversDir string
+	// wishlistWorkflow is optional (nil-safe) — see importBooks — so
+	// existing tests that construct a CopyHandler without one keep working.
+	wishlistWorkflow *services.WishlistWorkflow
 }
 
 // NewCopyHandler creates a new CopyHandler.
@@ -39,10 +43,11 @@ func NewCopyHandler(
 	books repository.BookRepository,
 	wishlists repository.WishlistRequestRepository,
 	coversDir string,
+	wishlistWorkflow *services.WishlistWorkflow,
 ) *CopyHandler {
 	return &CopyHandler{
 		copies: copies, users: users, notifs: notifs, waitlists: waitlists, admin: admin,
-		books: books, wishlists: wishlists, coversDir: coversDir,
+		books: books, wishlists: wishlists, coversDir: coversDir, wishlistWorkflow: wishlistWorkflow,
 	}
 }
 
@@ -119,6 +124,17 @@ func (h *CopyHandler) RegisterRoutes(api huma.API) {
 	}, h.listMyOwnedBookIDs)
 
 	huma.Register(api, huma.Operation{
+		OperationID: "export-my-copies",
+		Method:      "GET",
+		Path:        "/copies/mine/export",
+		Tags:        []string{"copies"},
+		Summary:     "Export the authenticated user's owned copies as JSON, YAML, or CSV",
+		Security:    []map[string][]string{{"bearer": {}}},
+	}, h.exportMyCopies)
+
+	h.registerImportRoutes(api)
+
+	huma.Register(api, huma.Operation{
 		OperationID:   "create-copy",
 		Method:        "POST",
 		Path:          "/copies",
@@ -191,16 +207,12 @@ func (h *CopyHandler) createCopy(ctx context.Context, input *createCopyInput) (*
 		return nil, huma.Error401Unauthorized("authentication required")
 	}
 
-	// Enforce max_copies_per_user (0 = unlimited).
-	if maxStr, err := h.admin.GetSetting("max_copies_per_user"); err == nil && maxStr != "" && maxStr != "0" {
-		var maxCopies int64
-		if _, scanErr := fmt.Sscanf(maxStr, "%d", &maxCopies); scanErr == nil && maxCopies > 0 {
-			count, countErr := h.copies.CountByOwnerID(ownerID)
-			if countErr == nil && count >= maxCopies {
-				return nil, huma.Error422UnprocessableEntity(
-					fmt.Sprintf("you have reached the maximum of %d shared copy/copies", maxCopies),
-				)
-			}
+	if maxCopies := h.maxCopiesPerUser(); maxCopies > 0 {
+		count, countErr := h.copies.CountByOwnerID(ownerID)
+		if countErr == nil && count >= maxCopies {
+			return nil, huma.Error422UnprocessableEntity(
+				fmt.Sprintf("you have reached the maximum of %d shared copy/copies", maxCopies),
+			)
 		}
 	}
 
@@ -274,6 +286,22 @@ func (h *CopyHandler) updateCopy(ctx context.Context, input *updateCopyInput) (*
 		return nil, huma.Error500InternalServerError("could not reload copy")
 	}
 	return &updateCopyOutput{Body: *loaded}, nil
+}
+
+// maxCopiesPerUser returns the configured max_copies_per_user admin
+// setting, or 0 if unset/invalid (meaning unlimited). Shared by createCopy
+// and the bulk import path (copies_import.go) so both enforce the same
+// limit the same way.
+func (h *CopyHandler) maxCopiesPerUser() int64 {
+	maxStr, err := h.admin.GetSetting("max_copies_per_user")
+	if err != nil || maxStr == "" || maxStr == "0" {
+		return 0
+	}
+	var maxCopies int64
+	if _, scanErr := fmt.Sscanf(maxStr, "%d", &maxCopies); scanErr != nil || maxCopies <= 0 {
+		return 0
+	}
+	return maxCopies
 }
 
 // applyCopyStatusUpdate validates and applies a status change, rejecting
