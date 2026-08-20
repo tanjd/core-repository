@@ -108,3 +108,31 @@ func TestWishlistRequestRepository_FindOpenMatch(t *testing.T) {
 		assert.Nil(t, match)
 	})
 }
+
+func TestWishlistRequestRepository_ClearFulfilledBookID(t *testing.T) {
+	db := openTestDB(t)
+	requester := models.User{Name: "Requester", Email: "req4@example.com"}
+	require.NoError(t, db.Create(&requester).Error)
+	requests := NewWishlistRequestRepository(db)
+
+	book := models.Book{Title: "T1", Author: "A"}
+	require.NoError(t, db.Create(&book).Error)
+	otherBook := models.Book{Title: "T2", Author: "A"}
+	require.NoError(t, db.Create(&otherBook).Error)
+
+	linked := models.WishlistRequest{RequesterID: requester.ID, Title: "Linked", Author: "A", Status: "fulfilled", FulfilledBookID: &book.ID}
+	require.NoError(t, requests.Create(&linked))
+	linkedOther := models.WishlistRequest{RequesterID: requester.ID, Title: "Linked Other", Author: "A", Status: "fulfilled", FulfilledBookID: &otherBook.ID}
+	require.NoError(t, requests.Create(&linkedOther))
+
+	require.NoError(t, requests.ClearFulfilledBookID(book.ID))
+
+	got, err := requests.GetByID(linked.ID)
+	require.NoError(t, err)
+	assert.Nil(t, got.FulfilledBookID)
+
+	gotOther, err := requests.GetByID(linkedOther.ID)
+	require.NoError(t, err)
+	require.NotNil(t, gotOther.FulfilledBookID)
+	assert.Equal(t, otherBook.ID, *gotOther.FulfilledBookID)
+}

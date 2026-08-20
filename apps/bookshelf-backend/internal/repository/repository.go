@@ -64,10 +64,18 @@ type BookRepository interface {
 	GetByIDWithCopies(id uint) (*models.Book, error)
 	Create(book *models.Book) error
 	Save(book *models.Book) error
+	// Delete hard-deletes book — there is no soft-delete on Book (no
+	// DeletedAt field). Used to clean up an orphaned keyless book once its
+	// last Copy is removed — see CopyHandler.maybeDeleteOrphanedBook.
+	Delete(book *models.Book) error
 	CountAvailableCopies(bookID uint) (int64, error)
 	// CountAvailableCopiesBatch returns a map of bookID → available copy count
 	// for all requested book IDs in a single query.
 	CountAvailableCopiesBatch(bookIDs []uint) (map[uint]int64, error)
+	// CountCopies returns the total number of Copy rows for bookID, with no
+	// status filter (unlike CountAvailableCopies) — used to detect when a
+	// book has just gone copy-less.
+	CountCopies(bookID uint) (int64, error)
 }
 
 // CopyRepository handles persistence for Copy records.
@@ -214,4 +222,8 @@ type WishlistRequestRepository interface {
 	// can join an existing request instead of posting a duplicate. Returns
 	// (nil, nil) if no key is given or none match.
 	FindOpenMatch(isbn, olKey, googleBooksID string) (*models.WishlistRequest, error)
+	// ClearFulfilledBookID nulls FulfilledBookID on every request pointing at
+	// bookID — called before hard-deleting a Book so no row is left pointing
+	// at a deleted one.
+	ClearFulfilledBookID(bookID uint) error
 }
