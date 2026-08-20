@@ -1,4 +1,5 @@
 import { test, expect } from "@playwright/test";
+import { login } from "./auth-helpers";
 
 // Registers a fresh user directly against the backend (bypassing the
 // registration UI wizard — same direct-POST pattern as auth.setup.ts) so
@@ -70,8 +71,5 @@ test("password reset via magic link requires no code entry", async ({
   await expect(page).toHaveURL("/login");
 
   // The new password actually works — the old one no longer would.
-  await page.getByLabel("Email").fill(email);
-  await page.getByLabel("Password").fill(newPassword);
-  await page.getByRole("button", { name: "Sign in" }).click();
-  await expect(page).toHaveURL("/catalog");
+  await login(page, email, newPassword);
 });

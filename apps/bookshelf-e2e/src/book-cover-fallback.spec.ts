@@ -1,5 +1,6 @@
 import { test, expect } from "@playwright/test";
 import { E2E_ADMIN_EMAIL, E2E_ADMIN_PASSWORD } from "./test-users";
+import { login } from "./auth-helpers";
 
 // Covers the generated book-cover fallback (BookCover/BookCoverFallback in
 // apps/bookshelf/src/components/BookCover.tsx) end-to-end against the real
@@ -10,11 +11,7 @@ import { E2E_ADMIN_EMAIL, E2E_ADMIN_PASSWORD } from "./test-users";
 test("a book with no cover renders a generated cover fallback across the catalog", async ({
   page,
 }) => {
-  await page.goto("/login");
-  await page.getByLabel("Email").fill(E2E_ADMIN_EMAIL);
-  await page.getByLabel("Password").fill(E2E_ADMIN_PASSWORD);
-  await page.getByRole("button", { name: "Sign in" }).click();
-  await expect(page).toHaveURL("/catalog");
+  await login(page, E2E_ADMIN_EMAIL, E2E_ADMIN_PASSWORD);
 
   const token = await page.evaluate(() =>
     localStorage.getItem("bookshelf_token"),

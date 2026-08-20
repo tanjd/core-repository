@@ -91,10 +91,14 @@ one `auth.go` endpoint that issues a working account without an email-OTP round 
 tolerates a 403 ("setup already complete") so re-runs against a `reuseExistingServer` backend in
 local dev (where the DB isn't wiped) stay idempotent.
 
-Specs that need to be logged in should import those constants and log in through the UI (see
-`login.spec.ts`) rather than re-deriving credentials. There's no shared `storageState` yet — add
-one (save it from `auth.setup.ts`, load it via a project's `use.storageState`) once more than one
-spec needs an authenticated session; not worth it for a single spec.
+Specs that need to be logged in should import those constants and log in through the UI via
+`login()` (`src/auth-helpers.ts`) rather than re-deriving credentials or re-typing the
+goto/fill/click sequence. There's no shared `storageState` yet — add one (save it from
+`auth.setup.ts`, load it via a project's `use.storageState`) once a spec needs an authenticated
+session but isn't itself exercising the login UI (unlike `login.spec.ts` and the
+reset-then-login check in `password-reset-magic-link.spec.ts`, both of which need the real form);
+`book-cover-fallback.spec.ts` is the current candidate, but one spec isn't worth the added
+machinery yet.
 
 ## Coverage
 
