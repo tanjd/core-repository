@@ -406,6 +406,20 @@ func TestSetupStatus(t *testing.T) {
 	assert.False(t, out.Body.NeedsSetup)
 }
 
+func TestRegistrationRequirements(t *testing.T) {
+	h, _, admin := newAuthHandler()
+
+	out, err := h.registrationRequirements(context.Background(), &struct{}{})
+	require.NoError(t, err)
+	assert.False(t, out.Body.RequirePhone)
+
+	require.NoError(t, admin.UpsertSetting("verification_requires_phone", "true"))
+
+	out, err = h.registrationRequirements(context.Background(), &struct{}{})
+	require.NoError(t, err)
+	assert.True(t, out.Body.RequirePhone)
+}
+
 func TestChangePassword(t *testing.T) {
 	setup := func(t *testing.T) (*AuthHandler, *models.User) {
 		h, users, _ := newAuthHandler()
