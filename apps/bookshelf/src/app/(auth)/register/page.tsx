@@ -37,6 +37,14 @@ export default function RegisterPage() {
   const [phone, setPhone] = useState("");
   const [error, setError] = useState("");
 
+  // Whether this community requires a verified phone number at signup
+  // (admin-toggleable `verification_requires_phone` setting). Fails open to
+  // today's optional/skippable behavior — both while the check is in flight
+  // and if it errors out — since a broken settings fetch shouldn't block
+  // registration entirely.
+  const [requirePhone, setRequirePhone] = useState(false);
+  const [phoneRequirementLoaded, setPhoneRequirementLoaded] = useState(false);
+
   const [emailOtpCode, setEmailOtpCode] = useState("");
   const [emailDebugCode, setEmailDebugCode] = useState("");
   const [emailVerificationToken, setEmailVerificationToken] = useState("");
@@ -98,6 +106,14 @@ export default function RegisterPage() {
         );
       })
       .finally(() => setVerifyingLinkToken(false));
+  }, []);
+
+  useEffect(() => {
+    api
+      .registrationRequirements()
+      .then(({ require_phone }) => setRequirePhone(require_phone))
+      .catch(() => setRequirePhone(false))
+      .finally(() => setPhoneRequirementLoaded(true));
   }, []);
 
   // Shared by handleVerifyEmailSubmit (manual code entry) and
@@ -173,6 +189,10 @@ export default function RegisterPage() {
     }
     if (password !== confirmPassword) {
       setError("Passwords do not match");
+      return;
+    }
+    if (requirePhone && !phone.trim()) {
+      setError("This community requires a phone number to register");
       return;
     }
 
@@ -368,9 +388,11 @@ export default function RegisterPage() {
                 <div className="flex flex-col gap-1.5">
                   <label htmlFor="phone" className="text-sm font-medium">
                     Phone number{" "}
-                    <span className="text-muted-foreground font-normal">
-                      (optional)
-                    </span>
+                    {phoneRequirementLoaded && !requirePhone && (
+                      <span className="text-muted-foreground font-normal">
+                        (optional)
+                      </span>
+                    )}
                   </label>
                   <div className="flex items-center gap-2">
                     <span className="text-sm text-muted-foreground">+65</span>
@@ -378,11 +400,22 @@ export default function RegisterPage() {
                       id="phone"
                       type="tel"
                       autoComplete="tel-national"
+                      disabled={!phoneRequirementLoaded}
                       value={phone}
                       onChange={(e) => setPhone(e.target.value)}
-                      placeholder="9123 4567"
+                      placeholder={
+                        phoneRequirementLoaded
+                          ? "9123 4567"
+                          : "Checking requirements…"
+                      }
                     />
                   </div>
+                  {phoneRequirementLoaded && requirePhone && (
+                    <p className="text-sm text-muted-foreground">
+                      This community requires a verified phone number to borrow
+                      books.
+                    </p>
+                  )}
                 </div>
                 {error && <p className="text-sm text-destructive">{error}</p>}
                 <Button
@@ -535,17 +568,19 @@ export default function RegisterPage() {
                     : "Verify and create account"}
                 </Button>
                 <div className="flex justify-between text-sm">
+                  {!requirePhone && (
+                    <button
+                      type="button"
+                      className="text-muted-foreground hover:underline"
+                      disabled={submitting}
+                      onClick={handleSkipPhone}
+                    >
+                      Skip phone
+                    </button>
+                  )}
                   <button
                     type="button"
-                    className="text-muted-foreground hover:underline"
-                    disabled={submitting}
-                    onClick={handleSkipPhone}
-                  >
-                    Skip phone
-                  </button>
-                  <button
-                    type="button"
-                    className="text-primary hover:underline disabled:opacity-50"
+                    className="text-primary hover:underline disabled:opacity-50 ml-auto"
                     disabled={sendingPhoneOtp}
                     onClick={handleResendPhoneOTP}
                   >

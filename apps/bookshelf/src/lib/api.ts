@@ -273,6 +273,8 @@ async function request<T>(path: string, options?: RequestInit): Promise<T> {
 export const api = {
   // Auth
   setupStatus: () => request<{ needs_setup: boolean }>("/auth/setup-status"),
+  registrationRequirements: () =>
+    request<{ require_phone: boolean }>("/auth/registration-requirements"),
   setup: (data: { name: string; email: string; password: string }) =>
     request<AuthResponse>("/auth/setup", {
       method: "POST",

@@ -440,6 +440,12 @@ type setupStatusOutput struct {
 	}
 }
 
+type registrationRequirementsOutput struct {
+	Body struct {
+		RequirePhone bool `json:"require_phone" doc:"Whether a verified phone number is required to register in this community"`
+	}
+}
+
 type setupInput struct {
 	Body struct {
 		Name     string `json:"name" required:"true" minLength:"1" doc:"Admin display name"`
@@ -589,6 +595,14 @@ func (h *AuthHandler) RegisterRoutes(api huma.API) {
 		Tags:        []string{"auth"},
 		Summary:     "Check whether initial admin setup is required",
 	}, h.setupStatus)
+
+	huma.Register(api, huma.Operation{
+		OperationID: "registration-requirements",
+		Method:      "GET",
+		Path:        "/auth/registration-requirements",
+		Tags:        []string{"auth"},
+		Summary:     "Check which fields are required to register in this community",
+	}, h.registrationRequirements)
 
 	huma.Register(api, huma.Operation{
 		OperationID:   "setup",
@@ -1277,6 +1291,13 @@ func (h *AuthHandler) setupStatus(_ context.Context, _ *struct{}) (*setupStatusO
 	}
 	out := &setupStatusOutput{}
 	out.Body.NeedsSetup = !hasAdmin
+	return out, nil
+}
+
+func (h *AuthHandler) registrationRequirements(_ context.Context, _ *struct{}) (*registrationRequirementsOutput, error) {
+	val, _ := h.admin.GetSetting("verification_requires_phone")
+	out := &registrationRequirementsOutput{}
+	out.Body.RequirePhone = val == "true"
 	return out, nil
 }
 
