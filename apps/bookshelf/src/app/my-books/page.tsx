@@ -13,6 +13,7 @@ import {
   ArrowRightLeft,
   Download,
   Upload,
+  Search,
 } from "lucide-react";
 import { api, downloadMyCopiesExport } from "@/lib/api";
 import type {
@@ -119,6 +120,7 @@ export default function MyBooksPage() {
   );
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [search, setSearch] = useState("");
 
   // Edit dialog
   const [editCopy, setEditCopy] = useState<MyCopy | null>(null);
@@ -393,6 +395,15 @@ export default function MyBooksPage() {
   );
   const totalPending = Object.values(pendingCounts).reduce((n, c) => n + c, 0);
 
+  const query = search.trim().toLowerCase();
+  const filteredGroups = query
+    ? bookGroups.filter(
+        (g) =>
+          g.title.toLowerCase().includes(query) ||
+          g.author.toLowerCase().includes(query),
+      )
+    : bookGroups;
+
   if (loading) {
     return (
       <div className="flex flex-col gap-4">
@@ -453,6 +464,19 @@ export default function MyBooksPage() {
 
       {error && <p className="text-sm text-destructive">{error}</p>}
 
+      {totalCopies > 0 && (
+        <div className="relative max-w-xl">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground pointer-events-none" />
+          <Input
+            type="search"
+            placeholder="Search your books by title, author…"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            className="pl-9 h-10"
+          />
+        </div>
+      )}
+
       {totalCopies === 0 ? (
         <div className="flex flex-col items-center justify-center py-16 text-center gap-3">
           <p className="text-muted-foreground">
@@ -464,9 +488,13 @@ export default function MyBooksPage() {
             </Button>
           </Link>
         </div>
+      ) : filteredGroups.length === 0 ? (
+        <p className="text-sm text-muted-foreground py-8 text-center">
+          No books match &quot;{search.trim()}&quot;.
+        </p>
       ) : (
         <div className="flex flex-col gap-6">
-          {bookGroups.map((group) => (
+          {filteredGroups.map((group) => (
             <div
               key={group.bookId}
               className="rounded-xl border bg-card overflow-hidden"

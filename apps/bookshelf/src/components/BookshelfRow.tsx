@@ -17,7 +17,7 @@ function BookSpine({ book, ownedByMe }: { book: Book; ownedByMe: boolean }) {
       {/* Book cover — lifts on hover like a book pulled off a shelf */}
       <div className="relative aspect-[2/3] w-full rounded-t-sm overflow-hidden shadow-[2px_4px_8px_rgba(0,0,0,0.35)] group-hover:-translate-y-2 group-hover:shadow-[4px_8px_16px_rgba(0,0,0,0.4)] transition-all duration-200 ease-out">
         {ownedByMe && (
-          <Badge className="absolute top-1.5 left-1.5 z-10 shadow-sm text-[9px] px-1 py-0 h-4">
+          <Badge className="absolute top-1.5 left-1.5 z-10 shadow-sm text-[9px] px-1.5 py-0.5 leading-none">
             Yours
           </Badge>
         )}
@@ -42,7 +42,7 @@ function BookSpine({ book, ownedByMe }: { book: Book; ownedByMe: boolean }) {
         {typeof book.available_copies === "number" && (
           <Badge
             variant={book.available_copies > 0 ? "success" : "secondary"}
-            className="text-[9px] px-1 py-0 h-4 mt-auto self-start"
+            className="text-[9px] px-1.5 py-0.5 leading-none mt-auto self-start"
           >
             {book.available_copies > 0
               ? `${book.available_copies} avail.`
@@ -106,7 +106,7 @@ export function BookshelfRow({ limit = 16, ownedBookIds }: BookshelfRowProps) {
                   <BookSpineSkeleton key={i} />
                 ))
               : books.map((book) => (
-                  <div key={book.id} className="snap-start">
+                  <div key={book.id} className="snap-start flex">
                     <BookSpine
                       book={book}
                       ownedByMe={ownedBookIds.has(book.id)}

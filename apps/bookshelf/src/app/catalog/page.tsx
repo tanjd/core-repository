@@ -8,6 +8,9 @@ import {
   Plus,
   PlusCircle,
   ScanLine,
+  Heart,
+  X,
+  Loader2,
 } from "lucide-react";
 import { api } from "@/lib/api";
 import type { Book, PaginatedResult } from "@/lib/types";
@@ -15,6 +18,8 @@ import { BookCard } from "@/components/BookCard";
 import { BookshelfRow } from "@/components/BookshelfRow";
 import { Pagination } from "@/components/ui/Pagination";
 import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
   Select,
@@ -33,6 +38,12 @@ import {
 import { useOwnedBookIds } from "@/hooks/useOwnedBookIds";
 
 const PAGE_SIZE = 20;
+const SORT_LABELS: Record<string, string> = {
+  title: "Title A–Z",
+  author: "Author A–Z",
+  newest: "Newest First",
+  relevance: "Best Match",
+};
 
 export default function CatalogPage() {
   const ownedBookIds = useOwnedBookIds();
@@ -42,11 +53,22 @@ export default function CatalogPage() {
   const [availableOnly, setAvailableOnly] = useState(false);
   const [page, setPage] = useState(1);
   const [loading, setLoading] = useState(true);
+  const [fetching, setFetching] = useState(false);
   const [error, setError] = useState("");
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Tracks whether the user has explicitly picked a sort — once they have,
+  // typing/clearing a search no longer auto-switches it for them.
+  const sortTouchedRef = useRef(false);
 
-  async function fetchBooks(q: string, s: string, avail: boolean, p: number) {
-    setLoading(true);
+  async function fetchBooks(
+    q: string,
+    s: string,
+    avail: boolean,
+    p: number,
+    isInitial = false,
+  ) {
+    if (isInitial) setLoading(true);
+    else setFetching(true);
     setError("");
     try {
       const data = await api.getBooks({
@@ -60,7 +82,8 @@ export default function CatalogPage() {
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to load books");
     } finally {
-      setLoading(false);
+      if (isInitial) setLoading(false);
+      else setFetching(false);
     }
   }
 
@@ -69,11 +92,17 @@ export default function CatalogPage() {
   useEffect(() => {
     if (loadedRef.current) return;
     loadedRef.current = true;
-    fetchBooks("", "title", false, 1);
+    fetchBooks("", "title", false, 1, true);
   }, []);
 
-  // Debounced search — reset to page 1
+  // Debounced search/sort/filter — reset to page 1. Skips the mount pass
+  // (the effect above already fetched the initial page).
+  const mountedRef = useRef(false);
   useEffect(() => {
+    if (!mountedRef.current) {
+      mountedRef.current = true;
+      return;
+    }
     if (debounceRef.current) clearTimeout(debounceRef.current);
     debounceRef.current = setTimeout(() => {
       setPage(1);
@@ -84,6 +113,32 @@ export default function CatalogPage() {
     };
   }, [search, sort, availableOnly]);
 
+  function handleSearchChange(value: string) {
+    setSearch(value);
+    if (value.trim()) {
+      if (!sortTouchedRef.current && sort !== "relevance") {
+        setSort("relevance");
+      }
+    } else if (sort === "relevance") {
+      // "Best match" is meaningless without a query — fall back, and let
+      // the next search re-suggest it rather than sticking on a stale pick.
+      setSort("title");
+      sortTouchedRef.current = false;
+    }
+  }
+
+  function handleSortChange(value: string) {
+    sortTouchedRef.current = true;
+    setSort(value);
+  }
+
+  function clearFilters() {
+    sortTouchedRef.current = false;
+    setSearch("");
+    setSort("title");
+    setAvailableOnly(false);
+  }
+
   function handlePageChange(p: number) {
     setPage(p);
     fetchBooks(search, sort, availableOnly, p);
@@ -93,6 +148,7 @@ export default function CatalogPage() {
   const books = result?.items ?? [];
   const totalPages = result?.total_pages ?? 1;
   const total = result?.total ?? 0;
+  const hasActiveFilters = !!search.trim() || availableOnly || sort !== "title";
 
   return (
     <div className="flex flex-col gap-8">
@@ -109,20 +165,34 @@ export default function CatalogPage() {
       {/* Search + filters */}
       <div className="flex flex-col sm:flex-row gap-3 items-start sm:items-center">
         <div className="relative flex-1 max-w-xl">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground pointer-events-none" />
+          {fetching ? (
+            <Loader2 className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground pointer-events-none animate-spin" />
+          ) : (
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground pointer-events-none" />
+          )}
           <Input
             type="search"
             placeholder="Search by title, author…"
             value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            className="pl-9 h-10"
+            onChange={(e) => handleSearchChange(e.target.value)}
+            className="pl-9 h-10 pr-9"
           />
+          {search && (
+            <button
+              type="button"
+              aria-label="Clear search"
+              onClick={() => handleSearchChange("")}
+              className="absolute right-2 top-1/2 -translate-y-1/2 flex size-6 items-center justify-center rounded-full text-muted-foreground hover:bg-accent hover:text-foreground"
+            >
+              <X className="size-4" />
+            </button>
+          )}
         </div>
 
         <div className="flex items-center gap-3 flex-wrap">
           <div className="flex items-center gap-1.5">
             <SlidersHorizontal className="size-4 text-muted-foreground" />
-            <Select value={sort} onValueChange={setSort}>
+            <Select value={sort} onValueChange={handleSortChange}>
               <SelectTrigger className="h-10 w-40">
                 <SelectValue />
               </SelectTrigger>
@@ -130,6 +200,9 @@ export default function CatalogPage() {
                 <SelectItem value="title">Title A–Z</SelectItem>
                 <SelectItem value="author">Author A–Z</SelectItem>
                 <SelectItem value="newest">Newest First</SelectItem>
+                {search.trim() && (
+                  <SelectItem value="relevance">Best Match</SelectItem>
+                )}
               </SelectContent>
             </Select>
           </div>
@@ -150,6 +223,59 @@ export default function CatalogPage() {
         </div>
       </div>
 
+      {/* Active filter chips — only meaningful once results have loaded at
+          least once; keeps the applied search/sort/availability state
+          legible after the filter row above scrolls out of view. */}
+      {hasActiveFilters && !loading && (
+        <div className="flex items-center gap-2 flex-wrap -mt-4">
+          {search.trim() && (
+            <Badge variant="secondary" className="gap-1 pr-1">
+              &ldquo;{search.trim()}&rdquo;
+              <button
+                type="button"
+                aria-label="Clear search"
+                onClick={() => handleSearchChange("")}
+                className="rounded-full hover:bg-background/60 p-0.5"
+              >
+                <X className="size-3" />
+              </button>
+            </Badge>
+          )}
+          {availableOnly && (
+            <Badge variant="secondary" className="gap-1 pr-1">
+              Available only
+              <button
+                type="button"
+                aria-label="Remove available-only filter"
+                onClick={() => setAvailableOnly(false)}
+                className="rounded-full hover:bg-background/60 p-0.5"
+              >
+                <X className="size-3" />
+              </button>
+            </Badge>
+          )}
+          {sort !== "title" && (
+            <Badge variant="secondary" className="gap-1 pr-1">
+              Sort: {SORT_LABELS[sort] ?? sort}
+              <button
+                type="button"
+                aria-label="Reset sort"
+                onClick={() => handleSortChange("title")}
+                className="rounded-full hover:bg-background/60 p-0.5"
+              >
+                <X className="size-3" />
+              </button>
+            </Badge>
+          )}
+          <button
+            onClick={clearFilters}
+            className="text-xs text-muted-foreground hover:text-foreground hover:underline ml-1"
+          >
+            Clear all
+          </button>
+        </div>
+      )}
+
       {error && <p className="text-sm text-destructive">{error}</p>}
 
       {loading ? (
@@ -163,41 +289,40 @@ export default function CatalogPage() {
           ))}
         </div>
       ) : books.length === 0 ? (
-        <div className="flex flex-col items-center justify-center py-16 text-center gap-2">
+        <div className="flex flex-col items-center justify-center py-16 text-center gap-4">
           <p className="text-muted-foreground">No books found.</p>
-          {(search || availableOnly) && (
-            <button
-              onClick={() => {
-                setSearch("");
-                setAvailableOnly(false);
-              }}
-              className="text-sm text-primary hover:underline"
-            >
-              Clear filters
-            </button>
-          )}
-          {search.trim() && (
-            <Link
-              href={`/share?q=${encodeURIComponent(search.trim())}`}
-              className="text-sm text-primary hover:underline"
-            >
-              Own a copy? Share &ldquo;{search.trim()}&rdquo; →
-            </Link>
-          )}
-          {search.trim() && (
-            <Link
-              href={`/wishlist?q=${encodeURIComponent(search.trim())}`}
-              className="text-sm text-primary hover:underline"
-            >
-              Don&apos;t have it? Add to wishlist →
-            </Link>
-          )}
+          <div className="flex flex-wrap items-center justify-center gap-2">
+            {hasActiveFilters && (
+              <Button variant="outline" size="sm" onClick={clearFilters}>
+                Clear filters
+              </Button>
+            )}
+            {search.trim() && (
+              <Link href={`/share?q=${encodeURIComponent(search.trim())}`}>
+                <Button variant="outline" size="sm">
+                  Own a copy? Share &ldquo;{search.trim()}&rdquo;
+                </Button>
+              </Link>
+            )}
+            {search.trim() && (
+              <Link href={`/wishlist?q=${encodeURIComponent(search.trim())}`}>
+                <Button variant="outline" size="sm">
+                  <Heart className="size-3.5" />
+                  Add to wishlist
+                </Button>
+              </Link>
+            )}
+          </div>
         </div>
       ) : (
         <>
-          <div>
+          <div
+            className={
+              fetching ? "opacity-60 transition-opacity" : "transition-opacity"
+            }
+          >
             {total > 0 && (
-              <p className="text-xs text-muted-foreground mb-4">
+              <p className="text-sm text-muted-foreground mb-4">
                 {total} {total === 1 ? "book" : "books"} found
               </p>
             )}
@@ -259,7 +384,7 @@ export default function CatalogPage() {
             href="/wishlist"
             className="flex items-center gap-2 rounded-md px-3 py-2 text-sm hover:bg-accent"
           >
-            <Search className="size-4" />
+            <Heart className="size-4" />
             Wishlist
           </Link>
         </PopoverContent>

@@ -40,7 +40,7 @@ type bookResponse struct {
 type listBooksInput struct {
 	Q             string `query:"q" doc:"Search by title or author"`
 	OLKey         string `query:"ol_key" doc:"Filter by exact Open Library key (returns single book)"`
-	Sort          string `query:"sort" doc:"Sort order: title (default), author, newest"`
+	Sort          string `query:"sort" doc:"Sort order: title (default), author, newest, relevance (best-match, only meaningful with q)"`
 	AvailableOnly bool   `query:"available_only" doc:"Only return books with at least one available copy"`
 	Page          int    `query:"page" minimum:"1" doc:"Page number (default 1)"`
 	PageSize      int    `query:"page_size" minimum:"1" maximum:"100" doc:"Items per page (default 20)"`
