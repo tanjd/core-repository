@@ -4,6 +4,9 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"os"
+	"path/filepath"
+	"strings"
 
 	"github.com/danielgtaylor/huma/v2"
 
@@ -21,6 +24,9 @@ type CopyHandler struct {
 	notifs    repository.NotificationRepository
 	waitlists repository.WaitlistRepository
 	admin     repository.AdminRepository
+	books     repository.BookRepository
+	wishlists repository.WishlistRequestRepository
+	coversDir string
 }
 
 // NewCopyHandler creates a new CopyHandler.
@@ -30,8 +36,14 @@ func NewCopyHandler(
 	notifs repository.NotificationRepository,
 	waitlists repository.WaitlistRepository,
 	admin repository.AdminRepository,
+	books repository.BookRepository,
+	wishlists repository.WishlistRequestRepository,
+	coversDir string,
 ) *CopyHandler {
-	return &CopyHandler{copies: copies, users: users, notifs: notifs, waitlists: waitlists, admin: admin}
+	return &CopyHandler{
+		copies: copies, users: users, notifs: notifs, waitlists: waitlists, admin: admin,
+		books: books, wishlists: wishlists, coversDir: coversDir,
+	}
 }
 
 // --- Input / Output types ---
@@ -313,7 +325,63 @@ func (h *CopyHandler) deleteCopy(ctx context.Context, input *deleteCopyInput) (*
 		return nil, huma.Error500InternalServerError("could not delete copy")
 	}
 
+	remaining, err := h.books.CountCopies(bookCopy.BookID)
+	if err != nil {
+		zerolog.Ctx(ctx).Warn().Err(err).Uint("book_id", bookCopy.BookID).Msg("could not count remaining copies after delete")
+	} else if remaining == 0 {
+		h.maybeDeleteOrphanedBook(ctx, bookCopy.BookID)
+	}
+
 	return nil, nil
+}
+
+// maybeDeleteOrphanedBook hard-deletes bookID's Book if it's keyless
+// (carries no OLKey/GoogleBooksID/ISBN) — such a book can never be matched
+// again by BookHandler.findExistingBook's dedup, so once its last Copy is
+// gone it's permanent, invisible clutter. Books with an external key are
+// left alone: a future re-share can still find and reuse them. Called after
+// the copy is already deleted — every failure here is logged and swallowed,
+// never surfaced as a copy-deletion error.
+func (h *CopyHandler) maybeDeleteOrphanedBook(ctx context.Context, bookID uint) {
+	log := zerolog.Ctx(ctx).With().Uint("book_id", bookID).Logger()
+
+	book, err := h.books.GetByIDWithCopies(bookID)
+	if err != nil {
+		log.Warn().Err(err).Msg("could not fetch book for orphan cleanup")
+		return
+	}
+	if book.OLKey != "" || book.GoogleBooksID != "" || book.ISBN != "" {
+		return
+	}
+
+	if h.wishlists != nil {
+		if err := h.wishlists.ClearFulfilledBookID(bookID); err != nil {
+			log.Warn().Err(err).Msg("could not clear wishlist fulfilled_book_id before orphan delete")
+		}
+	}
+
+	h.deleteCachedCover(ctx, book.CoverURL)
+
+	if err := h.books.Delete(book); err != nil {
+		log.Warn().Err(err).Msg("could not delete orphaned keyless book")
+		return
+	}
+	log.Info().Msg("deleted orphaned keyless book")
+}
+
+// deleteCachedCover best-effort removes coverURL's locally-cached file, if
+// it points inside h.coversDir (i.e. was downloaded via downloadCover —
+// see internal/handlers/covers.go). A bare external URL, or any removal
+// failure, is silently ignored.
+func (h *CopyHandler) deleteCachedCover(ctx context.Context, coverURL string) {
+	const localPrefix = "/api/covers/"
+	if h.coversDir == "" || !strings.HasPrefix(coverURL, localPrefix) {
+		return
+	}
+	filename := strings.TrimPrefix(coverURL, localPrefix)
+	if err := os.Remove(filepath.Join(h.coversDir, filename)); err != nil && !os.IsNotExist(err) {
+		zerolog.Ctx(ctx).Warn().Err(err).Str("filename", filename).Msg("could not delete cached cover for orphaned book")
+	}
 }
 
 func (h *CopyHandler) transferCopy(ctx context.Context, input *transferCopyInput) (*transferCopyOutput, error) {

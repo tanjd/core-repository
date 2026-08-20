@@ -131,6 +131,20 @@ func (r *BookRepository) Save(book *models.Book) error {
 	return r.db.Save(book).Error
 }
 
+// Delete hard-deletes book — Book has no DeletedAt field, so this is a real DELETE.
+func (r *BookRepository) Delete(book *models.Book) error {
+	return r.db.Delete(book).Error
+}
+
+// CountCopies returns the total number of Copy rows for bookID, with no status filter.
+func (r *BookRepository) CountCopies(bookID uint) (int64, error) {
+	var count int64
+	err := r.db.Model(&models.Copy{}).
+		Where("book_id = ?", bookID).
+		Count(&count).Error
+	return count, err
+}
+
 func (r *BookRepository) CountAvailableCopies(bookID uint) (int64, error) {
 	var count int64
 	err := r.db.Model(&models.Copy{}).

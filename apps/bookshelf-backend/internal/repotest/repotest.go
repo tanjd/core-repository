@@ -965,11 +965,19 @@ type BookRepository struct {
 	mu     sync.Mutex
 	nextID uint
 	byID   map[uint]*models.Book
+	copies *CopyRepository
 }
 
 // NewBookRepository creates an empty fake BookRepository.
 func NewBookRepository() *BookRepository {
 	return &BookRepository{byID: map[uint]*models.Book{}}
+}
+
+// SetCopies wires copies in so CountCopies can answer from its data — a test
+// helper, not part of the repository.BookRepository interface. Tests that
+// don't call this get a CountCopies that always returns 0.
+func (r *BookRepository) SetCopies(copies *CopyRepository) {
+	r.copies = copies
 }
 
 // Create inserts book, assigning it a new ID.
@@ -1076,6 +1084,31 @@ func (r *BookRepository) CountAvailableCopies(_ uint) (int64, error) { return 0,
 // CountAvailableCopiesBatch returns an empty map — not exercised by any test using this fake yet.
 func (r *BookRepository) CountAvailableCopiesBatch(_ []uint) (map[uint]int64, error) {
 	return map[uint]int64{}, nil
+}
+
+// Delete removes book from the store.
+func (r *BookRepository) Delete(book *models.Book) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	delete(r.byID, book.ID)
+	return nil
+}
+
+// CountCopies returns the number of copies stored against bookID, delegating
+// to copies since the fake BookRepository holds no Copy rows of its own.
+func (r *BookRepository) CountCopies(bookID uint) (int64, error) {
+	if r.copies == nil {
+		return 0, nil
+	}
+	r.copies.mu.Lock()
+	defer r.copies.mu.Unlock()
+	var count int64
+	for _, c := range r.copies.byID {
+		if c.BookID == bookID {
+			count++
+		}
+	}
+	return count, nil
 }
 
 // WishlistRequestRepository is an in-memory fake of
@@ -1228,6 +1261,18 @@ func (r *WishlistRequestRepository) FindOpenMatch(isbn, olKey, googleBooksID str
 	}
 	cp := *match
 	return &cp, nil
+}
+
+// ClearFulfilledBookID nulls FulfilledBookID on every stored request pointing at bookID.
+func (r *WishlistRequestRepository) ClearFulfilledBookID(bookID uint) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	for _, req := range r.byID {
+		if req.FulfilledBookID != nil && *req.FulfilledBookID == bookID {
+			req.FulfilledBookID = nil
+		}
+	}
+	return nil
 }
 
 // paginationBounds returns the [start, end) slice bounds for page/pageSize

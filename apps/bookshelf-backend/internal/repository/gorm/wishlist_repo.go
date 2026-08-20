@@ -120,3 +120,11 @@ func (r *WishlistRequestRepository) FindOpenMatch(isbn, olKey, googleBooksID str
 	}
 	return &req, nil
 }
+
+// ClearFulfilledBookID nulls FulfilledBookID on every request pointing at
+// bookID, so deleting that Book leaves no dangling reference.
+func (r *WishlistRequestRepository) ClearFulfilledBookID(bookID uint) error {
+	return r.db.Model(&models.WishlistRequest{}).
+		Where("fulfilled_book_id = ?", bookID).
+		Update("fulfilled_book_id", nil).Error
+}

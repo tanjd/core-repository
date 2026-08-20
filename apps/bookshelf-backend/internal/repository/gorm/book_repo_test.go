@@ -63,3 +63,49 @@ func TestBookRepository_ListPaginated_ExcludesBooksWithNoCopies(t *testing.T) {
 	assert.NotContains(t, titles, "No Copies Left")
 	assert.EqualValues(t, 1, result.Total)
 }
+
+func TestBookRepository_Delete(t *testing.T) {
+	db := openTestDB(t)
+	books := NewBookRepository(db)
+
+	book := models.Book{Title: "T1", Author: "A"}
+	require.NoError(t, books.Create(&book))
+
+	require.NoError(t, books.Delete(&book))
+
+	_, err := books.GetByIDWithCopies(book.ID)
+	assert.ErrorIs(t, err, repository.ErrNotFound)
+}
+
+func TestBookRepository_CountCopies(t *testing.T) {
+	db := openTestDB(t)
+	books := NewBookRepository(db)
+	copies := NewCopyRepository(db)
+
+	owner := models.User{Name: "Owner", Email: "owner@example.com"}
+	require.NoError(t, db.Create(&owner).Error)
+
+	zero := models.Book{Title: "Zero", Author: "A"}
+	require.NoError(t, books.Create(&zero))
+
+	one := models.Book{Title: "One", Author: "A"}
+	require.NoError(t, books.Create(&one))
+	require.NoError(t, copies.Create(&models.Copy{BookID: one.ID, OwnerID: owner.ID, Status: "available"}))
+
+	two := models.Book{Title: "Two", Author: "A"}
+	require.NoError(t, books.Create(&two))
+	require.NoError(t, copies.Create(&models.Copy{BookID: two.ID, OwnerID: owner.ID, Status: "available"}))
+	require.NoError(t, copies.Create(&models.Copy{BookID: two.ID, OwnerID: owner.ID, Status: "loaned"}))
+
+	count, err := books.CountCopies(zero.ID)
+	require.NoError(t, err)
+	assert.EqualValues(t, 0, count)
+
+	count, err = books.CountCopies(one.ID)
+	require.NoError(t, err)
+	assert.EqualValues(t, 1, count)
+
+	count, err = books.CountCopies(two.ID)
+	require.NoError(t, err)
+	assert.EqualValues(t, 2, count)
+}
