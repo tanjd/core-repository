@@ -12,9 +12,15 @@ import {
   BookOpen,
   ArrowRightLeft,
   Download,
+  Upload,
 } from "lucide-react";
 import { api, downloadMyCopiesExport } from "@/lib/api";
-import type { MyCopiesExportFormat } from "@/lib/api";
+import type {
+  MyCopiesExportFormat,
+  ImportResult,
+  ImportRowAction,
+  ImportSummary,
+} from "@/lib/api";
 import type { Copy } from "@/lib/types";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -70,6 +76,38 @@ const statusVariant: Record<
   requested: "outline",
 };
 
+const importActionVariant: Record<
+  ImportRowAction,
+  "success" | "outline" | "secondary"
+> = {
+  create_book: "success",
+  match_existing_book: "outline",
+  skipped: "secondary",
+};
+
+const importActionLabel: Record<ImportRowAction, string> = {
+  create_book: "New book",
+  match_existing_book: "Matched",
+  skipped: "Skipped",
+};
+
+function importSummaryText(summary: ImportSummary, isResult: boolean): string {
+  const parts: string[] = [];
+  if (summary.books_created > 0) {
+    parts.push(
+      `${summary.books_created} new book${summary.books_created === 1 ? "" : "s"}`,
+    );
+  }
+  if (summary.books_matched > 0) {
+    parts.push(`${summary.books_matched} matched to your existing catalog`);
+  }
+  if (summary.skipped > 0) {
+    parts.push(`${summary.skipped} skipped`);
+  }
+  if (parts.length === 0) return "Nothing to import";
+  return `${isResult ? "Imported" : "Will import"}: ${parts.join(", ")}`;
+}
+
 export default function MyBooksPage() {
   const router = useRouter();
   const [bookGroups, setBookGroups] = useState<BookGroup[]>([]);
@@ -106,6 +144,15 @@ export default function MyBooksPage() {
   const [exportFormat, setExportFormat] =
     useState<MyCopiesExportFormat>("json");
   const [exportSubmitting, setExportSubmitting] = useState(false);
+
+  // Import dialog
+  const [importOpen, setImportOpen] = useState(false);
+  const [importFile, setImportFile] = useState<File | null>(null);
+  const [importPreview, setImportPreview] = useState<ImportResult | null>(null);
+  const [importResult, setImportResult] = useState<ImportResult | null>(null);
+  const [importBusy, setImportBusy] = useState(false);
+  const [importError, setImportError] = useState("");
+  const importInputRef = useRef<HTMLInputElement>(null);
 
   // Fetched separately, after the main copies list renders — per-copy
   // pending-request counts and active-loan details aren't returned by
@@ -255,6 +302,74 @@ export default function MyBooksPage() {
     }
   }
 
+  const MAX_IMPORT_FILE_BYTES = 2_000_000; // mirrors the backend's Content maxLength
+
+  function importFormatFromFilename(name: string): MyCopiesExportFormat | null {
+    const ext = name.split(".").pop()?.toLowerCase();
+    if (ext === "json") return "json";
+    if (ext === "yaml" || ext === "yml") return "yaml";
+    if (ext === "csv") return "csv";
+    return null;
+  }
+
+  function resetImportDialog() {
+    setImportFile(null);
+    setImportPreview(null);
+    setImportResult(null);
+    setImportError("");
+    if (importInputRef.current) importInputRef.current.value = "";
+  }
+
+  async function handleImportFileSelected(file: File) {
+    setImportError("");
+    setImportResult(null);
+    setImportPreview(null);
+    const format = importFormatFromFilename(file.name);
+    if (!format) {
+      setImportError("File must be .json, .yaml, .yml, or .csv");
+      return;
+    }
+    if (file.size > MAX_IMPORT_FILE_BYTES) {
+      setImportError("File is too large (max 2MB)");
+      return;
+    }
+    setImportFile(file);
+    setImportBusy(true);
+    try {
+      const content = await file.text();
+      const preview = await api.previewImportBooks(format, content);
+      setImportPreview(preview);
+    } catch (err) {
+      setImportError(err instanceof Error ? err.message : "Preview failed");
+    } finally {
+      setImportBusy(false);
+    }
+  }
+
+  async function handleImportConfirm() {
+    if (!importFile) return;
+    const format = importFormatFromFilename(importFile.name);
+    if (!format) return;
+    setImportBusy(true);
+    try {
+      const content = await importFile.text();
+      const result = await api.importBooks(format, content);
+      setImportResult(result);
+      setImportPreview(null);
+      const added = result.summary.books_created + result.summary.books_matched;
+      toast.success(
+        added > 0
+          ? `Imported ${added} book${added === 1 ? "" : "s"}`
+          : "Import finished — nothing new to add",
+      );
+      loadMyCopies();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Import failed");
+    } finally {
+      setImportBusy(false);
+    }
+  }
+
   async function handleTransfer() {
     if (!transferCopy || !transferEmail.trim()) return;
     setTransferSubmitting(true);
@@ -299,6 +414,16 @@ export default function MyBooksPage() {
           </p>
         </div>
         <div className="flex items-center gap-2">
+          <Button
+            variant="outline"
+            onClick={() => {
+              resetImportDialog();
+              setImportOpen(true);
+            }}
+          >
+            <Upload className="size-4" />
+            Import
+          </Button>
           <Button
             variant="outline"
             disabled={totalCopies === 0}
@@ -684,6 +809,122 @@ export default function MyBooksPage() {
               <Download className="size-4" />
               {exportSubmitting ? "Exporting…" : "Export"}
             </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Import dialog */}
+      <Dialog
+        open={importOpen}
+        onOpenChange={(open) => {
+          setImportOpen(open);
+          if (!open) resetImportDialog();
+        }}
+      >
+        <DialogContent className="sm:max-w-xl max-h-[85vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Import Books</DialogTitle>
+            <DialogDescription>
+              Upload a JSON, YAML, or CSV file exported from this or another
+              bookshelf instance. You&apos;ll see what will happen before
+              anything is added.
+            </DialogDescription>
+          </DialogHeader>
+
+          {!importPreview && !importResult && (
+            <div className="flex flex-col gap-2">
+              <label
+                htmlFor="import-file-input"
+                className="flex flex-col items-center justify-center gap-2 rounded-lg border-2 border-dashed p-8 text-center text-sm text-muted-foreground cursor-pointer hover:border-foreground/40 hover:bg-muted/40 transition-colors"
+              >
+                <Upload className="size-6" />
+                {importFile ? importFile.name : "Click to choose a file"}
+                <span className="text-xs">
+                  .json, .yaml, .yml, or .csv — max 2MB
+                </span>
+              </label>
+              <input
+                id="import-file-input"
+                ref={importInputRef}
+                type="file"
+                accept=".json,.yaml,.yml,.csv"
+                className="sr-only"
+                onChange={(e) => {
+                  const file = e.target.files?.[0];
+                  if (file) handleImportFileSelected(file);
+                }}
+              />
+              {importBusy && (
+                <p className="text-sm text-muted-foreground">Reading file…</p>
+              )}
+              {importError && (
+                <p className="text-sm text-destructive">{importError}</p>
+              )}
+            </div>
+          )}
+
+          {(importPreview || importResult) && (
+            <div className="flex flex-col gap-3">
+              <p className="text-sm font-medium">
+                {importSummaryText(
+                  (importPreview ?? importResult)!.summary,
+                  !!importResult,
+                )}
+              </p>
+              <div className="flex flex-col gap-1 max-h-64 overflow-y-auto rounded-md border divide-y">
+                {(importPreview ?? importResult)!.rows.map((row) => (
+                  <div
+                    key={row.row}
+                    className="flex items-center justify-between gap-2 px-3 py-2 text-sm"
+                  >
+                    <span className="truncate">
+                      {row.title || `Row ${row.row}`}
+                    </span>
+                    <div className="flex items-center gap-2 shrink-0">
+                      {row.action === "skipped" && row.reason && (
+                        <span className="text-xs text-muted-foreground">
+                          {row.reason}
+                        </span>
+                      )}
+                      <Badge variant={importActionVariant[row.action]}>
+                        {importActionLabel[row.action]}
+                      </Badge>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          <DialogFooter showCloseButton>
+            {importResult ? (
+              <Button onClick={() => setImportOpen(false)}>Done</Button>
+            ) : importPreview ? (
+              <>
+                <Button
+                  variant="outline"
+                  onClick={resetImportDialog}
+                  disabled={importBusy}
+                >
+                  Choose a different file
+                </Button>
+                <Button onClick={handleImportConfirm} disabled={importBusy}>
+                  <Upload className="size-4" />
+                  {importBusy
+                    ? "Importing…"
+                    : `Import ${
+                        importPreview.summary.books_created +
+                        importPreview.summary.books_matched
+                      } book${
+                        importPreview.summary.books_created +
+                          importPreview.summary.books_matched ===
+                        1
+                          ? ""
+                          : "s"
+                      }`}
+                </Button>
+              </>
+            ) : null}
           </DialogFooter>
         </DialogContent>
       </Dialog>

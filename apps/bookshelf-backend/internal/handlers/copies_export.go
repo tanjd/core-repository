@@ -21,6 +21,8 @@ type exportRow struct {
 	Title         string `json:"title" yaml:"title"`
 	Author        string `json:"author" yaml:"author"`
 	ISBN          string `json:"isbn" yaml:"isbn"`
+	OLKey         string `json:"ol_key" yaml:"ol_key"`
+	GoogleBooksID string `json:"google_books_id" yaml:"google_books_id"`
 	Publisher     string `json:"publisher" yaml:"publisher"`
 	PublishedDate string `json:"published_date" yaml:"published_date"`
 	PageCount     int    `json:"page_count" yaml:"page_count"`
@@ -32,15 +34,19 @@ type exportRow struct {
 
 // exportRowHeader/exportRowValues keep the CSV column order in sync with
 // exportRow's fields without relying on struct-tag reflection (encoding/csv
-// has no tag support of its own).
+// has no tag support of its own). ol_key/google_books_id ride along
+// specifically so an import can dedup against an existing catalog using the
+// same OLKey/GoogleBooksID-first precedence BookHandler.findExistingBook
+// already uses for manual "add a book" — ISBN alone can be shared across
+// distinct editions, so it's the weakest of the three signals.
 var exportRowHeader = []string{
-	"title", "author", "isbn", "publisher", "published_date",
-	"page_count", "language", "condition", "notes", "status",
+	"title", "author", "isbn", "ol_key", "google_books_id", "publisher",
+	"published_date", "page_count", "language", "condition", "notes", "status",
 }
 
 func (r exportRow) exportRowValues() []string {
 	return []string{
-		r.Title, r.Author, r.ISBN, r.Publisher, r.PublishedDate,
+		r.Title, r.Author, r.ISBN, r.OLKey, r.GoogleBooksID, r.Publisher, r.PublishedDate,
 		strconv.Itoa(r.PageCount), r.Language, r.Condition, r.Notes, r.Status,
 	}
 }
@@ -54,6 +60,8 @@ func buildExportRows(copies []models.Copy) []exportRow {
 			Title:         c.Book.Title,
 			Author:        c.Book.Author,
 			ISBN:          c.Book.ISBN,
+			OLKey:         c.Book.OLKey,
+			GoogleBooksID: c.Book.GoogleBooksID,
 			Publisher:     c.Book.Publisher,
 			PublishedDate: c.Book.PublishedDate,
 			PageCount:     c.Book.PageCount,

@@ -268,6 +268,27 @@ export async function downloadMyCopiesExport(
   );
 }
 
+export type ImportRowAction = "create_book" | "match_existing_book" | "skipped";
+
+export interface ImportRowResult {
+  row: number;
+  title: string;
+  action: ImportRowAction;
+  reason?: string;
+}
+
+export interface ImportSummary {
+  books_created: number;
+  books_matched: number;
+  copies_created: number;
+  skipped: number;
+}
+
+export interface ImportResult {
+  summary: ImportSummary;
+  rows: ImportRowResult[];
+}
+
 async function request<T>(path: string, options?: RequestInit): Promise<T> {
   const token = getToken();
   const headers: HeadersInit = {
@@ -470,6 +491,16 @@ export const api = {
     request<Copy>(`/copies/${id}/transfer`, {
       method: "POST",
       body: JSON.stringify({ email }),
+    }),
+  previewImportBooks: (format: MyCopiesExportFormat, content: string) =>
+    request<ImportResult>("/copies/mine/import/preview", {
+      method: "POST",
+      body: JSON.stringify({ format, content }),
+    }),
+  importBooks: (format: MyCopiesExportFormat, content: string) =>
+    request<ImportResult>("/copies/mine/import", {
+      method: "POST",
+      body: JSON.stringify({ format, content }),
     }),
 
   // Waitlist

@@ -21,7 +21,7 @@ func newCopyHandler(coversDir string) (*CopyHandler, *repotest.CopyRepository, *
 	books := repotest.NewBookRepository()
 	books.SetCopies(copies)
 	wishlists := repotest.NewWishlistRequestRepository()
-	return NewCopyHandler(copies, users, notifs, waitlists, admin, books, wishlists, coversDir), copies, books, wishlists
+	return NewCopyHandler(copies, users, notifs, waitlists, admin, books, wishlists, coversDir, nil), copies, books, wishlists
 }
 
 func TestDeleteCopy_OrphanedKeylessBookCleanup(t *testing.T) {
