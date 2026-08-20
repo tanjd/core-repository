@@ -43,7 +43,7 @@ func (w *RegistrationWorkflow) OnPendingApproval(ctx context.Context, user *mode
 	body := fmt.Sprintf(
 		"<p>A new registration is waiting for your approval.</p><p><strong>%s</strong> (%s) signed up and needs an admin to approve their account before they can sign in.</p>",
 		html.EscapeString(user.Name), html.EscapeString(user.Email),
-	)
+	) + w.email.Button("/admin/users", "Review pending users")
 
 	for _, admin := range admins {
 		n := models.Notification{

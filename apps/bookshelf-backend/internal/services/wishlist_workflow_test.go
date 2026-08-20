@@ -22,7 +22,7 @@ func newWishlistWorkflow() *wishlistWorkflowDeps {
 	requests := repotest.NewWishlistRequestRepository()
 	notifs := repotest.NewNotificationRepository()
 	users := repotest.NewUserRepository()
-	email := NewEmailService("", "", "", "", "", "", "")
+	email := NewEmailService("", "", "", "", "", "", "", "http://localhost:3000")
 	return &wishlistWorkflowDeps{
 		workflow: NewWishlistWorkflow(requests, notifs, users, email),
 		requests: requests, notifs: notifs, users: users,

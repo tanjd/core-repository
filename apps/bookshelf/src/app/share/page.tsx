@@ -3,7 +3,6 @@
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import Image from "next/image";
 import { toast } from "sonner";
 import { ArrowLeft, BookPlus, ScanLine } from "lucide-react";
 import { api } from "@/lib/api";
@@ -18,6 +17,7 @@ import {
   CardDescription,
   CardContent,
 } from "@/components/ui/card";
+import { BookCover } from "@/components/BookCover";
 import { MetadataSearchStep } from "./components/MetadataSearchStep";
 import { ConditionPicker, type Condition } from "./components/ConditionPicker";
 import { CopySettings } from "./components/CopySettings";
@@ -305,17 +305,14 @@ export default function SharePage() {
         {/* Book preview */}
         <Card>
           <CardHeader className="flex-row gap-4 items-start pb-3">
-            {selected.coverUrl && (
-              <div className="relative w-20 aspect-[2/3] rounded overflow-hidden shrink-0 bg-muted">
-                <Image
-                  src={selected.coverUrl}
-                  alt={selected.title}
-                  fill
-                  className="object-cover"
-                  sizes="80px"
-                />
-              </div>
-            )}
+            <div className="relative w-20 aspect-[2/3] rounded overflow-hidden shrink-0 bg-muted">
+              <BookCover
+                title={selected.title}
+                author={selected.author}
+                coverUrl={selected.coverUrl}
+                sizes="80px"
+              />
+            </div>
             <div className="flex flex-col gap-1.5 min-w-0 flex-1">
               <CardTitle className="text-base leading-snug">
                 {selected.title}

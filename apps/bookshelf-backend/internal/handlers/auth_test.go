@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"context"
+	"fmt"
 	"sync"
 	"testing"
 	"time"
@@ -624,6 +625,53 @@ func TestResetPassword(t *testing.T) {
 		require.Error(t, err)
 		assertStatus(t, err, 400)
 	})
+
+	t.Run("resets the password via a magic-link token, without submitting email or code", func(t *testing.T) {
+		h, users, user := setup(t)
+		token, err := h.issueOTPLinkToken(otpLinkPurposeResetPassword, "ada@example.com", "123456")
+		require.NoError(t, err)
+
+		input := &resetPasswordInput{}
+		input.Body.Token = token
+		input.Body.NewPassword = "NewPassw0rd1"
+		input.Body.ConfirmPassword = "NewPassw0rd1"
+
+		_, err = h.resetPassword(context.Background(), input)
+
+		require.NoError(t, err)
+		reloaded, findErr := users.FindByID(user.ID)
+		require.NoError(t, findErr)
+		assert.Empty(t, reloaded.ResetPasswordOTPCode)
+		assert.NoError(t, bcrypt.CompareHashAndPassword([]byte(reloaded.Password), []byte("NewPassw0rd1")))
+	})
+
+	t.Run("a token minted for a different purpose is rejected", func(t *testing.T) {
+		h, _, _ := setup(t)
+		token, err := h.issueOTPLinkToken(otpLinkPurposeEmailChange, "ada@example.com", "123456")
+		require.NoError(t, err)
+
+		input := &resetPasswordInput{}
+		input.Body.Token = token
+		input.Body.NewPassword = "NewPassw0rd1"
+		input.Body.ConfirmPassword = "NewPassw0rd1"
+
+		_, err = h.resetPassword(context.Background(), input)
+
+		require.Error(t, err)
+		assertStatus(t, err, 400)
+	})
+
+	t.Run("neither token nor email/code is rejected", func(t *testing.T) {
+		h, _, _ := setup(t)
+		input := &resetPasswordInput{}
+		input.Body.NewPassword = "NewPassw0rd1"
+		input.Body.ConfirmPassword = "NewPassw0rd1"
+
+		_, err := h.resetPassword(context.Background(), input)
+
+		require.Error(t, err)
+		assertStatus(t, err, 400)
+	})
 }
 
 func TestVerifyOTP(t *testing.T) {
@@ -667,6 +715,21 @@ func TestVerifyOTP(t *testing.T) {
 
 		require.Error(t, err)
 		assertStatus(t, err, 400)
+	})
+
+	t.Run("verifies via a magic-link token, without submitting a code", func(t *testing.T) {
+		user4 := &models.User{Name: "Dana", Email: "dana@example.com", Password: "x", OTPCode: "111222", OTPExpiry: &expiry}
+		require.NoError(t, users.Create(user4))
+
+		token, err := h.issueOTPLinkToken(otpLinkPurposeOTPVerify, "anything", "111222")
+		require.NoError(t, err)
+
+		input := &verifyOTPInput{}
+		input.Body.Token = token
+		out, err := h.verifyOTP(fakeAuthedCtx(t, user4.ID, "user"), input)
+
+		require.NoError(t, err)
+		assert.True(t, out.Body.Verified)
 	})
 }
 
@@ -886,6 +949,19 @@ func TestConfirmEmailChange(t *testing.T) {
 		require.Error(t, err)
 		assertStatus(t, err, 400)
 	})
+
+	t.Run("confirms via a magic-link token, without submitting a code", func(t *testing.T) {
+		h, _, user := setup(t)
+		token, err := h.issueOTPLinkToken(otpLinkPurposeEmailChange, fmt.Sprint(user.ID), user.PendingEmailOTPCode)
+		require.NoError(t, err)
+
+		input := &confirmEmailChangeInput{}
+		input.Body.Token = token
+		out, err := h.confirmEmailChange(fakeAuthedCtx(t, user.ID, "user"), input)
+
+		require.NoError(t, err)
+		assert.Equal(t, "ada-new@example.com", out.Body.Email)
+	})
 }
 
 func TestSendVerifyRegisterEmailOTP(t *testing.T) {
@@ -913,6 +989,25 @@ func TestSendVerifyRegisterEmailOTP(t *testing.T) {
 		out, err := h.register(context.Background(), regIn)
 		require.NoError(t, err)
 		assert.True(t, out.Body.User.Verified)
+	})
+
+	t.Run("verifies via a magic-link token, without submitting email or code", func(t *testing.T) {
+		h, _, _, _ := newAuthHandlerWithVerifications()
+
+		sendIn := &sendRegisterEmailOTPInput{}
+		sendIn.Body.Email = "link.user@example.com"
+		sendOut, err := h.sendRegisterEmailOTP(context.Background(), sendIn)
+		require.NoError(t, err)
+
+		linkToken, err := h.issueOTPLinkToken(otpLinkPurposeRegisterEmail, normalizeEmail("link.user@example.com"), sendOut.Body.DebugCode)
+		require.NoError(t, err)
+
+		verifyIn := &verifyRegisterEmailOTPInput{}
+		verifyIn.Body.Token = linkToken
+		verifyOut, err := h.verifyRegisterEmailOTP(context.Background(), verifyIn)
+
+		require.NoError(t, err)
+		assert.NotEmpty(t, verifyOut.Body.VerificationToken)
 	})
 
 	t.Run("debug_code is withheld outside dev", func(t *testing.T) {

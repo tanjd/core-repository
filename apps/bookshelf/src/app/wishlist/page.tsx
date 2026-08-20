@@ -1,9 +1,8 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
-import Image from "next/image";
 import { toast } from "sonner";
-import { Search, Plus, BookOpen, Link2, X } from "lucide-react";
+import { Search, Plus, Link2, X } from "lucide-react";
 import { api } from "@/lib/api";
 import type {
   BookMetadataResult,
@@ -14,6 +13,7 @@ import type {
 } from "@/lib/types";
 import { wishlistStatusLabel, wishlistStatusVariant } from "@/lib/wishlist";
 import { Button } from "@/components/ui/button";
+import { BookCover } from "@/components/BookCover";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -237,19 +237,12 @@ function WishlistCard({
     <Card className="overflow-hidden py-0 gap-0">
       <CardContent className="p-3 flex gap-3">
         <div className="relative w-14 aspect-[2/3] rounded overflow-hidden bg-muted shrink-0">
-          {request.cover_url ? (
-            <Image
-              src={request.cover_url}
-              alt={request.title}
-              fill
-              className="object-cover"
-              sizes="56px"
-            />
-          ) : (
-            <div className="flex h-full items-center justify-center">
-              <BookOpen className="size-5 text-muted-foreground/60" />
-            </div>
-          )}
+          <BookCover
+            title={request.title}
+            author={request.author}
+            coverUrl={request.cover_url}
+            sizes="56px"
+          />
         </div>
         <div className="flex flex-col gap-1 min-w-0 flex-1">
           <p className="text-sm font-medium leading-snug line-clamp-2">
@@ -456,19 +449,12 @@ function CreateRequestDialog({
           <div className="flex flex-col gap-4">
             <div className="flex items-center gap-3 rounded-lg border p-3">
               <div className="relative w-10 aspect-[2/3] rounded overflow-hidden bg-muted shrink-0">
-                {selected.coverUrl ? (
-                  <Image
-                    src={selected.coverUrl}
-                    alt={selected.title}
-                    fill
-                    className="object-cover"
-                    sizes="40px"
-                  />
-                ) : (
-                  <div className="flex h-full items-center justify-center">
-                    <BookOpen className="size-4 text-muted-foreground/60" />
-                  </div>
-                )}
+                <BookCover
+                  title={selected.title}
+                  author={selected.author}
+                  coverUrl={selected.coverUrl}
+                  sizes="40px"
+                />
               </div>
               <div className="flex flex-col gap-0.5 min-w-0 flex-1">
                 <p className="text-sm font-medium truncate">{selected.title}</p>
@@ -589,19 +575,12 @@ function CreateRequestDialog({
                     className="flex items-center gap-3 rounded-lg border p-3 text-left hover:bg-accent transition-colors"
                   >
                     <div className="relative w-10 aspect-[2/3] rounded overflow-hidden bg-muted shrink-0">
-                      {r.cover_url ? (
-                        <Image
-                          src={r.cover_url}
-                          alt={r.title}
-                          fill
-                          className="object-cover"
-                          sizes="40px"
-                        />
-                      ) : (
-                        <div className="flex h-full items-center justify-center text-[8px] text-muted-foreground text-center">
-                          No cover
-                        </div>
-                      )}
+                      <BookCover
+                        title={r.title}
+                        author={r.author}
+                        coverUrl={r.cover_url}
+                        sizes="40px"
+                      />
                     </div>
                     <div className="flex flex-col gap-0.5 min-w-0 flex-1">
                       <p className="text-sm font-medium truncate">{r.title}</p>

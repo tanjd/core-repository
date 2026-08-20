@@ -10,6 +10,7 @@ import (
 	"html"
 
 	"math/big"
+	"net/url"
 	"strings"
 	"time"
 
@@ -306,14 +307,16 @@ type sendRegisterEmailOTPOutput struct {
 
 type verifyRegisterEmailOTPInput struct {
 	Body struct {
-		Email string `json:"email" required:"true" format:"email" doc:"Email address being verified"`
-		Code  string `json:"code" required:"true" doc:"6-digit code"`
+		Email string `json:"email,omitempty" format:"email" doc:"Email address being verified. Required unless token is set."`
+		Code  string `json:"code,omitempty" doc:"6-digit code. Required unless token is set."`
+		Token string `json:"token,omitempty" doc:"Magic-link token from the verification email, as an alternative to submitting email+code."`
 	}
 }
 
 type verifyRegisterEmailOTPOutput struct {
 	Body struct {
 		VerificationToken string `json:"verification_token" doc:"Pass this as email_verification_token to /auth/register"`
+		Email             string `json:"email" doc:"The email address that was verified — echoed back so a magic-link (token-only) verification, which never submits an email itself, can still prefill the rest of the signup form"`
 	}
 }
 
@@ -374,14 +377,16 @@ type forgotPasswordInput struct {
 
 type forgotPasswordOutput struct {
 	Body struct {
-		DebugCode string `json:"debug_code,omitempty" doc:"Only present when ENV=dev: the code, so local development doesn't require SMTP"`
+		DebugCode      string `json:"debug_code,omitempty" doc:"Only present when ENV=dev: the code, so local development doesn't require SMTP"`
+		DebugResetLink string `json:"debug_reset_link,omitempty" doc:"Only present when ENV=dev: the magic-link URL the email would contain — no more sensitive than debug_code, which alone is already sufficient to reset the password"`
 	}
 }
 
 type resetPasswordInput struct {
 	Body struct {
-		Email           string `json:"email" required:"true" format:"email" doc:"Account email address"`
-		Code            string `json:"code" required:"true" doc:"6-digit code sent to the account's email"`
+		Email           string `json:"email,omitempty" format:"email" doc:"Account email address. Required unless token is set."`
+		Code            string `json:"code,omitempty" doc:"6-digit code sent to the account's email. Required unless token is set."`
+		Token           string `json:"token,omitempty" doc:"Magic-link token from the reset email, as an alternative to submitting email+code."`
 		NewPassword     string `json:"new_password" required:"true" minLength:"12" doc:"New password (min 12 chars, mixed case + digit)"`
 		ConfirmPassword string `json:"confirm_password" required:"true" minLength:"1" doc:"Must match new_password"`
 	}
@@ -393,6 +398,14 @@ type meBody struct {
 }
 
 type meOutput struct{ Body meBody }
+
+type updateMeOutput struct {
+	Body struct {
+		models.User
+		GoogleBooksKeyConfigured bool   `json:"google_books_key_configured"`
+		PendingEmailDebugCode    string `json:"pending_email_debug_code,omitempty" doc:"Only present when ENV=dev: the code sent to confirm a pending email change, so local development doesn't require SMTP"`
+	}
+}
 
 type updateMeInput struct {
 	Body updateMeBody
@@ -437,15 +450,23 @@ type setupInput struct {
 
 type sendOTPInput struct{}
 
+type sendOTPOutput struct {
+	Body struct {
+		DebugCode string `json:"debug_code,omitempty" doc:"Only present when ENV=dev: the code, so local development doesn't require SMTP"`
+	}
+}
+
 type verifyOTPInput struct {
 	Body struct {
-		Code string `json:"code" required:"true" doc:"6-digit OTP code"`
+		Code  string `json:"code,omitempty" doc:"6-digit OTP code. Required unless token is set."`
+		Token string `json:"token,omitempty" doc:"Magic-link token from the verification email, as an alternative to submitting code."`
 	}
 }
 
 type confirmEmailChangeInput struct {
 	Body struct {
-		Code string `json:"code" required:"true" doc:"6-digit code sent to the new email address"`
+		Code  string `json:"code,omitempty" doc:"6-digit code sent to the new email address. Required unless token is set."`
+		Token string `json:"token,omitempty" doc:"Magic-link token from the confirmation email, as an alternative to submitting code."`
 	}
 }
 
@@ -741,6 +762,9 @@ func (h *AuthHandler) sendRegisterEmailOTP(ctx context.Context, input *sendRegis
 		"<p>Your Bookshelf email verification code is: <strong>%s</strong></p><p>This code expires in 15 minutes.</p>",
 		code,
 	)
+	if linkToken, tokenErr := h.issueOTPLinkToken(otpLinkPurposeRegisterEmail, email, code); tokenErr == nil {
+		body += h.email.Button(fmt.Sprintf("/register?verifyToken=%s", url.QueryEscape(linkToken)), "Verify email")
+	}
 	h.email.SendEmailAsync(ctx, input.Body.Email, "Verify your email for Bookshelf", body)
 
 	out := &sendRegisterEmailOTPOutput{}
@@ -751,13 +775,18 @@ func (h *AuthHandler) sendRegisterEmailOTP(ctx context.Context, input *sendRegis
 }
 
 func (h *AuthHandler) verifyRegisterEmailOTP(_ context.Context, input *verifyRegisterEmailOTPInput) (*verifyRegisterEmailOTPOutput, error) {
-	email := normalizeEmail(input.Body.Email)
-	token, err := h.checkRegistrationOTP(registrationChannelEmail, email, input.Body.Code)
+	rawEmail, code, err := h.resolveEmailAndCode(input.Body.Token, otpLinkPurposeRegisterEmail, input.Body.Email, input.Body.Code)
+	if err != nil {
+		return nil, err
+	}
+	email := normalizeEmail(rawEmail)
+	token, err := h.checkRegistrationOTP(registrationChannelEmail, email, code)
 	if err != nil {
 		return nil, err
 	}
 	out := &verifyRegisterEmailOTPOutput{}
 	out.Body.VerificationToken = token
+	out.Body.Email = email
 	return out, nil
 }
 
@@ -929,10 +958,22 @@ func (h *AuthHandler) forgotPassword(ctx context.Context, input *forgotPasswordI
 		"<p>Hi %s,</p><p>Your Bookshelf password reset code is: <strong>%s</strong></p><p>This code expires in 15 minutes. If you didn't request this, you can safely ignore this email — your password won't change.</p>",
 		html.EscapeString(user.Name), code,
 	)
+	resetPath := ""
+	// user.Email, not the normalized `email` above: resetPassword's
+	// token path feeds this identifier straight into FindByEmail, a
+	// case-sensitive lookup — a lowercased identifier would fail to find
+	// an account whose stored email contains uppercase characters.
+	if linkToken, tokenErr := h.issueOTPLinkToken(otpLinkPurposeResetPassword, user.Email, code); tokenErr == nil {
+		resetPath = fmt.Sprintf("/forgot-password?resetToken=%s", url.QueryEscape(linkToken))
+		body += h.email.Button(resetPath, "Reset password")
+	}
 	h.email.SendEmailAsync(ctx, user.Email, "Reset your Bookshelf password", body)
 
 	if h.env == "dev" {
 		out.Body.DebugCode = code
+		if resetPath != "" {
+			out.Body.DebugResetLink = h.email.URL(resetPath)
+		}
 	}
 	return out, nil
 }
@@ -944,14 +985,18 @@ func (h *AuthHandler) forgotPassword(ctx context.Context, input *forgotPasswordI
 // code was requested", "code expired", and "code doesn't match", so a caller
 // can't distinguish an unregistered email from a wrong code.
 func (h *AuthHandler) resetPassword(ctx context.Context, input *resetPasswordInput) (*struct{}, error) {
-	email := normalizeEmail(input.Body.Email)
+	rawEmail, code, err := h.resolveEmailAndCode(input.Body.Token, otpLinkPurposeResetPassword, input.Body.Email, input.Body.Code)
+	if err != nil {
+		return nil, err
+	}
+	email := normalizeEmail(rawEmail)
 	if !h.resetPasswordLimiter.Allow(email) {
 		return nil, huma.Error429TooManyRequests("too many attempts — try again later")
 	}
 
 	invalidCodeErr := huma.Error400BadRequest("invalid or expired code")
 
-	user, err := h.users.FindByEmail(input.Body.Email)
+	user, err := h.users.FindByEmail(rawEmail)
 	if err != nil {
 		return nil, invalidCodeErr
 	}
@@ -965,7 +1010,7 @@ func (h *AuthHandler) resetPassword(ctx context.Context, input *resetPasswordInp
 		_ = h.users.Save(user) //nolint:errcheck
 		return nil, invalidCodeErr
 	}
-	if subtle.ConstantTimeCompare([]byte(user.ResetPasswordOTPCode), []byte(input.Body.Code)) != 1 {
+	if subtle.ConstantTimeCompare([]byte(user.ResetPasswordOTPCode), []byte(code)) != 1 {
 		user.ResetPasswordOTPCode = ""
 		user.ResetPasswordOTPExpiry = nil
 		_ = h.users.Save(user) //nolint:errcheck
@@ -1020,7 +1065,7 @@ func (h *AuthHandler) me(ctx context.Context, _ *struct{}) (*meOutput, error) {
 	return &meOutput{Body: meBody{User: *user, GoogleBooksKeyConfigured: user.GoogleBooksAPIKey != ""}}, nil
 }
 
-func (h *AuthHandler) updateMe(ctx context.Context, input *updateMeInput) (*meOutput, error) {
+func (h *AuthHandler) updateMe(ctx context.Context, input *updateMeInput) (*updateMeOutput, error) {
 	userID, err := middleware.GetRequiredUserID(ctx)
 	if err != nil {
 		return nil, huma.Error401Unauthorized("authentication required")
@@ -1048,10 +1093,13 @@ func (h *AuthHandler) updateMe(ctx context.Context, input *updateMeInput) (*meOu
 	if input.Body.Phone != nil {
 		applyPhoneUpdate(user, *input.Body.Phone)
 	}
+	var pendingEmailDebugCode string
 	if input.Body.Email != nil {
-		if err := h.handleEmailUpdateRequest(ctx, user, *input.Body.Email); err != nil {
+		code, err := h.handleEmailUpdateRequest(ctx, user, *input.Body.Email)
+		if err != nil {
 			return nil, err
 		}
+		pendingEmailDebugCode = code
 	}
 	if input.Body.GoogleBooksAPIKey != nil {
 		if err := h.applyGoogleBooksKeyUpdate(user, *input.Body.GoogleBooksAPIKey); err != nil {
@@ -1064,7 +1112,11 @@ func (h *AuthHandler) updateMe(ctx context.Context, input *updateMeInput) (*meOu
 		return nil, huma.Error500InternalServerError("could not update user")
 	}
 
-	return &meOutput{Body: meBody{User: *user, GoogleBooksKeyConfigured: user.GoogleBooksAPIKey != ""}}, nil
+	out := &updateMeOutput{}
+	out.Body.User = *user
+	out.Body.GoogleBooksKeyConfigured = user.GoogleBooksAPIKey != ""
+	out.Body.PendingEmailDebugCode = pendingEmailDebugCode
+	return out, nil
 }
 
 // applyContactPrefsUpdate applies the notification-preference and
@@ -1097,8 +1149,10 @@ func applyPhoneUpdate(user *models.User, newPhone string) {
 // right behavior: unchanged email with a pending change cancels it; a
 // changed email either applies immediately or stages a pending
 // confirmation, depending on the require_email_confirmation_on_change flag
-// (defaults to "true" in db.Seed() — see the comment there for why).
-func (h *AuthHandler) handleEmailUpdateRequest(ctx context.Context, user *models.User, newEmail string) error {
+// (defaults to "true" in db.Seed() — see the comment there for why). Returns
+// the pending-change OTP code when ENV=dev (see requestEmailChange), or ""
+// otherwise.
+func (h *AuthHandler) handleEmailUpdateRequest(ctx context.Context, user *models.User, newEmail string) (string, error) {
 	if newEmail == user.Email {
 		if user.PendingEmail != "" {
 			// User resubmitted their current (unchanged) email while a change
@@ -1108,13 +1162,13 @@ func (h *AuthHandler) handleEmailUpdateRequest(ctx context.Context, user *models
 			user.PendingEmailOTPCode = ""
 			user.PendingEmailOTPExpiry = nil
 		}
-		return nil
+		return "", nil
 	}
 
 	if val, _ := h.admin.GetSetting("require_email_confirmation_on_change"); val == "true" {
 		return h.requestEmailChange(ctx, user, newEmail)
 	}
-	return h.applyEmailUpdate(user, newEmail)
+	return "", h.applyEmailUpdate(user, newEmail)
 }
 
 // applyEmailUpdate changes the user's email, rejecting duplicates and
@@ -1133,16 +1187,18 @@ func (h *AuthHandler) applyEmailUpdate(user *models.User, newEmail string) error
 
 // requestEmailChange stages a pending email change and sends a confirmation
 // OTP to the *new* address; user.Email is left unchanged until
-// confirmEmailChange succeeds.
-func (h *AuthHandler) requestEmailChange(ctx context.Context, user *models.User, newEmail string) error {
+// confirmEmailChange succeeds. Returns the code when ENV=dev, so local
+// development doesn't require SMTP — same convention as the registration and
+// password-reset OTP flows.
+func (h *AuthHandler) requestEmailChange(ctx context.Context, user *models.User, newEmail string) (string, error) {
 	existing, findErr := h.users.FindByEmail(newEmail)
 	if findErr == nil && existing.ID != user.ID {
-		return huma.Error400BadRequest("email already in use")
+		return "", huma.Error400BadRequest("email already in use")
 	}
 
 	code, err := generateOTPCode()
 	if err != nil {
-		return huma.Error500InternalServerError("could not generate OTP")
+		return "", huma.Error500InternalServerError("could not generate OTP")
 	}
 	expiry := time.Now().Add(15 * time.Minute)
 
@@ -1154,8 +1210,15 @@ func (h *AuthHandler) requestEmailChange(ctx context.Context, user *models.User,
 		"<p>Hi %s,</p><p>You requested to change your Bookshelf account email to this address. Your confirmation code is: <strong>%s</strong></p><p>This code expires in 15 minutes. If you didn't request this change, you can safely ignore this email.</p>",
 		html.EscapeString(user.Name), code,
 	)
+	if linkToken, tokenErr := h.issueOTPLinkToken(otpLinkPurposeEmailChange, fmt.Sprint(user.ID), code); tokenErr == nil {
+		body += h.email.Button(fmt.Sprintf("/profile?confirmEmailToken=%s", url.QueryEscape(linkToken)), "Confirm email change")
+	}
 	h.email.SendEmailAsync(ctx, newEmail, "Confirm your new Bookshelf email address", body)
-	return nil
+
+	if h.env == "dev" {
+		return code, nil
+	}
+	return "", nil
 }
 
 // applyGoogleBooksKeyUpdate sets or clears the user's stored (encrypted) Google Books API key.
@@ -1257,7 +1320,7 @@ func (h *AuthHandler) setup(_ context.Context, input *setupInput) (*authOutput, 
 	return &authOutput{Body: authResponse{Token: token, User: user}}, nil
 }
 
-func (h *AuthHandler) sendOTP(ctx context.Context, _ *sendOTPInput) (*struct{}, error) {
+func (h *AuthHandler) sendOTP(ctx context.Context, _ *sendOTPInput) (*sendOTPOutput, error) {
 	userID, err := middleware.GetRequiredUserID(ctx)
 	if err != nil {
 		return nil, huma.Error401Unauthorized("authentication required")
@@ -1292,9 +1355,16 @@ func (h *AuthHandler) sendOTP(ctx context.Context, _ *sendOTPInput) (*struct{}, 
 		"<p>Hi %s,</p><p>Your Bookshelf verification code is: <strong>%s</strong></p><p>This code expires in 15 minutes.</p>",
 		html.EscapeString(user.Name), code,
 	)
+	if linkToken, tokenErr := h.issueOTPLinkToken(otpLinkPurposeOTPVerify, fmt.Sprint(user.ID), code); tokenErr == nil {
+		body += h.email.Button(fmt.Sprintf("/profile?verifyOtpToken=%s", url.QueryEscape(linkToken)), "Verify")
+	}
 	h.email.SendEmailAsync(ctx, user.Email, "Your Bookshelf verification code", body)
 
-	return nil, nil
+	out := &sendOTPOutput{}
+	if h.env == "dev" {
+		out.Body.DebugCode = code
+	}
+	return out, nil
 }
 
 func (h *AuthHandler) verifyOTP(ctx context.Context, input *verifyOTPInput) (*meOutput, error) {
@@ -1316,6 +1386,11 @@ func (h *AuthHandler) verifyOTP(ctx context.Context, input *verifyOTPInput) (*me
 		return nil, huma.Error403Forbidden("this account is pending admin approval")
 	}
 
+	code, err := h.resolveCode(input.Body.Token, otpLinkPurposeOTPVerify, input.Body.Code)
+	if err != nil {
+		return nil, err
+	}
+
 	if user.OTPCode == "" || user.OTPExpiry == nil {
 		return nil, huma.Error400BadRequest("no OTP has been sent")
 	}
@@ -1324,7 +1399,7 @@ func (h *AuthHandler) verifyOTP(ctx context.Context, input *verifyOTPInput) (*me
 	}
 	// Use constant-time comparison to prevent timing attacks, and invalidate
 	// the OTP on any wrong attempt to prevent brute-force enumeration.
-	if subtle.ConstantTimeCompare([]byte(user.OTPCode), []byte(input.Body.Code)) != 1 {
+	if subtle.ConstantTimeCompare([]byte(user.OTPCode), []byte(code)) != 1 {
 		user.OTPCode = ""
 		user.OTPExpiry = nil
 		_ = h.users.Save(user) //nolint:errcheck
@@ -1360,13 +1435,18 @@ func (h *AuthHandler) confirmEmailChange(ctx context.Context, input *confirmEmai
 		return nil, huma.Error403Forbidden("this account is pending admin approval")
 	}
 
+	code, err := h.resolveCode(input.Body.Token, otpLinkPurposeEmailChange, input.Body.Code)
+	if err != nil {
+		return nil, err
+	}
+
 	if user.PendingEmail == "" || user.PendingEmailOTPCode == "" || user.PendingEmailOTPExpiry == nil {
 		return nil, huma.Error400BadRequest("no pending email change")
 	}
 	if time.Now().After(*user.PendingEmailOTPExpiry) {
 		return nil, huma.Error400BadRequest("confirmation code has expired")
 	}
-	if subtle.ConstantTimeCompare([]byte(user.PendingEmailOTPCode), []byte(input.Body.Code)) != 1 {
+	if subtle.ConstantTimeCompare([]byte(user.PendingEmailOTPCode), []byte(code)) != 1 {
 		user.PendingEmailOTPCode = ""
 		user.PendingEmailOTPExpiry = nil
 		_ = h.users.Save(user) //nolint:errcheck

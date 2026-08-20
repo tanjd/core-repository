@@ -35,3 +35,31 @@ func TestBookRepository_FindByISBN(t *testing.T) {
 		assert.ErrorIs(t, err, repository.ErrNotFound)
 	})
 }
+
+func TestBookRepository_ListPaginated_ExcludesBooksWithNoCopies(t *testing.T) {
+	db := openTestDB(t)
+	books := NewBookRepository(db)
+	copies := NewCopyRepository(db)
+
+	owner := models.User{Name: "Owner", Email: "owner@example.com"}
+	require.NoError(t, db.Create(&owner).Error)
+
+	withCopy := models.Book{Title: "Has A Copy", Author: "A"}
+	require.NoError(t, books.Create(&withCopy))
+	require.NoError(t, copies.Create(&models.Copy{BookID: withCopy.ID, OwnerID: owner.ID, Condition: "good", Status: "available"}))
+
+	// Simulates a book whose last copy was just removed by its owner.
+	noCopy := models.Book{Title: "No Copies Left", Author: "A"}
+	require.NoError(t, books.Create(&noCopy))
+
+	result, err := books.ListPaginated("", "title", false, 1, 20)
+	require.NoError(t, err)
+
+	var titles []string
+	for _, b := range result.Items {
+		titles = append(titles, b.Title)
+	}
+	assert.Contains(t, titles, "Has A Copy")
+	assert.NotContains(t, titles, "No Copies Left")
+	assert.EqualValues(t, 1, result.Total)
+}

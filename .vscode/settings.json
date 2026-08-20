@@ -13,6 +13,7 @@
     "pkgerrors"
   ],
   "cursorpyright.analysis.extraPaths": [],
+  "js/ts.tsdk.path": "node_modules/typescript/lib",
   "nxConsole.generateAiAgentRules": true,
   "python.analysis.extraPaths": [],
   "python.autoComplete.extraPaths": [],

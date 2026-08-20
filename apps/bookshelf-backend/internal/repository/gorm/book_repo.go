@@ -60,8 +60,13 @@ func (r *BookRepository) buildListQuery(search, sort string, availableOnly bool)
 		like := "%" + search + "%"
 		tx = tx.Where("title LIKE ? OR author LIKE ?", like, like)
 	}
+	// A book with no copies left (e.g. its last copy was just removed by its
+	// owner) shouldn't linger in the catalog — same rule ListRecent already
+	// applies to the "recently added" shelf.
 	if availableOnly {
 		tx = tx.Where("EXISTS (SELECT 1 FROM copies WHERE copies.book_id = books.id AND copies.status = 'available')")
+	} else {
+		tx = tx.Where("EXISTS (SELECT 1 FROM copies WHERE copies.book_id = books.id)")
 	}
 	switch sort {
 	case "author":

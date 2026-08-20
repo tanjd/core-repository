@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, type FormEvent } from "react";
+import { useEffect, useRef, useState, type FormEvent } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
@@ -40,6 +40,12 @@ export default function RegisterPage() {
   const [emailOtpCode, setEmailOtpCode] = useState("");
   const [emailDebugCode, setEmailDebugCode] = useState("");
   const [emailVerificationToken, setEmailVerificationToken] = useState("");
+  // The email emailVerificationToken was actually issued for — if the user
+  // edits the email field afterwards, the token no longer applies and a new
+  // OTP must be sent, so handleDetailsSubmit compares against this rather
+  // than trusting emailVerificationToken's mere presence.
+  const [verifiedEmail, setVerifiedEmail] = useState("");
+  const [verifyingLinkToken, setVerifyingLinkToken] = useState(false);
 
   const [phoneOtpCode, setPhoneOtpCode] = useState("");
   const [phoneMockCode, setPhoneMockCode] = useState("");
@@ -50,6 +56,71 @@ export default function RegisterPage() {
   const [sendingPhoneOtp, setSendingPhoneOtp] = useState(false);
   const [verifyingPhoneOtp, setVerifyingPhoneOtp] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+
+  // Magic link from the verification email (?verifyToken=...): verify the
+  // email up front so the details step can skip straight past the OTP step
+  // once name/password are filled in. Read via window.location on mount
+  // (rather than useSearchParams) to avoid a server/client hydration
+  // mismatch and the Suspense boundary that hook requires — same pattern as
+  // SharePage's ?q= prefill. Name/password aren't in the link (this
+  // multi-step wizard only holds them in memory), so this can't finish
+  // registration on its own — it just saves retyping the 6-digit code. The
+  // setState-in-effect rule normally flags an effect that drives a render
+  // branch, but there's no render-time alternative here: window.location
+  // isn't available during SSR and verifying the token requires a network
+  // call, so this genuinely has to run post-mount.
+  const checkedVerifyTokenRef = useRef(false);
+  useEffect(() => {
+    if (checkedVerifyTokenRef.current) return;
+    checkedVerifyTokenRef.current = true;
+    const token = new URLSearchParams(window.location.search).get(
+      "verifyToken",
+    );
+    if (!token) return;
+
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setVerifyingLinkToken(true);
+    api
+      .verifyRegisterEmailOTP({ token })
+      .then(({ verification_token, email: linkEmail }) => {
+        setEmail(linkEmail);
+        setVerifiedEmail(linkEmail);
+        setEmailVerificationToken(verification_token);
+        toast.success(
+          "Email verified — fill in the rest to finish signing up.",
+        );
+      })
+      .catch((err) => {
+        toast.error(
+          err instanceof Error
+            ? err.message
+            : "That verification link is invalid or expired",
+        );
+      })
+      .finally(() => setVerifyingLinkToken(false));
+  }, []);
+
+  // Shared by handleVerifyEmailSubmit (manual code entry) and
+  // handleDetailsSubmit's magic-link shortcut: once the email is verified,
+  // either send a phone OTP or finalize registration outright.
+  async function proceedAfterEmailVerified(verificationToken: string) {
+    const trimmedPhone = phone.trim();
+    if (!trimmedPhone) {
+      await finalizeRegistration(verificationToken, undefined, "");
+      return;
+    }
+
+    const full = toFullPhone(trimmedPhone);
+    setFullPhone(full);
+    setSendingPhoneOtp(true);
+    try {
+      const { mock_code } = await api.sendRegisterPhoneOTP(full);
+      setPhoneMockCode(mock_code);
+      setStep("verify-phone");
+    } finally {
+      setSendingPhoneOtp(false);
+    }
+  }
 
   // Takes both tokens as parameters rather than reading them from state:
   // setEmailVerificationToken/setPhoneVerificationToken don't take effect
@@ -104,6 +175,20 @@ export default function RegisterPage() {
       setError("Passwords do not match");
       return;
     }
+
+    // Email was already verified via a magic link and hasn't been edited
+    // since — skip straight past the OTP step. proceedAfterEmailVerified
+    // manages its own loading state (sendingPhoneOtp/submitting), which the
+    // Continue button below already reflects.
+    if (emailVerificationToken && verifiedEmail === email.trim()) {
+      try {
+        await proceedAfterEmailVerified(emailVerificationToken);
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "Registration failed");
+      }
+      return;
+    }
+
     setSendingEmailOtp(true);
     try {
       const { debug_code } = await api.sendRegisterEmailOTP(email);
@@ -136,28 +221,13 @@ export default function RegisterPage() {
     setError("");
     setVerifyingEmailOtp(true);
     try {
-      const { verification_token } = await api.verifyRegisterEmailOTP(
+      const { verification_token } = await api.verifyRegisterEmailOTP({
         email,
-        emailOtpCode.trim(),
-      );
+        code: emailOtpCode.trim(),
+      });
       setEmailVerificationToken(verification_token);
-
-      const trimmedPhone = phone.trim();
-      if (!trimmedPhone) {
-        await finalizeRegistration(verification_token, undefined, "");
-        return;
-      }
-
-      const full = toFullPhone(trimmedPhone);
-      setFullPhone(full);
-      setSendingPhoneOtp(true);
-      try {
-        const { mock_code } = await api.sendRegisterPhoneOTP(full);
-        setPhoneMockCode(mock_code);
-        setStep("verify-phone");
-      } finally {
-        setSendingPhoneOtp(false);
-      }
+      setVerifiedEmail(email.trim());
+      await proceedAfterEmailVerified(verification_token);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Verification failed");
     } finally {
@@ -220,6 +290,18 @@ export default function RegisterPage() {
                 onSubmit={handleDetailsSubmit}
                 className="flex flex-col gap-4"
               >
+                {verifyingLinkToken && (
+                  <p className="text-sm rounded-md border border-dashed p-2 text-muted-foreground">
+                    Verifying your email…
+                  </p>
+                )}
+                {!verifyingLinkToken &&
+                  emailVerificationToken &&
+                  verifiedEmail === email.trim() && (
+                    <p className="text-sm rounded-md border border-dashed p-2 text-muted-foreground">
+                      ✓ Email verified — just fill in the rest to finish.
+                    </p>
+                  )}
                 <div className="flex flex-col gap-1.5">
                   <label htmlFor="name" className="text-sm font-medium">
                     Name
@@ -305,10 +387,20 @@ export default function RegisterPage() {
                 {error && <p className="text-sm text-destructive">{error}</p>}
                 <Button
                   type="submit"
-                  disabled={sendingEmailOtp}
+                  disabled={
+                    sendingEmailOtp ||
+                    verifyingLinkToken ||
+                    sendingPhoneOtp ||
+                    submitting
+                  }
                   className="w-full"
                 >
-                  {sendingEmailOtp ? "Sending code…" : "Continue"}
+                  {sendingEmailOtp && "Sending code…"}
+                  {(sendingPhoneOtp || submitting) && "Creating account…"}
+                  {!sendingEmailOtp &&
+                    !sendingPhoneOtp &&
+                    !submitting &&
+                    "Continue"}
                 </Button>
               </form>
             </CardContent>

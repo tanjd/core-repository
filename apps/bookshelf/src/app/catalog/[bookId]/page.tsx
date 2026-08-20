@@ -2,13 +2,13 @@
 
 import { useEffect, useState, useRef } from "react";
 import { useParams, useRouter } from "next/navigation";
-import Image from "next/image";
 import { toast } from "sonner";
 import { ArrowLeft } from "lucide-react";
 import { api } from "@/lib/api";
 import type { Book, User, Copy } from "@/lib/types";
 import { Input } from "@/components/ui/input";
 import { CopyCard } from "@/components/CopyCard";
+import { BookCover } from "@/components/BookCover";
 import { WaitlistButton } from "@/components/WaitlistButton";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -139,19 +139,12 @@ export default function BookDetailPage() {
       {/* Book header */}
       <div className="flex flex-col sm:flex-row gap-6">
         <div className="relative w-36 aspect-[2/3] rounded-lg overflow-hidden bg-muted shrink-0">
-          {book.cover_url ? (
-            <Image
-              src={book.cover_url}
-              alt={`Cover of ${book.title}`}
-              fill
-              className="object-cover"
-              sizes="144px"
-            />
-          ) : (
-            <div className="flex h-full items-center justify-center text-muted-foreground text-xs text-center px-2">
-              No cover
-            </div>
-          )}
+          <BookCover
+            title={book.title}
+            author={book.author}
+            coverUrl={book.cover_url}
+            sizes="144px"
+          />
         </div>
 
         <div className="flex flex-col gap-2">

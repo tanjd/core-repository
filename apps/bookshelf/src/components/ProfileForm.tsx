@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, type FormEvent } from "react";
+import { useEffect, useRef, useState, type FormEvent } from "react";
 import Link from "next/link";
 import { CheckCircle2, XCircle } from "lucide-react";
 import { useRouter } from "next/navigation";
@@ -56,12 +56,14 @@ export function ProfileForm() {
   const [otpCode, setOtpCode] = useState("");
   const [sendingOtp, setSendingOtp] = useState(false);
   const [verifyingOtp, setVerifyingOtp] = useState(false);
+  const [otpDebugCode, setOtpDebugCode] = useState("");
 
   // Pending email change confirmation
   const [emailChangePending, setEmailChangePending] = useState(false);
   const [pendingEmailTarget, setPendingEmailTarget] = useState("");
   const [emailChangeCode, setEmailChangeCode] = useState("");
   const [confirmingEmailChange, setConfirmingEmailChange] = useState(false);
+  const [emailChangeDebugCode, setEmailChangeDebugCode] = useState("");
 
   useEffect(() => {
     const token = localStorage.getItem("bookshelf_token");
@@ -92,6 +94,28 @@ export function ProfileForm() {
       .finally(() => setLoading(false));
   }, [router]);
 
+  // Magic links from the email-verification / email-change-confirmation
+  // emails (?verifyOtpToken=... / ?confirmEmailToken=...): auto-submit once
+  // the authenticated user has loaded above, instead of making them retype
+  // the code. Only works when opened in a browser that still holds this
+  // account's bookshelf_token (the useEffect above already redirects to
+  // /login otherwise) — the code is still shown in the email as a fallback.
+  // Guarded by a ref (not a useState value in the deps array) so this only
+  // ever fires once, on the render where `user` first becomes available.
+  const autoVerifiedRef = useRef(false);
+  useEffect(() => {
+    if (!user || autoVerifiedRef.current) return;
+    autoVerifiedRef.current = true;
+    const params = new URLSearchParams(window.location.search);
+    const verifyOtpToken = params.get("verifyOtpToken");
+    const confirmEmailToken = params.get("confirmEmailToken");
+    if (!user.verified && verifyOtpToken) {
+      void submitOtpVerification({ token: verifyOtpToken });
+    } else if (user.pending_email && confirmEmailToken) {
+      void submitEmailChangeConfirmation({ token: confirmEmailToken });
+    }
+  }, [user]);
+
   async function handleSaveProfile(e?: FormEvent) {
     e?.preventDefault();
     setSaving(true);
@@ -114,6 +138,7 @@ export function ProfileForm() {
         setUser(updated);
         setEmailChangePending(true);
         setPendingEmailTarget(updated.pending_email);
+        setEmailChangeDebugCode(updated.pending_email_debug_code ?? "");
         toast.success(`Confirmation code sent to ${updated.pending_email}`);
       } else {
         const vs = await api.myVerificationStatus();
@@ -169,8 +194,9 @@ export function ProfileForm() {
   async function handleSendOTP() {
     setSendingOtp(true);
     try {
-      await api.sendOTP();
+      const { debug_code } = await api.sendOTP();
       setOtpSent(true);
+      setOtpDebugCode(debug_code ?? "");
       toast.success("Verification code sent to your email");
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Failed to send code");
@@ -229,17 +255,19 @@ export function ProfileForm() {
     }
   }
 
-  async function handleVerifyOTP(e: FormEvent) {
-    e.preventDefault();
+  async function submitOtpVerification(
+    data: { code: string } | { token: string },
+  ) {
     setVerifyingOtp(true);
     try {
-      const updated = await api.verifyOTP(otpCode.trim());
+      const updated = await api.verifyOTP(data);
       const vs = await api.myVerificationStatus();
       setUser(updated);
       setVerificationStatus(vs);
       localStorage.setItem("bookshelf_user", JSON.stringify(updated));
       setOtpSent(false);
       setOtpCode("");
+      setOtpDebugCode("");
       toast.success("Email verified!");
     } catch (err) {
       toast.error(
@@ -250,11 +278,17 @@ export function ProfileForm() {
     }
   }
 
-  async function handleConfirmEmailChange(e: FormEvent) {
+  async function handleVerifyOTP(e: FormEvent) {
     e.preventDefault();
+    await submitOtpVerification({ code: otpCode.trim() });
+  }
+
+  async function submitEmailChangeConfirmation(
+    data: { code: string } | { token: string },
+  ) {
     setConfirmingEmailChange(true);
     try {
-      const updated = await api.confirmEmailChange(emailChangeCode.trim());
+      const updated = await api.confirmEmailChange(data);
       const vs = await api.myVerificationStatus();
       setUser(updated);
       setVerificationStatus(vs);
@@ -262,6 +296,7 @@ export function ProfileForm() {
       setEmailChangePending(false);
       setPendingEmailTarget("");
       setEmailChangeCode("");
+      setEmailChangeDebugCode("");
       setEmail(updated.email);
       toast.success("Email address updated");
     } catch (err) {
@@ -271,6 +306,11 @@ export function ProfileForm() {
     } finally {
       setConfirmingEmailChange(false);
     }
+  }
+
+  async function handleConfirmEmailChange(e: FormEvent) {
+    e.preventDefault();
+    await submitEmailChangeConfirmation({ code: emailChangeCode.trim() });
   }
 
   if (loading) {
@@ -352,6 +392,12 @@ export function ProfileForm() {
                     Enter it below to confirm the change — your email won&apos;t
                     update until you do.
                   </p>
+                  {emailChangeDebugCode && (
+                    <p className="text-sm rounded-md border border-dashed p-2 text-muted-foreground">
+                      Dev mode — no SMTP configured, so here&apos;s the code
+                      directly: <strong>{emailChangeDebugCode}</strong>
+                    </p>
+                  )}
                   <div className="flex flex-col gap-1.5">
                     <label
                       htmlFor="email-change-code"
@@ -393,6 +439,7 @@ export function ProfileForm() {
                         setEmailChangePending(false);
                         setPendingEmailTarget("");
                         setEmailChangeCode("");
+                        setEmailChangeDebugCode("");
                         setEmail(user.email);
                       }}
                     >
@@ -699,7 +746,11 @@ export function ProfileForm() {
                     <p className="text-xs text-muted-foreground mt-0.5">
                       {user.verified
                         ? "Your email address has been verified."
-                        : "Verify your email to unlock borrowing features."}
+                        : verificationStatus?.factors.some(
+                              (factor) => factor.key === "email",
+                            )
+                          ? "Verify your email to unlock borrowing features."
+                          : "Verifying your email helps other members trust that you're reachable."}
                     </p>
                   </div>
                   {user.verified ? (
@@ -714,14 +765,20 @@ export function ProfileForm() {
                 </div>
                 {!user.verified &&
                   (!otpSent ? (
-                    <Button
-                      variant="outline"
-                      onClick={handleSendOTP}
-                      disabled={sendingOtp}
-                      className="w-fit"
-                    >
-                      {sendingOtp ? "Sending…" : "Send verification code"}
-                    </Button>
+                    verifyingOtp ? (
+                      <p className="text-sm rounded-md border border-dashed p-2 text-muted-foreground w-fit">
+                        Verifying your email…
+                      </p>
+                    ) : (
+                      <Button
+                        variant="outline"
+                        onClick={handleSendOTP}
+                        disabled={sendingOtp}
+                        className="w-fit"
+                      >
+                        {sendingOtp ? "Sending…" : "Send verification code"}
+                      </Button>
+                    )
                   ) : (
                     <form
                       onSubmit={handleVerifyOTP}
@@ -731,6 +788,12 @@ export function ProfileForm() {
                         A 6-digit code was sent to <strong>{user.email}</strong>
                         .
                       </p>
+                      {otpDebugCode && (
+                        <p className="text-sm rounded-md border border-dashed p-2 text-muted-foreground">
+                          Dev mode — no SMTP configured, so here&apos;s the code
+                          directly: <strong>{otpDebugCode}</strong>
+                        </p>
+                      )}
                       <div className="flex flex-col gap-1.5">
                         <label
                           htmlFor="otp-code"

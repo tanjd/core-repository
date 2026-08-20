@@ -24,7 +24,7 @@ const testJWTSecret = "test-jwt-secret"
 // SendEmail always no-ops instead of touching the network — see
 // EmailService.SendEmail's "if s.host == ”" branch.
 func noopEmail() *services.EmailService {
-	return services.NewEmailService("", "", "", "", "", "", "")
+	return services.NewEmailService("", "", "", "", "", "", "", "http://localhost:3000")
 }
 
 // noopSMS returns the same MockSMSService production uses — there's no real

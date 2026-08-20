@@ -2,10 +2,10 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import Image from "next/image";
 import { api } from "@/lib/api";
 import type { Book } from "@/lib/types";
 import { Badge } from "@/components/ui/badge";
+import { BookCover } from "@/components/BookCover";
 
 function BookSpine({ book, ownedByMe }: { book: Book; ownedByMe: boolean }) {
   return (
@@ -21,21 +21,12 @@ function BookSpine({ book, ownedByMe }: { book: Book; ownedByMe: boolean }) {
             Yours
           </Badge>
         )}
-        {book.cover_url ? (
-          <Image
-            src={book.cover_url}
-            alt={`Cover of ${book.title}`}
-            fill
-            className="object-cover"
-            sizes="112px"
-          />
-        ) : (
-          <div className="flex h-full items-center justify-center bg-gradient-to-br from-slate-200 to-slate-300 dark:from-slate-700 dark:to-slate-800">
-            <span className="text-[10px] text-center text-muted-foreground px-1 leading-tight line-clamp-4">
-              {book.title}
-            </span>
-          </div>
-        )}
+        <BookCover
+          title={book.title}
+          author={book.author}
+          coverUrl={book.cover_url}
+          sizes="112px"
+        />
         {/* Spine highlight (simulates book edge) */}
         <div className="absolute inset-y-0 left-0 w-1.5 bg-black/10 pointer-events-none" />
       </div>

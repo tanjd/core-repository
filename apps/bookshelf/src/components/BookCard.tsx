@@ -1,8 +1,7 @@
 import Link from "next/link";
-import Image from "next/image";
-import { BookOpen } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
+import { BookCover } from "@/components/BookCover";
 import type { Book } from "@/lib/types";
 
 interface BookCardProps {
@@ -20,22 +19,13 @@ export function BookCard({ book, ownedByMe }: BookCardProps) {
               Yours
             </Badge>
           )}
-          {book.cover_url ? (
-            <Image
-              src={book.cover_url}
-              alt={`Cover of ${book.title}`}
-              fill
-              className="object-cover transition-transform group-hover:scale-105"
-              sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 20vw"
-            />
-          ) : (
-            <div className="flex h-full flex-col items-center justify-center gap-2 px-4 text-center">
-              <BookOpen className="size-8 text-muted-foreground/60" />
-              <span className="text-xs text-muted-foreground line-clamp-3">
-                {book.title}
-              </span>
-            </div>
-          )}
+          <BookCover
+            title={book.title}
+            author={book.author}
+            coverUrl={book.cover_url}
+            sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 20vw"
+            className="transition-transform group-hover:scale-105"
+          />
         </div>
         <CardContent className="px-3 py-3 flex flex-1 flex-col gap-1">
           <p className="font-medium text-sm leading-snug line-clamp-2">
