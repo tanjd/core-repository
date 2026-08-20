@@ -1,3 +1,13 @@
+## 0.7.0 (2026-08-20)
+
+### 🚀 Features
+
+- **bookshelf,bookshelf-backend,bookshelf-e2e:** magic-link auth, book cover fallback ([#55](https://github.com/tanjd/core-repository/pull/55))
+
+### ❤️ Thank You
+
+- Jeddy Tan @tanjd
+
 ## 0.6.1 (2026-08-20)
 
 ### 🚀 Features
