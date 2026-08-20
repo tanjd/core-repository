@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, type FormEvent } from "react";
+import { useEffect, useRef, useState, type FormEvent } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
@@ -33,6 +33,28 @@ export default function ForgotPasswordPage() {
   const [error, setError] = useState("");
   const [sending, setSending] = useState(false);
   const [resetting, setResetting] = useState(false);
+
+  // Magic link from the reset email (?resetToken=...): skip straight to the
+  // "new password" fields, no code entry needed. Read via window.location on
+  // mount (rather than useSearchParams) to avoid a server/client hydration
+  // mismatch and the Suspense boundary that hook requires — same pattern as
+  // SharePage's ?q= prefill. The setState-in-effect rule normally flags an
+  // effect that drives a render branch, but there's no render-time
+  // alternative here: window.location isn't available during SSR, so this
+  // genuinely has to run post-mount, once, reading an external source (the
+  // URL) exactly as the rule's own guidance allows.
+  const [resetToken, setResetToken] = useState<string | null>(null);
+  const checkedTokenRef = useRef(false);
+  useEffect(() => {
+    if (checkedTokenRef.current) return;
+    checkedTokenRef.current = true;
+    const token = new URLSearchParams(window.location.search).get("resetToken");
+    if (token) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setResetToken(token);
+      setStep("reset");
+    }
+  }, []);
 
   async function handleRequestSubmit(e: FormEvent) {
     e.preventDefault();
@@ -81,8 +103,7 @@ export default function ForgotPasswordPage() {
     setResetting(true);
     try {
       await api.resetPassword({
-        email,
-        code: code.trim(),
+        ...(resetToken ? { token: resetToken } : { email, code: code.trim() }),
         new_password: newPassword,
         confirm_password: confirmPassword,
       });
@@ -93,6 +114,11 @@ export default function ForgotPasswordPage() {
     } finally {
       setResetting(false);
     }
+  }
+
+  function handleUseCodeInstead() {
+    setResetToken(null);
+    setStep("request");
   }
 
   return (
@@ -150,8 +176,14 @@ export default function ForgotPasswordPage() {
             <CardHeader>
               <CardTitle className="text-2xl">Reset your password</CardTitle>
               <CardDescription>
-                If <strong>{email}</strong> is registered, a 6-digit code was
-                sent to it.
+                {resetToken ? (
+                  "Enter a new password to complete your reset."
+                ) : (
+                  <>
+                    If <strong>{email}</strong> is registered, a 6-digit code
+                    was sent to it.
+                  </>
+                )}
               </CardDescription>
             </CardHeader>
             <CardContent>
@@ -159,27 +191,29 @@ export default function ForgotPasswordPage() {
                 onSubmit={handleResetSubmit}
                 className="flex flex-col gap-4"
               >
-                {debugCode && (
+                {!resetToken && debugCode && (
                   <p className="text-sm rounded-md border border-dashed p-2 text-muted-foreground">
                     Dev mode — no SMTP configured, so here&apos;s the code
                     directly: <strong>{debugCode}</strong>
                   </p>
                 )}
-                <div className="flex flex-col gap-1.5">
-                  <label htmlFor="reset-otp" className="text-sm font-medium">
-                    Reset code
-                  </label>
-                  <Input
-                    id="reset-otp"
-                    type="text"
-                    inputMode="numeric"
-                    maxLength={6}
-                    required
-                    value={code}
-                    onChange={(e) => setCode(e.target.value)}
-                    placeholder="123456"
-                  />
-                </div>
+                {!resetToken && (
+                  <div className="flex flex-col gap-1.5">
+                    <label htmlFor="reset-otp" className="text-sm font-medium">
+                      Reset code
+                    </label>
+                    <Input
+                      id="reset-otp"
+                      type="text"
+                      inputMode="numeric"
+                      maxLength={6}
+                      required
+                      value={code}
+                      onChange={(e) => setCode(e.target.value)}
+                      placeholder="123456"
+                    />
+                  </div>
+                )}
                 <div className="flex flex-col gap-1.5">
                   <label htmlFor="new-password" className="text-sm font-medium">
                     New password
@@ -218,27 +252,39 @@ export default function ForgotPasswordPage() {
                 {error && <p className="text-sm text-destructive">{error}</p>}
                 <Button
                   type="submit"
-                  disabled={resetting || code.length !== 6}
+                  disabled={resetting || (!resetToken && code.length !== 6)}
                   className="w-full"
                 >
                   {resetting ? "Resetting…" : "Reset password"}
                 </Button>
                 <div className="flex justify-between text-sm">
-                  <button
-                    type="button"
-                    className="text-muted-foreground hover:underline"
-                    onClick={() => setStep("request")}
-                  >
-                    ← Use a different email
-                  </button>
-                  <button
-                    type="button"
-                    className="text-primary hover:underline disabled:opacity-50"
-                    disabled={sending}
-                    onClick={handleResendCode}
-                  >
-                    {sending ? "Sending…" : "Resend code"}
-                  </button>
+                  {resetToken ? (
+                    <button
+                      type="button"
+                      className="text-muted-foreground hover:underline"
+                      onClick={handleUseCodeInstead}
+                    >
+                      ← Enter a code instead
+                    </button>
+                  ) : (
+                    <>
+                      <button
+                        type="button"
+                        className="text-muted-foreground hover:underline"
+                        onClick={() => setStep("request")}
+                      >
+                        ← Use a different email
+                      </button>
+                      <button
+                        type="button"
+                        className="text-primary hover:underline disabled:opacity-50"
+                        disabled={sending}
+                        onClick={handleResendCode}
+                      >
+                        {sending ? "Sending…" : "Resend code"}
+                      </button>
+                    </>
+                  )}
                 </div>
               </form>
             </CardContent>

@@ -48,6 +48,14 @@ export default defineConfig({
         ENV: "dev",
         JWT_SECRET: E2E_JWT_SECRET,
         CORS_ORIGINS: "http://localhost:3000",
+        FRONTEND_ORIGIN: "http://localhost:3000",
+        // Explicitly blank, not just omitted: godotenv only fills in vars
+        // that aren't already set, so a dev's real apps/bookshelf-backend/.env
+        // (if one exists, e.g. real SMTP credentials for local testing)
+        // would otherwise leak into this run and send real email for any
+        // spec that exercises an email-sending flow (forgot-password,
+        // registration, etc.).
+        SMTP_HOST: "",
       },
     },
     {

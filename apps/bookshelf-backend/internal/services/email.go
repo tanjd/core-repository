@@ -20,10 +20,11 @@ type EmailService struct {
 	from             string
 	env              string
 	devEmailOverride string
+	frontendOrigin   string
 }
 
 // NewEmailService creates a new EmailService.
-func NewEmailService(host, port, username, password, from, env, devEmailOverride string) *EmailService {
+func NewEmailService(host, port, username, password, from, env, devEmailOverride, frontendOrigin string) *EmailService {
 	return &EmailService{
 		host:             host,
 		port:             port,
@@ -32,7 +33,24 @@ func NewEmailService(host, port, username, password, from, env, devEmailOverride
 		from:             from,
 		env:              env,
 		devEmailOverride: devEmailOverride,
+		frontendOrigin:   strings.TrimRight(frontendOrigin, "/"),
 	}
+}
+
+// URL builds an absolute frontend URL from path, for linking recipients back
+// into the app from an email body. path must start with "/".
+func (s *EmailService) URL(path string) string {
+	return s.frontendOrigin + path
+}
+
+// Button renders a call-to-action link to path, styled as a button, for
+// appending to an email body — the one shared bit of visual consistency
+// across otherwise ad hoc inline-HTML email bodies.
+func (s *EmailService) Button(path, label string) string {
+	return fmt.Sprintf(
+		`<p><a href="%s" style="display:inline-block;padding:10px 20px;background-color:#1f2937;color:#ffffff;text-decoration:none;border-radius:6px;font-weight:bold;">%s</a></p>`,
+		s.URL(path), label,
+	)
 }
 
 // SendEmail sends an HTML email over SMTP. net/smtp.SendMail negotiates

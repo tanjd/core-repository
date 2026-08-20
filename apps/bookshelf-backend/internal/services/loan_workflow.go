@@ -68,7 +68,7 @@ func (w *LoanWorkflow) OnRequested(ctx context.Context, lr *models.LoanRequest) 
 	body := fmt.Sprintf(
 		"<p>Hi %s,</p><p><strong>%s</strong> has requested to borrow your copy of <em>%s</em>.</p>",
 		html.EscapeString(bookCopy.Owner.Name), html.EscapeString(borrower.Name), html.EscapeString(bookCopy.Book.Title),
-	)
+	) + w.email.Button(fmt.Sprintf("/my-books/%d/requests", bookCopy.ID), "View request")
 	if bookCopy.Owner.EmailNotificationsEnabled {
 		w.email.SendEmailAsync(ctx, bookCopy.Owner.Email, subject, body)
 	}
@@ -114,7 +114,7 @@ func (w *LoanWorkflow) OnAccepted(ctx context.Context, lr *models.LoanRequest) e
 		"<p>Hi %s,</p><p>Your request to borrow <em>%s</em> has been accepted by %s. "+
 			"Please get in touch to arrange collection.</p>",
 		html.EscapeString(borrower.Name), html.EscapeString(bookCopy.Book.Title), html.EscapeString(bookCopy.Owner.Name),
-	)
+	) + w.email.Button("/my-requests", "View your loans")
 	if borrower.EmailNotificationsEnabled {
 		w.email.SendEmailAsync(ctx, borrower.Email, subject, body)
 	}
@@ -233,7 +233,7 @@ func (w *LoanWorkflow) sendReturnedEmail(ctx context.Context, recipientID uint, 
 		body := fmt.Sprintf(
 			"<p>Hi %s,</p><p>Your loan of <em>%s</em> has been marked as returned. Thank you!</p>",
 			html.EscapeString(borrower.Name), html.EscapeString(bookCopy.Book.Title),
-		)
+		) + w.email.Button("/my-requests", "View your loans")
 		if borrower.EmailNotificationsEnabled {
 			w.email.SendEmailAsync(ctx, borrower.Email, subject, body)
 		}
@@ -245,7 +245,7 @@ func (w *LoanWorkflow) sendReturnedEmail(ctx context.Context, recipientID uint, 
 	body := fmt.Sprintf(
 		"<p>Hi %s,</p><p>%s marked your copy of <em>%s</em> as returned.</p>",
 		html.EscapeString(owner.Name), html.EscapeString(borrower.Name), html.EscapeString(bookCopy.Book.Title),
-	)
+	) + w.email.Button("/my-books", "View your books")
 	if owner.EmailNotificationsEnabled {
 		w.email.SendEmailAsync(ctx, owner.Email, subject, body)
 	}
@@ -284,7 +284,7 @@ func (w *LoanWorkflow) OnReturnUndone(ctx context.Context, lr *models.LoanReques
 	body := fmt.Sprintf(
 		"<p>Hi %s,</p><p>%s undid the return of <em>%s</em> — your loan is active again.</p>",
 		html.EscapeString(borrower.Name), html.EscapeString(bookCopy.Owner.Name), html.EscapeString(bookCopy.Book.Title),
-	)
+	) + w.email.Button("/my-requests", "View your loans")
 	if borrower.EmailNotificationsEnabled {
 		w.email.SendEmailAsync(ctx, borrower.Email, subject, body)
 	}

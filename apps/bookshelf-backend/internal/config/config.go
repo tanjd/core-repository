@@ -18,6 +18,7 @@ type Config struct {
 	JWTSecret               string   `env:"JWT_SECRET" envDefault:"dev-secret-change-me" sensitive:"true"`
 	EncryptionSecret        string   `env:"ENCRYPTION_SECRET" sensitive:"true"`
 	CORSOrigins             []string `env:"CORS_ORIGINS" envSeparator:"," envDefault:"http://localhost:3000"`
+	FrontendOrigin          string   `env:"FRONTEND_ORIGIN" envDefault:"http://localhost:3000"`
 	SMTPHost                string   `env:"SMTP_HOST"`
 	SMTPPort                string   `env:"SMTP_PORT" envDefault:"587"`
 	SMTPUsername            string   `env:"SMTP_USERNAME"`

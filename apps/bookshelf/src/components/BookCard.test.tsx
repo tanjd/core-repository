@@ -32,12 +32,15 @@ describe("BookCard", () => {
   it("renders the title and author", () => {
     render(<BookCard book={baseBook} />);
 
-    // Without a cover image, the title also appears in the fallback icon
-    // caption, so at least one match — not exactly one — is what matters.
+    // Without a cover image, the title and author also appear in the
+    // generated SVG fallback's text, so at least one match — not exactly
+    // one — is what matters.
     expect(
       screen.getAllByText("The Go Programming Language").length,
     ).toBeGreaterThan(0);
-    expect(screen.getByText("Donovan & Kernighan")).toBeInTheDocument();
+    expect(screen.getAllByText("Donovan & Kernighan").length).toBeGreaterThan(
+      0,
+    );
   });
 
   it("shows a 'Yours' badge when ownedByMe is true", () => {
@@ -64,20 +67,21 @@ describe("BookCard", () => {
     expect(screen.getByText("Unavailable")).toBeInTheDocument();
   });
 
-  it("renders a fallback icon and title when there is no cover image", () => {
-    render(<BookCard book={baseBook} />);
+  it("renders a generated cover fallback when there is no cover image", () => {
+    const { container } = render(<BookCard book={baseBook} />);
 
-    expect(screen.queryByRole("img")).not.toBeInTheDocument();
+    expect(container.querySelector("img")).not.toBeInTheDocument();
+    expect(container.querySelector("svg")).toBeInTheDocument();
   });
 
   it("renders the cover image when a cover_url is present", () => {
-    render(
+    const { container } = render(
       <BookCard
         book={{ ...baseBook, cover_url: "https://example.com/cover.jpg" }}
       />,
     );
 
-    expect(screen.getByRole("img")).toHaveAttribute(
+    expect(container.querySelector("img")).toHaveAttribute(
       "src",
       "https://example.com/cover.jpg",
     );

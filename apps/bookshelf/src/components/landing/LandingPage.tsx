@@ -13,10 +13,8 @@ import {
   BookOpen,
 } from "lucide-react";
 import { api } from "@/lib/api";
-import type { Book } from "@/lib/types";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { Skeleton } from "@/components/ui/skeleton";
 
 const features = [
   {
@@ -67,14 +65,9 @@ const steps = [
 ];
 
 export function LandingPage() {
-  const [recentBooks, setRecentBooks] = useState<Book[] | null>(null);
   const [totalBooks, setTotalBooks] = useState<number | null>(null);
 
   useEffect(() => {
-    api
-      .getRecentBooks(8)
-      .then(setRecentBooks)
-      .catch(() => setRecentBooks([]));
     api
       .getBooks({ page_size: 1 })
       .then((result) => setTotalBooks(result.total))
@@ -164,43 +157,27 @@ export function LandingPage() {
             />
           </div>
         </div>
-      </div>
-
-      {/* Live teaser */}
-      {recentBooks === null || recentBooks.length > 0 ? (
-        <div className="flex flex-col gap-4">
-          <h2 className="text-lg font-semibold text-center">
-            Recently added to the shelf
-          </h2>
-          <div className="grid grid-cols-4 sm:grid-cols-8 gap-3">
-            {recentBooks === null
-              ? Array.from({ length: 8 }).map((_, i) => (
-                  <Skeleton key={i} className="aspect-[2/3] rounded-md" />
-                ))
-              : recentBooks.map((book) => (
-                  <div
-                    key={book.id}
-                    className="relative aspect-[2/3] w-full rounded-md bg-muted overflow-hidden"
-                    title={book.title}
-                  >
-                    {book.cover_url ? (
-                      <Image
-                        src={book.cover_url}
-                        alt={`Cover of ${book.title}`}
-                        fill
-                        className="object-cover"
-                        sizes="(max-width: 640px) 25vw, 12vw"
-                      />
-                    ) : (
-                      <div className="flex h-full items-center justify-center p-2">
-                        <BookOpen className="size-6 text-muted-foreground/60" />
-                      </div>
-                    )}
-                  </div>
-                ))}
-          </div>
+        {/* On narrow screens the phone mockup can't overlap the desktop
+            shot without cramping both — show it full-size underneath instead. */}
+        <div className="sm:hidden w-40 mx-auto overflow-hidden rounded-[1.25rem] border-4 border-background shadow-lg ring-1 ring-border">
+          <Image
+            src="/screenshots/catalog-mobile-dark.png"
+            alt="The same catalogue on a phone in dark mode, with the bottom tab bar for quick navigation"
+            width={390}
+            height={664}
+            className="block dark:hidden w-full h-auto"
+            sizes="10rem"
+          />
+          <Image
+            src="/screenshots/catalog-mobile.png"
+            alt="The same catalogue on a phone in light mode, with the bottom tab bar for quick navigation"
+            width={390}
+            height={664}
+            className="hidden dark:block w-full h-auto"
+            sizes="10rem"
+          />
         </div>
-      ) : null}
+      </div>
 
       {/* Features */}
       <div className="flex flex-col gap-6">

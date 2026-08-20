@@ -26,7 +26,7 @@ func newWorkflow() *workflowDeps {
 	users := repotest.NewUserRepository()
 	loanReqs := repotest.NewLoanRequestRepository(copies, notifs, users)
 	waitlists := repotest.NewWaitlistRepository()
-	email := NewEmailService("", "", "", "", "", "", "")
+	email := NewEmailService("", "", "", "", "", "", "", "http://localhost:3000")
 	return &workflowDeps{
 		workflow: NewLoanWorkflow(copies, loanReqs, notifs, users, waitlists, email),
 		copies:   copies, loanReqs: loanReqs, notifs: notifs, users: users, waitlists: waitlists,

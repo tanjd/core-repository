@@ -3,7 +3,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import Image from "next/image";
 import { toast } from "sonner";
 import { BrowserMultiFormatReader, BarcodeFormat } from "@zxing/browser";
 import type { IScannerControls } from "@zxing/browser";
@@ -20,6 +19,7 @@ import {
 import { ConditionPicker, type Condition } from "../components/ConditionPicker";
 import { CopySettings } from "../components/CopySettings";
 import { MetadataSearchStep } from "../components/MetadataSearchStep";
+import { BookCover } from "@/components/BookCover";
 
 type ScanItemStatus = "resolving" | "resolved" | "unresolved";
 
@@ -449,18 +449,17 @@ function ScanItemCard({
     <div className="flex flex-col gap-3 rounded-lg border p-3">
       <div className="flex items-start gap-3">
         <div className="relative w-12 aspect-[2/3] rounded overflow-hidden bg-muted shrink-0">
-          {r?.cover_url ? (
-            <Image
-              src={r.cover_url}
-              alt={r.title}
-              fill
-              className="object-cover"
+          {item.status === "resolving" && !r?.cover_url ? (
+            <div className="flex h-full items-center justify-center text-[8px] text-muted-foreground text-center">
+              …
+            </div>
+          ) : (
+            <BookCover
+              title={r?.title ?? item.isbn}
+              author={r?.author}
+              coverUrl={r?.cover_url}
               sizes="48px"
             />
-          ) : (
-            <div className="flex h-full items-center justify-center text-[8px] text-muted-foreground text-center">
-              {item.status === "resolving" ? "…" : "No cover"}
-            </div>
           )}
         </div>
         <div className="flex flex-col gap-0.5 min-w-0 flex-1">

@@ -1,13 +1,13 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import Image from "next/image";
 import { Search } from "lucide-react";
 import { api } from "@/lib/api";
 import type { BookMetadataResult } from "@/lib/types";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
+import { BookCover } from "@/components/BookCover";
 
 /**
  * Title/author/ISBN metadata search — shared by the main /share flow and
@@ -155,19 +155,12 @@ export function MetadataSearchStep({
               className="flex items-center gap-3 rounded-lg border p-3 text-left hover:bg-accent transition-colors"
             >
               <div className="relative w-10 aspect-[2/3] rounded overflow-hidden bg-muted shrink-0">
-                {result.cover_url ? (
-                  <Image
-                    src={result.cover_url}
-                    alt={result.title}
-                    fill
-                    className="object-cover"
-                    sizes="40px"
-                  />
-                ) : (
-                  <div className="flex h-full items-center justify-center text-[8px] text-muted-foreground text-center">
-                    No cover
-                  </div>
-                )}
+                <BookCover
+                  title={result.title}
+                  author={result.author}
+                  coverUrl={result.cover_url}
+                  sizes="40px"
+                />
               </div>
               <div className="flex flex-col gap-0.5 min-w-0 flex-1">
                 <p className="text-sm font-medium truncate">{result.title}</p>

@@ -1,7 +1,6 @@
-import Image from "next/image";
-import { BookOpen } from "lucide-react";
 import type { LoanRequest } from "@/lib/types";
 import { Card, CardContent } from "@/components/ui/card";
+import { BookCover } from "@/components/BookCover";
 
 // A compact glance at one currently-held loan (status "accepted" guaranteed
 // by the caller) — cover, title, author, and due date. Full detail (message,
@@ -14,19 +13,12 @@ export function CurrentlyBorrowedCard({ request }: { request: LoanRequest }) {
     <Card className="overflow-hidden py-0 gap-0">
       <CardContent className="p-3 flex gap-3">
         <div className="relative w-14 aspect-[2/3] rounded overflow-hidden bg-muted shrink-0">
-          {book?.cover_url ? (
-            <Image
-              src={book.cover_url}
-              alt={book.title}
-              fill
-              className="object-cover"
-              sizes="56px"
-            />
-          ) : (
-            <div className="flex h-full items-center justify-center">
-              <BookOpen className="size-5 text-muted-foreground/60" />
-            </div>
-          )}
+          <BookCover
+            title={book?.title ?? "Unknown book"}
+            author={book?.author}
+            coverUrl={book?.cover_url}
+            sizes="56px"
+          />
         </div>
         <div className="flex flex-col gap-1 min-w-0 flex-1">
           <p className="text-sm font-medium leading-snug line-clamp-2">

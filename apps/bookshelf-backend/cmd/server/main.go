@@ -93,7 +93,7 @@ func main() {
 	wishlistRepo := gormrepo.NewWishlistRequestRepository(database)
 
 	// Services
-	emailSvc := services.NewEmailService(cfg.SMTPHost, cfg.SMTPPort, cfg.SMTPUsername, cfg.SMTPPassword, cfg.EmailFrom, cfg.Env, cfg.DevEmailOverride)
+	emailSvc := services.NewEmailService(cfg.SMTPHost, cfg.SMTPPort, cfg.SMTPUsername, cfg.SMTPPassword, cfg.EmailFrom, cfg.Env, cfg.DevEmailOverride, cfg.FrontendOrigin)
 	smsSvc := services.NewMockSMSService()
 	workflow := services.NewLoanWorkflow(copyRepo, loanRepo, notifRepo, userRepo, waitlistRepo, emailSvc)
 	wishlistWorkflow := services.NewWishlistWorkflow(wishlistRepo, notifRepo, userRepo, emailSvc)

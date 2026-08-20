@@ -100,7 +100,7 @@ func (w *WishlistWorkflow) fulfill(ctx context.Context, req *models.WishlistRequ
 		"<p>Hi %s,</p><p><strong>%s</strong> by %s, which you were looking for, has been added to the catalog. "+
 			"Visit the book's page to request to borrow it.</p>",
 		html.EscapeString(requester.Name), html.EscapeString(book.Title), html.EscapeString(book.Author),
-	)
+	) + w.email.Button(fmt.Sprintf("/catalog/%d", book.ID), "View book")
 	if requester.EmailNotificationsEnabled {
 		w.email.SendEmailAsync(ctx, requester.Email, subject, body)
 	}

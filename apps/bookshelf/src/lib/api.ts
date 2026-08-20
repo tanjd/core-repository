@@ -295,11 +295,16 @@ export const api = {
       method: "POST",
       body: JSON.stringify({ email }),
     }),
-  verifyRegisterEmailOTP: (email: string, code: string) =>
-    request<{ verification_token: string }>("/auth/register/verify-email-otp", {
-      method: "POST",
-      body: JSON.stringify({ email, code }),
-    }),
+  verifyRegisterEmailOTP: (
+    data: { email: string; code: string } | { token: string },
+  ) =>
+    request<{ verification_token: string; email: string }>(
+      "/auth/register/verify-email-otp",
+      {
+        method: "POST",
+        body: JSON.stringify(data),
+      },
+    ),
   sendRegisterPhoneOTP: (phone: string) =>
     request<{ mock_code: string }>("/auth/register/send-phone-otp", {
       method: "POST",
@@ -320,12 +325,12 @@ export const api = {
       method: "POST",
       body: JSON.stringify({ email }),
     }),
-  resetPassword: (data: {
-    email: string;
-    code: string;
-    new_password: string;
-    confirm_password: string;
-  }) =>
+  resetPassword: (
+    data: ({ email: string; code: string } | { token: string }) & {
+      new_password: string;
+      confirm_password: string;
+    },
+  ) =>
     request<void>("/auth/reset-password", {
       method: "POST",
       body: JSON.stringify(data),
@@ -340,7 +345,10 @@ export const api = {
     telegram_username?: string;
     whatsapp_username?: string;
   }) =>
-    request<User>("/auth/me", { method: "PATCH", body: JSON.stringify(data) }),
+    request<User & { pending_email_debug_code?: string }>("/auth/me", {
+      method: "PATCH",
+      body: JSON.stringify(data),
+    }),
   changePassword: (data: {
     current_password: string;
     new_password: string;
@@ -356,19 +364,19 @@ export const api = {
       { method: "POST", body: JSON.stringify({ key: key ?? "" }) },
     ),
   sendOTP: () =>
-    request<void>("/auth/send-otp", {
+    request<{ debug_code?: string }>("/auth/send-otp", {
       method: "POST",
       body: JSON.stringify({}),
     }),
-  verifyOTP: (code: string) =>
+  verifyOTP: (data: { code: string } | { token: string }) =>
     request<User>("/auth/verify-otp", {
       method: "POST",
-      body: JSON.stringify({ code }),
+      body: JSON.stringify(data),
     }),
-  confirmEmailChange: (code: string) =>
+  confirmEmailChange: (data: { code: string } | { token: string }) =>
     request<User>("/auth/confirm-email-change", {
       method: "POST",
-      body: JSON.stringify({ code }),
+      body: JSON.stringify(data),
     }),
   myVerificationStatus: () =>
     request<VerificationStatus>("/auth/me/verification-status"),
