@@ -1,3 +1,13 @@
+## 0.6.1 (2026-08-20)
+
+### 🚀 Features
+
+- **bookshelf,bookshelf-e2e:** landing page for logged-out visitors, e2e against real servers ([#54](https://github.com/tanjd/core-repository/pull/54))
+
+### ❤️ Thank You
+
+- Jeddy Tan @tanjd
+
 ## 0.6.0 (2026-08-19)
 
 ### 🚀 Features
