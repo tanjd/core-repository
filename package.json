@@ -97,7 +97,7 @@
       "goimports -w"
     ],
     "*.{js,jsx,ts,tsx}": [
-      "eslint --fix",
+      "node scripts/lint-staged-eslint.mjs",
       "oxfmt"
     ],
     "*.{md,yml,yaml,css,html}": [
