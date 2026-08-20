@@ -1,3 +1,13 @@
+## 0.8.0 (2026-08-20)
+
+### 🚀 Features
+
+- **bookshelf-backend:** delete orphaned keyless books on last-copy removal ([#56](https://github.com/tanjd/core-repository/pull/56))
+
+### ❤️ Thank You
+
+- Jeddy Tan @tanjd
+
 ## 0.7.0 (2026-08-20)
 
 ### 🚀 Features
