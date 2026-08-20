@@ -1,3 +1,13 @@
+## 0.10.0 (2026-08-20)
+
+### 🚀 Features
+
+- **bookshelf,bookshelf-backend,bookshelf-e2e:** export and import books ([#58](https://github.com/tanjd/core-repository/pull/58))
+
+### ❤️ Thank You
+
+- Jeddy Tan @tanjd
+
 ## 0.9.0 (2026-08-20)
 
 ### 🚀 Features
