@@ -87,6 +87,116 @@ test("exporting then re-importing a book matches it to the existing catalog entr
     expect(matchingCopies.length).toBe(2);
   });
 
+  // Two more books, each with their own copy, dedicated to the fuzzy-match
+  // scenarios below — kept separate from `book` (and from each other) so a
+  // possible_match row's candidate is never ambiguous between two catalog
+  // entries sharing a normalized title+author (findFuzzyMatch's "first found
+  // wins" behavior would make that outcome order-dependent).
+  const fuzzyDefaultTitle = `E2E Fuzzy Default ${Date.now()}`;
+  const fuzzyDefaultBookResponse = await page.request.post("/api/books", {
+    headers: { Authorization: `Bearer ${token}` },
+    data: { title: fuzzyDefaultTitle, author: "E2E Fuzzy Author" },
+  });
+  expect(fuzzyDefaultBookResponse.ok()).toBeTruthy();
+  const fuzzyDefaultBook = await fuzzyDefaultBookResponse.json();
+  const fuzzyDefaultCopyResponse = await page.request.post("/api/copies", {
+    headers: { Authorization: `Bearer ${token}` },
+    data: { book_id: fuzzyDefaultBook.id, condition: "good" },
+  });
+  expect(fuzzyDefaultCopyResponse.ok()).toBeTruthy();
+
+  const fuzzyAcceptTitle = `E2E Fuzzy Accept ${Date.now()}`;
+  const fuzzyAcceptBookResponse = await page.request.post("/api/books", {
+    headers: { Authorization: `Bearer ${token}` },
+    data: { title: fuzzyAcceptTitle, author: "E2E Fuzzy Author" },
+  });
+  expect(fuzzyAcceptBookResponse.ok()).toBeTruthy();
+  const fuzzyAcceptBook = await fuzzyAcceptBookResponse.json();
+  const fuzzyAcceptCopyResponse = await page.request.post("/api/copies", {
+    headers: { Authorization: `Bearer ${token}` },
+    data: { book_id: fuzzyAcceptBook.id, condition: "good" },
+  });
+  expect(fuzzyAcceptCopyResponse.ok()).toBeTruthy();
+
+  await test.step("a title+author match with no external key surfaces as a possible match, defaulting to a new book when left untouched", async () => {
+    await page.goto("/my-books");
+    await page.getByRole("button", { name: "Import" }).click();
+    await expect(
+      page.getByRole("heading", { name: "Import Books" }),
+    ).toBeVisible();
+
+    // No isbn/ol_key/google_books_id — findExistingBook can't match this row,
+    // so it falls to the normalized title+author fallback (findFuzzyMatch).
+    const fuzzyContent = JSON.stringify([
+      { title: fuzzyDefaultTitle, author: "E2E Fuzzy Author" },
+    ]);
+    await page.locator("#import-file-input").setInputFiles({
+      name: "fuzzy.json",
+      mimeType: "application/json",
+      buffer: Buffer.from(fuzzyContent),
+    });
+
+    await expect(
+      page.getByText("Possible match", { exact: true }),
+    ).toBeVisible();
+    await expect(page.getByText(/Matches your existing copy of/)).toBeVisible();
+
+    // Leave the toggle on its default ("Add as new") and confirm.
+    await page.getByRole("button", { name: "Import 1 book" }).click();
+    await expect(page.getByRole("button", { name: "Done" })).toBeVisible();
+    await page.getByRole("button", { name: "Done" }).click();
+
+    const copiesResponse = await page.request.get("/api/copies/mine", {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    const copies: { id: number; book_id: number }[] =
+      await copiesResponse.json();
+    const matchingCopies = copies.filter(
+      (c) => c.book_id === fuzzyDefaultBook.id,
+    );
+    expect(
+      matchingCopies.length,
+      "an unresolved possible_match must never silently merge into the existing book",
+    ).toBe(1);
+  });
+
+  await test.step("choosing 'Use existing' on a possible match attaches to the existing book instead", async () => {
+    await page.goto("/my-books");
+    await page.getByRole("button", { name: "Import" }).click();
+    await expect(
+      page.getByRole("heading", { name: "Import Books" }),
+    ).toBeVisible();
+
+    const fuzzyContent = JSON.stringify([
+      { title: fuzzyAcceptTitle, author: "E2E Fuzzy Author" },
+    ]);
+    await page.locator("#import-file-input").setInputFiles({
+      name: "fuzzy-2.json",
+      mimeType: "application/json",
+      buffer: Buffer.from(fuzzyContent),
+    });
+
+    await expect(
+      page.getByText("Possible match", { exact: true }),
+    ).toBeVisible();
+    await page.getByRole("radio", { name: "Use existing" }).check();
+
+    await page.getByRole("button", { name: "Import 1 book" }).click();
+    await expect(page.getByRole("button", { name: "Done" })).toBeVisible();
+    await expect(page.getByText("Matched", { exact: true })).toBeVisible();
+    await page.getByRole("button", { name: "Done" }).click();
+
+    const copiesResponse = await page.request.get("/api/copies/mine", {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    const copies: { id: number; book_id: number }[] =
+      await copiesResponse.json();
+    const matchingCopies = copies.filter(
+      (c) => c.book_id === fuzzyAcceptBook.id,
+    );
+    expect(matchingCopies.length).toBe(2);
+  });
+
   await test.step("a corrupted import file fails safely without touching the catalog", async () => {
     const before = await page.request.get("/api/copies/mine", {
       headers: { Authorization: `Bearer ${token}` },

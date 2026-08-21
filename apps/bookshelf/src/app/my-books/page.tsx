@@ -19,6 +19,7 @@ import type {
   ImportResult,
   ImportRowAction,
   ImportSummary,
+  ImportDecision,
 } from "@/lib/api";
 import type { Copy } from "@/lib/types";
 import { Button } from "@/components/ui/button";
@@ -82,12 +83,14 @@ const importActionVariant: Record<
 > = {
   create_book: "success",
   match_existing_book: "outline",
+  possible_match: "secondary",
   skipped: "secondary",
 };
 
 const importActionLabel: Record<ImportRowAction, string> = {
   create_book: "New book",
   match_existing_book: "Matched",
+  possible_match: "Possible match",
   skipped: "Skipped",
 };
 
@@ -100,6 +103,11 @@ function importSummaryText(summary: ImportSummary, isResult: boolean): string {
   }
   if (summary.books_matched > 0) {
     parts.push(`${summary.books_matched} matched to your existing catalog`);
+  }
+  if (summary.possible_matches > 0) {
+    parts.push(
+      `${summary.possible_matches} possible match${summary.possible_matches === 1 ? "" : "es"} to review`,
+    );
   }
   if (summary.skipped > 0) {
     parts.push(`${summary.skipped} skipped`);
@@ -153,6 +161,12 @@ export default function MyBooksPage() {
   const [importResult, setImportResult] = useState<ImportResult | null>(null);
   const [importBusy, setImportBusy] = useState(false);
   const [importError, setImportError] = useState("");
+  // Per-row resolution for possible_match rows, keyed by 1-based row number
+  // (importRowResult.row). A row with no entry here defaults to "create_new"
+  // on commit — matches the backend's safe default.
+  const [importDecisions, setImportDecisions] = useState<
+    Record<number, ImportDecision>
+  >({});
   const importInputRef = useRef<HTMLInputElement>(null);
 
   // Fetched separately, after the main copies list renders — per-copy
@@ -318,6 +332,7 @@ export default function MyBooksPage() {
     setImportPreview(null);
     setImportResult(null);
     setImportError("");
+    setImportDecisions({});
     if (importInputRef.current) importInputRef.current.value = "";
   }
 
@@ -325,6 +340,7 @@ export default function MyBooksPage() {
     setImportError("");
     setImportResult(null);
     setImportPreview(null);
+    setImportDecisions({});
     const format = importFormatFromFilename(file.name);
     if (!format) {
       setImportError("File must be .json, .yaml, .yml, or .csv");
@@ -354,7 +370,7 @@ export default function MyBooksPage() {
     setImportBusy(true);
     try {
       const content = await importFile.text();
-      const result = await api.importBooks(format, content);
+      const result = await api.importBooks(format, content, importDecisions);
       setImportResult(result);
       setImportPreview(null);
       const added = result.summary.books_created + result.summary.books_matched;
@@ -896,21 +912,71 @@ export default function MyBooksPage() {
                 {(importPreview ?? importResult)!.rows.map((row) => (
                   <div
                     key={row.row}
-                    className="flex items-center justify-between gap-2 px-3 py-2 text-sm"
+                    className="flex flex-col gap-1.5 px-3 py-2 text-sm"
                   >
-                    <span className="truncate">
-                      {row.title || `Row ${row.row}`}
-                    </span>
-                    <div className="flex items-center gap-2 shrink-0">
-                      {row.action === "skipped" && row.reason && (
-                        <span className="text-xs text-muted-foreground">
-                          {row.reason}
-                        </span>
-                      )}
-                      <Badge variant={importActionVariant[row.action]}>
-                        {importActionLabel[row.action]}
-                      </Badge>
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="truncate">
+                        {row.title || `Row ${row.row}`}
+                      </span>
+                      <div className="flex items-center gap-2 shrink-0">
+                        {row.action === "skipped" && row.reason && (
+                          <span className="text-xs text-muted-foreground">
+                            {row.reason}
+                          </span>
+                        )}
+                        <Badge variant={importActionVariant[row.action]}>
+                          {importActionLabel[row.action]}
+                        </Badge>
+                      </div>
                     </div>
+                    {row.action === "possible_match" && importPreview && (
+                      <div className="flex flex-col gap-1.5 rounded-md bg-muted/40 p-2">
+                        <p className="text-xs text-muted-foreground">
+                          Matches your existing copy of{" "}
+                          <span className="font-medium text-foreground">
+                            {row.matched_book_title}
+                          </span>
+                          {row.matched_book_author
+                            ? ` by ${row.matched_book_author}`
+                            : ""}
+                        </p>
+                        <RadioGroup
+                          value={importDecisions[row.row] ?? "create_new"}
+                          onValueChange={(value) =>
+                            setImportDecisions((prev) => ({
+                              ...prev,
+                              [row.row]: value as ImportDecision,
+                            }))
+                          }
+                          className="flex flex-row gap-4"
+                        >
+                          <div className="flex items-center gap-1.5">
+                            <RadioGroupItem
+                              value="create_new"
+                              id={`import-decision-${row.row}-new`}
+                            />
+                            <Label
+                              htmlFor={`import-decision-${row.row}-new`}
+                              className="text-xs font-normal cursor-pointer"
+                            >
+                              Add as new
+                            </Label>
+                          </div>
+                          <div className="flex items-center gap-1.5">
+                            <RadioGroupItem
+                              value="accept_match"
+                              id={`import-decision-${row.row}-match`}
+                            />
+                            <Label
+                              htmlFor={`import-decision-${row.row}-match`}
+                              className="text-xs font-normal cursor-pointer"
+                            >
+                              Use existing
+                            </Label>
+                          </div>
+                        </RadioGroup>
+                      </div>
+                    )}
                   </div>
                 ))}
               </div>
@@ -935,10 +1001,12 @@ export default function MyBooksPage() {
                     ? "Importing…"
                     : `Import ${
                         importPreview.summary.books_created +
-                        importPreview.summary.books_matched
+                        importPreview.summary.books_matched +
+                        importPreview.summary.possible_matches
                       } book${
                         importPreview.summary.books_created +
-                          importPreview.summary.books_matched ===
+                          importPreview.summary.books_matched +
+                          importPreview.summary.possible_matches ===
                         1
                           ? ""
                           : "s"

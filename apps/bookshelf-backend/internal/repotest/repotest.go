@@ -1060,7 +1060,49 @@ func (r *BookRepository) GetByIDWithCopies(id uint) (*models.Book, error) {
 }
 
 // List returns nil — not exercised by any test using this fake yet.
-func (r *BookRepository) List(_, _ string, _ bool) ([]models.Book, error) { return nil, nil }
+// List returns books with at least one copy — mirrors the real
+// implementation's EXISTS-copies filter (availableOnly narrows that to an
+// available copy) — optionally substring-filtered by search against
+// title/author, case-insensitive. sort is ignored: no caller relies on
+// ordering from this fake yet.
+func (r *BookRepository) List(search, _ string, availableOnly bool) ([]models.Book, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	search = strings.ToLower(search)
+	var out []models.Book
+	for _, b := range r.byID {
+		if !r.hasCopyLocked(b.ID, availableOnly) {
+			continue
+		}
+		if search != "" && !strings.Contains(strings.ToLower(b.Title), search) &&
+			!strings.Contains(strings.ToLower(b.Author), search) {
+			continue
+		}
+		out = append(out, *b)
+	}
+	return out, nil
+}
+
+// hasCopyLocked reports whether book bookID has at least one copy
+// (availableOnly: at least one with status "available"). Callers must
+// already hold r.mu.
+func (r *BookRepository) hasCopyLocked(bookID uint, availableOnly bool) bool {
+	if r.copies == nil {
+		return false
+	}
+	r.copies.mu.Lock()
+	defer r.copies.mu.Unlock()
+	for _, c := range r.copies.byID {
+		if c.BookID != bookID {
+			continue
+		}
+		if availableOnly && c.Status != "available" {
+			continue
+		}
+		return true
+	}
+	return false
+}
 
 // Count returns the number of stored books — a test helper, not part of the
 // repository.BookRepository interface.
