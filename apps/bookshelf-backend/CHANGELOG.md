@@ -1,3 +1,13 @@
+## 0.11.1 (2026-08-21)
+
+### 🚀 Features
+
+- **bookshelf,bookshelf-e2e:** redesign mobile nav, cover-load fallback ([#60](https://github.com/tanjd/core-repository/pull/60))
+
+### ❤️ Thank You
+
+- Jeddy Tan @tanjd
+
 ## 0.11.0 (2026-08-20)
 
 ### 🚀 Features
