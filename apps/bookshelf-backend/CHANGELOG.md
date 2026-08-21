@@ -1,3 +1,13 @@
+## 0.12.0 (2026-08-21)
+
+### 🚀 Features
+
+- **bookshelf,bookshelf-backend,bookshelf-e2e:** add fuzzy title/author match to book import ([#61](https://github.com/tanjd/core-repository/pull/61))
+
+### ❤️ Thank You
+
+- Jeddy Tan @tanjd
+
 ## 0.11.1 (2026-08-21)
 
 ### 🚀 Features
