@@ -16,8 +16,9 @@ export type NavItem = {
   icon: ComponentType<{ className?: string }>;
   isActive: (pathname: string) => boolean;
   // Desktop has room for every destination in the top nav; the mobile bottom
-  // tab bar doesn't, so items can opt out (e.g. "Share" moves to a FAB on
-  // Catalog instead of taking a thumb-reachable tab slot).
+  // tab bar doesn't, so items can opt out (e.g. "Share" reaches its
+  // destinations via BottomTabBar's own "Share" popover instead of taking a
+  // thumb-reachable tab slot).
   mobileTab?: boolean;
 };
 
@@ -58,7 +59,6 @@ export const primaryNavItems: NavItem[] = [
     shortLabel: "Wishlist",
     icon: Search,
     isActive: (p) => p === "/wishlist",
-    mobileTab: false,
   },
 ];
 

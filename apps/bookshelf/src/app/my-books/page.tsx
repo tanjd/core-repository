@@ -2,14 +2,12 @@
 
 import { useCallback, useEffect, useState, useRef } from "react";
 import Link from "next/link";
-import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import {
   Plus,
   Pencil,
   Trash2,
-  BookOpen,
   ArrowRightLeft,
   Download,
   Upload,
@@ -31,6 +29,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Textarea } from "@/components/ui/textarea";
 import { Skeleton } from "@/components/ui/skeleton";
+import { BookCover } from "@/components/BookCover";
 import {
   Dialog,
   DialogContent,
@@ -505,21 +504,15 @@ export default function MyBooksPage() {
                   href={`/catalog/${group.bookId}`}
                   className="w-14 shrink-0 self-start"
                 >
-                  {group.coverUrl ? (
-                    <div className="relative w-14 aspect-[2/3] rounded overflow-hidden">
-                      <Image
-                        src={group.coverUrl}
-                        alt={group.title}
-                        fill
-                        className="object-cover"
-                        sizes="56px"
-                      />
-                    </div>
-                  ) : (
-                    <div className="w-14 aspect-[2/3] rounded bg-muted flex items-center justify-center">
-                      <BookOpen className="size-5 text-muted-foreground" />
-                    </div>
-                  )}
+                  <div className="relative w-14 aspect-[2/3] rounded overflow-hidden">
+                    <BookCover
+                      title={group.title}
+                      author={group.author}
+                      coverUrl={group.coverUrl}
+                      alt={group.title}
+                      sizes="56px"
+                    />
+                  </div>
                 </Link>
                 <div className="min-w-0">
                   <Link

@@ -2,16 +2,7 @@
 
 import { useState, useEffect, useRef } from "react";
 import Link from "next/link";
-import {
-  Search,
-  SlidersHorizontal,
-  Plus,
-  PlusCircle,
-  ScanLine,
-  Heart,
-  X,
-  Loader2,
-} from "lucide-react";
+import { Search, SlidersHorizontal, Heart, X, Loader2 } from "lucide-react";
 import { api } from "@/lib/api";
 import type { Book, PaginatedResult } from "@/lib/types";
 import { BookCard } from "@/components/BookCard";
@@ -30,11 +21,6 @@ import {
 } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
-import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from "@/components/ui/popover";
 import { useOwnedBookIds } from "@/hooks/useOwnedBookIds";
 
 const PAGE_SIZE = 20;
@@ -343,52 +329,6 @@ export default function CatalogPage() {
           />
         </>
       )}
-
-      {/* Mobile-only speed-dial FAB — desktop already has "Share a Book"
-          and "Wishlist" in the top nav; neither is a bottom-tab slot
-          (see navItems.ts), so this is how mobile users reach either from
-          the primary browse screen. "Scan ISBN" has no desktop nav
-          affordance at all (most desktops lack a book-facing camera). Sits
-          above the bottom tab bar + its safe-area inset. */}
-      <Popover>
-        <PopoverTrigger asChild>
-          <button
-            aria-label="Share a book or post a wishlist request"
-            className="md:hidden fixed right-4 z-40 flex size-14 items-center justify-center rounded-full bg-primary text-primary-foreground shadow-lg active:scale-95 transition-transform data-[state=open]:rotate-45"
-            style={{ bottom: "calc(env(safe-area-inset-bottom) + 4.5rem)" }}
-          >
-            <Plus className="size-6" />
-          </button>
-        </PopoverTrigger>
-        <PopoverContent
-          side="top"
-          align="end"
-          sideOffset={12}
-          className="md:hidden w-52 p-1"
-        >
-          <Link
-            href="/share"
-            className="flex items-center gap-2 rounded-md px-3 py-2 text-sm hover:bg-accent"
-          >
-            <PlusCircle className="size-4" />
-            Share a Book
-          </Link>
-          <Link
-            href="/share/scan"
-            className="flex items-center gap-2 rounded-md px-3 py-2 text-sm hover:bg-accent"
-          >
-            <ScanLine className="size-4" />
-            Scan ISBN
-          </Link>
-          <Link
-            href="/wishlist"
-            className="flex items-center gap-2 rounded-md px-3 py-2 text-sm hover:bg-accent"
-          >
-            <Heart className="size-4" />
-            Wishlist
-          </Link>
-        </PopoverContent>
-      </Popover>
     </div>
   );
 }
