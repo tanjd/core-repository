@@ -23,9 +23,19 @@ func (r *UserRepository) Create(user *models.User) error {
 	return r.db.Create(user).Error
 }
 
+// FindByEmail looks up a user by email, case-insensitively: an address is
+// one identity whatever casing it's typed in, so "Ada@example.com" and
+// "ada@example.com" must not resolve to different accounts (or to none,
+// when the row was stored with the other casing). Backed by
+// idx_users_email_nocase (migration 000011), which both makes this an index
+// lookup rather than a scan and stops two case-variant rows existing in the
+// first place.
+//
+// COLLATE NOCASE folds ASCII only, which is all an email address is in
+// practice — domains are punycode and local parts are effectively ASCII.
 func (r *UserRepository) FindByEmail(email string) (*models.User, error) {
 	var user models.User
-	if err := r.db.Where("email = ?", email).First(&user).Error; err != nil {
+	if err := r.db.Where("email = ? COLLATE NOCASE", email).First(&user).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return nil, repository.ErrNotFound
 		}

@@ -27,27 +27,36 @@ export async function registerTestUser(
   password: string,
   name = "E2E Test User",
 ) {
-  const sendOtp = await request.post(
-    "http://localhost:8000/auth/register/send-email-otp",
-    { data: { email } },
-  );
-  expect(sendOtp.ok()).toBeTruthy();
-  const { debug_code } = await sendOtp.json();
-
+  // Two calls, not three: send-email-otp holds the whole form server-side,
+  // and verify-email-otp creates the account outright.
+  const sendOtp = await startRegistration(request, { name, email, password });
   const verifyOtp = await request.post(
     "http://localhost:8000/auth/register/verify-email-otp",
-    { data: { email, code: debug_code } },
+    { data: { email, code: sendOtp.debug_code } },
   );
-  expect(verifyOtp.ok()).toBeTruthy();
-  const { verification_token } = await verifyOtp.json();
+  // Body in the message, not just ok(): this endpoint is IP-rate-limited
+  // (registerLimiter), and a bare `false` gives no hint that a run
+  // registering many users tripped it rather than the flow being broken.
+  expect(
+    verifyOtp.ok(),
+    `verify-email-otp failed (${verifyOtp.status()}): ${await verifyOtp.text()}`,
+  ).toBeTruthy();
+}
 
-  const register = await request.post("http://localhost:8000/auth/register", {
-    data: {
-      name,
-      email,
-      password,
-      email_verification_token: verification_token,
-    },
-  });
-  expect(register.ok()).toBeTruthy();
+/**
+ * Submits the registration form's details step and returns the dev-only
+ * debug fields — `debug_verify_link` is the exact magic-link URL the
+ * verification email would carry, which no SMTP is configured to deliver in
+ * this run (see playwright.config.ts).
+ */
+export async function startRegistration(
+  request: APIRequestContext,
+  data: { name: string; email: string; password: string; phone?: string },
+): Promise<{ debug_code: string; debug_verify_link: string }> {
+  const res = await request.post(
+    "http://localhost:8000/auth/register/send-email-otp",
+    { data },
+  );
+  expect(res.ok()).toBeTruthy();
+  return res.json();
 }

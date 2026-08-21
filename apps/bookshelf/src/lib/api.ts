@@ -7,6 +7,7 @@ import type {
   Announcement,
   AnnouncementType,
   AuthResponse,
+  RegistrationResult,
   AppSetting,
   BookMetadataResult,
   MetadataProviderStatus,
@@ -28,6 +29,7 @@ export type {
   Announcement,
   AnnouncementType,
   AuthResponse,
+  RegistrationResult,
   AppSetting,
   BookMetadataResult,
   MetadataProviderStatus,
@@ -330,42 +332,28 @@ export const api = {
       method: "POST",
       body: JSON.stringify(data),
     }),
-  register: (data: {
+  // Registration is two calls, not three: this one hands the whole form to
+  // the backend, which holds it (password hashed, never in the link) against
+  // the emailed code; verifyRegisterEmailOTP below then creates the account.
+  sendRegisterEmailOTP: (data: {
     name: string;
     email: string;
     password: string;
     phone?: string;
-    email_verification_token: string;
-    phone_verification_token?: string;
   }) =>
-    request<AuthResponse>("/auth/register", {
-      method: "POST",
-      body: JSON.stringify(data),
-    }),
-  sendRegisterEmailOTP: (email: string) =>
-    request<{ debug_code?: string }>("/auth/register/send-email-otp", {
-      method: "POST",
-      body: JSON.stringify({ email }),
-    }),
-  verifyRegisterEmailOTP: (
-    data: { email: string; code: string } | { token: string },
-  ) =>
-    request<{ verification_token: string; email: string }>(
-      "/auth/register/verify-email-otp",
+    request<{ debug_code?: string; debug_verify_link?: string }>(
+      "/auth/register/send-email-otp",
       {
         method: "POST",
         body: JSON.stringify(data),
       },
     ),
-  sendRegisterPhoneOTP: (phone: string) =>
-    request<{ mock_code: string }>("/auth/register/send-phone-otp", {
+  verifyRegisterEmailOTP: (
+    data: { email: string; code: string } | { token: string },
+  ) =>
+    request<RegistrationResult>("/auth/register/verify-email-otp", {
       method: "POST",
-      body: JSON.stringify({ phone }),
-    }),
-  verifyRegisterPhoneOTP: (phone: string, code: string) =>
-    request<{ verification_token: string }>("/auth/register/verify-phone-otp", {
-      method: "POST",
-      body: JSON.stringify({ phone, code }),
+      body: JSON.stringify(data),
     }),
   login: (data: { email: string; password: string }) =>
     request<AuthResponse>("/auth/login", {

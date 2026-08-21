@@ -151,6 +151,17 @@ cp -r /data/. /backup/`.
 
 ## Known gaps
 
+- **The registration phone-OTP endpoints are dead weight, kept on purpose.**
+  `/auth/register/send-phone-otp` and `/auth/register/verify-phone-otp` are registered, working
+  and tested, but nothing calls them: registration is a single email step since the magic-link
+  rework (`apps/bookshelf/docs/magic-link-registration-spec.md`), and phone is now a plain
+  optional field. They're held against a future real SMS provider rather than deleted — see the
+  tech-debt comment on `sendRegisterPhoneOTP` in `internal/handlers/auth.go` for the full removal
+  list if that bet doesn't pay off. Two consequences worth knowing: the token
+  `verifyRegisterPhoneOTP` mints has no validator any more (`/auth/register` was its only
+  consumer), and `User.PhoneVerified` is never set true by anything, which is why
+  `phoneOnFileFactor` checks `Phone != ""` instead — matching what `checkPhoneRequirement`
+  (`loan_requests.go`) has always actually enforced at borrow time.
 - **Deleting a `Copy` orphans its `loan_requests.copy_id` history.** SQLite FK enforcement is off
   (no `PRAGMA foreign_keys=ON`), and that column has no `ON DELETE` action in the migration
   (`internal/db/migrations/000001_init.up.sql`), so `deleteCopy` (`internal/handlers/copies.go`)

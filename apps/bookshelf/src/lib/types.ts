@@ -165,6 +165,17 @@ export interface AuthResponse {
   user: User;
 }
 
+/**
+ * Outcome of `POST /auth/register/verify-email-otp`, which is where an
+ * account is actually created — both by typing the emailed code and by
+ * clicking the emailed magic link. A `complete` result carries a live
+ * session; `pending_approval` means the account exists but an admin has to
+ * let it in first, so there's no token to store.
+ */
+export type RegistrationResult =
+  | { status: "complete"; token: string; user: User }
+  | { status: "pending_approval"; token?: never; user: User };
+
 // Normalised metadata search result (from backend proxy)
 export interface BookMetadataResult {
   source: "openlibrary" | "google_books" | "bookbrainz";
