@@ -1,20 +1,65 @@
 "use client";
 
-import { useEffect, useState, useRef } from "react";
+import { useEffect, useState, useRef, type ReactNode } from "react";
 import Link from "next/link";
 import { useRouter, usePathname } from "next/navigation";
-import { BookOpen, LogOut } from "lucide-react";
+import { BookOpen, ChevronDown, LogOut } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { NotificationBell } from "@/components/NotificationBell";
 import { BottomTabBar } from "@/components/layout/BottomTabBar";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { primaryNavItems, profileNavItem } from "@/components/layout/navItems";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
 
 function navLinkClass(active: boolean) {
   return cn(
     "px-3 py-1.5 rounded-md text-sm font-medium transition-colors hover:bg-accent hover:text-accent-foreground",
     active ? "bg-accent text-accent-foreground" : "text-muted-foreground",
+  );
+}
+
+// Shared by the desktop and mobile headers: tap the trigger for a popover
+// with the Profile/Admin link followed by Logout (Facebook-style), rather
+// than Logout being its own always-visible control.
+function ProfileMenu({
+  profileItem,
+  onLogout,
+  trigger,
+}: {
+  profileItem: ReturnType<typeof profileNavItem>;
+  onLogout: () => void;
+  trigger: ReactNode;
+}) {
+  return (
+    <Popover>
+      <PopoverTrigger asChild>{trigger}</PopoverTrigger>
+      <PopoverContent
+        side="bottom"
+        align="end"
+        sideOffset={8}
+        className="w-44 p-1"
+      >
+        <Link
+          href={profileItem.href}
+          className="flex items-center gap-2 rounded-md px-3 py-2 text-sm hover:bg-accent"
+        >
+          <profileItem.icon className="size-4" />
+          {profileItem.label}
+        </Link>
+        <button
+          onClick={onLogout}
+          className="flex w-full items-center gap-2 rounded-md px-3 py-2 text-sm hover:bg-accent"
+        >
+          <LogOut className="size-4" />
+          Logout
+        </button>
+      </PopoverContent>
+    </Popover>
   );
 }
 
@@ -89,20 +134,21 @@ export function NavBar() {
                     </Link>
                   ))}
                   <NotificationBell />
-                  <Link
-                    href={profileItem.href}
-                    className={navLinkClass(profileItem.isActive(pathname))}
-                  >
-                    {profileItem.label}
-                  </Link>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={handleLogout}
-                    className="text-muted-foreground"
-                  >
-                    Logout
-                  </Button>
+                  <ProfileMenu
+                    profileItem={profileItem}
+                    onLogout={handleLogout}
+                    trigger={
+                      <button
+                        className={cn(
+                          navLinkClass(profileItem.isActive(pathname)),
+                          "flex items-center gap-1",
+                        )}
+                      >
+                        {profileItem.label}
+                        <ChevronDown className="size-3.5" />
+                      </button>
+                    }
+                  />
                 </>
               ) : (
                 <>
@@ -121,17 +167,27 @@ export function NavBar() {
             </div>
 
             {/* Mobile — guests get compact login/register CTAs; authenticated
-                users just get a logout icon since navigation moved to the
-                bottom tab bar */}
+                users get Alerts, theme toggle, and a Profile menu (Facebook-
+                style: tap the profile icon for a popover with Profile/Admin
+                + Logout) since navigation moved to the bottom tab bar */}
             <div className="md:hidden flex items-center gap-1">
               {isAuth ? (
-                <button
-                  onClick={handleLogout}
-                  className="p-2 rounded-md text-muted-foreground hover:bg-accent transition-colors"
-                  aria-label="Logout"
-                >
-                  <LogOut className="size-5" />
-                </button>
+                <>
+                  <NotificationBell />
+                  <ThemeToggle />
+                  <ProfileMenu
+                    profileItem={profileItem}
+                    onLogout={handleLogout}
+                    trigger={
+                      <button
+                        className="p-2 rounded-md text-muted-foreground hover:bg-accent transition-colors"
+                        aria-label="Profile menu"
+                      >
+                        <profileItem.icon className="size-5" />
+                      </button>
+                    }
+                  />
+                </>
               ) : (
                 <>
                   <Link
@@ -143,15 +199,15 @@ export function NavBar() {
                   <Link href="/register">
                     <Button size="sm">Register</Button>
                   </Link>
+                  <ThemeToggle />
                 </>
               )}
-              <ThemeToggle />
             </div>
           </div>
         </div>
       </nav>
 
-      {isAuth && <BottomTabBar isAdmin={isAdmin} />}
+      {isAuth && <BottomTabBar />}
     </>
   );
 }

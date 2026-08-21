@@ -1,4 +1,4 @@
-import { render } from "@testing-library/react";
+import { fireEvent, render } from "@testing-library/react";
 import { BookCover } from "./BookCover";
 
 jest.mock("next/image", () => ({
@@ -52,6 +52,24 @@ describe("BookCover", () => {
       (el) => el.textContent,
     );
     expect(texts).toEqual(["Dune"]);
+  });
+
+  it("renders the generated SVG fallback if the cover image fails to load", () => {
+    const { container } = render(
+      <BookCover
+        title="Dune"
+        author="Frank Herbert"
+        coverUrl="https://example.com/broken.jpg"
+        sizes="100px"
+      />,
+    );
+
+    const img = container.querySelector("img");
+    expect(img).not.toBeNull();
+    fireEvent.error(img as HTMLImageElement);
+
+    expect(container.querySelector("img")).toBeNull();
+    expect(container.querySelector("svg")).not.toBeNull();
   });
 
   it("produces the same generated cover for the same title across renders", () => {

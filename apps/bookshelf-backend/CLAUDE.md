@@ -46,6 +46,11 @@ apps/bookshelf-backend/Dockerfile .`) and switched from the source repo's `golan
   a comment justifying its blank `mattn/go-sqlite3` import, and four `Ping`/`Exec` calls switched
   to `PingContext`/`ExecContext` (`noctx`). See the repo-root `CLAUDE.md`'s Go tooling notes — this
   now genuinely widens linting for every Go app in the workspace, not just this one.
+- Dockerized (GHCR) and versioned independently via `nx release` (`release.projects` in root
+  `nx.json`); numbering restarted from `0.1.0` at migration rather than continuing the source
+  repo's own version history (that history wasn't preserved either, per the migration decision
+  above) — current version is whatever `apps/bookshelf-backend/CHANGELOG.md`'s latest entry says,
+  not necessarily `0.x`.
 
 ## Go tooling
 
@@ -60,15 +65,10 @@ apps/bookshelf-backend/Dockerfile .`) and switched from the source repo's `golan
 - `nx run bookshelf-backend:lint` depends on `golangci-lint` (see `nx.json` →
   `targetDefaults.lint.dependsOn`), so a plain `nx affected -t lint` genuinely gates on it, not
   just `go vet`/`go fmt`.
-- `./data/screenshot-seed.db` (gitignored, same `*.db` rule) is a pre-seeded DB for taking
-  `apps/bookshelf` landing-page screenshots against real-looking data instead of an empty
-  catalogue: 10 real books (real Open Library/Google Books covers/metadata, via
-  `/books/metadata/search`) split across two accounts —
-  `admin@bookshelf.local` / `jamie@bookshelf.local`, both password `ScreenshotDemo42!` — so the
-  catalogue reads as a multi-person community rather than one account's shelf. Point `DB_PATH` at
-  it (`DB_PATH=./data/screenshot-seed.db go run ./cmd/server`) instead of reseeding from scratch;
-  copy the `.db`/`-shm`/`-wal` trio together since it was last stopped mid-WAL rather than cleanly
-  checkpointed.
+- Regenerating `apps/bookshelf`'s landing-page screenshots seeds a disposable `DB_PATH` (e.g.
+  `./data/screenshot-seed.db`, gitignored via the same `*.db` rule) against a running instance of
+  this server — see `apps/bookshelf-e2e/CLAUDE.md`'s note on `src/tools/generate-landing-screenshots.ts`
+  for the actual mechanism and the exact commands to boot it.
 
 ## Wishlist board
 
@@ -150,11 +150,6 @@ cp -r /data/. /backup/`.
      dashboard.
 
 ## Known gaps
-
-Dockerized (GHCR) and versioned independently via `nx release` (`release.projects` in root
-`nx.json`) — this is its first release; the version starts at `0.1.0` rather than continuing the
-source repo's own version history (that history wasn't preserved either, per the migration
-decision above).
 
 - **Deleting a `Copy` orphans its `loan_requests.copy_id` history.** SQLite FK enforcement is off
   (no `PRAGMA foreign_keys=ON`), and that column has no `ON DELETE` action in the migration

@@ -34,6 +34,18 @@ leaves nothing behind; a spec here does the same verification once and stays as 
 test. If the flow you're checking has no coverage yet, add a spec (or extend an existing one)
 rather than reaching for a standalone script.
 
+`src/tools/generate-landing-screenshots.ts` is the one deliberate exception: it's not a
+regression check but an asset generator, re-run whenever a catalog/nav UI change makes
+`apps/bookshelf/public/screenshots/catalog-{desktop,mobile}{,-dark}.png` (embedded by
+`LandingPage.tsx`) stale. Named without `.spec.ts` on purpose so `testMatch` never picks it up as
+a test. It seeds a throwaway _second_ user to own the demo catalog (not the admin account it logs
+in as) so no card ends up wrongly badged "Yours", mixes real ISBNs (real Open Library cover art)
+with a couple of cover-less entries (BookCoverFallback's gradient), and screenshots each
+theme/viewport combo at the exact width/height/deviceScaleFactor the `<Image>` calls in
+`LandingPage.tsx` expect. Run it against a disposable `DB_PATH` (its header comment has the exact
+commands) — never a real dev DB — and pipe the output through `pngquant --quality=70-90 --speed 1
+--strip` before committing; Playwright's raw PNG output ran ~2.5x larger than the optimized file.
+
 ## Real backend vs. mocked API: which for a new spec?
 
 Two tiers already exist in this app; a third is available but unused so far:
@@ -93,7 +105,14 @@ local dev (where the DB isn't wiped) stay idempotent.
 
 Specs that need to be logged in should import those constants and log in through the UI via
 `login()` (`src/auth-helpers.ts`) rather than re-deriving credentials or re-typing the
-goto/fill/click sequence. There's no shared `storageState` yet — add one (save it from
+goto/fill/click sequence.
+
+A spec that registers its own one-off test user (rather than logging in as the seeded admin)
+should use `E2E_TEST_USER_PASSWORD` from `test-users.ts` for it, instead of inventing a fresh
+password literal — that way anyone poking at a leftover test user later doesn't need to go dig
+through spec files to find its password. Only fall back to a spec-local literal when the test
+itself needs a second, distinct password (e.g. `password-reset-magic-link.spec.ts`'s `newPassword`,
+which has to differ from the original to prove the reset actually took effect). There's no shared `storageState` yet — add one (save it from
 `auth.setup.ts`, load it via a project's `use.storageState`) once a spec needs an authenticated
 session but isn't itself exercising the login UI (unlike `login.spec.ts` and the
 reset-then-login check in `password-reset-magic-link.spec.ts`, both of which need the real form);

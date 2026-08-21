@@ -73,16 +73,22 @@ Husky (`core.hooksPath=.husky/_`) is just the trigger Git calls on
   checks (trailing whitespace, EOF newline, YAML/JSON sanity, merge-conflict
   markers, etc.), run against `git diff --cached` (staged), not the working
   tree — fixes from both layers are re-staged so they land in the commit.
-- `pnpm nx affected -t lint test` — the full Nx lint/test for whatever the
-  commit affects, not staged-file-scoped like the two layers above.
+- `pnpm nx affected -t lint test e2e` — the full Nx lint/test/e2e for
+  whatever the commit affects, not staged-file-scoped like the two layers
+  above.
 
 The third layer duplicates what CI runs, on purpose: failing locally before a
 push beats failing in CI, even with no remote cache to offset it
 (`neverConnectToCloud: true` in `nx.json`) — local `.nx/cache` still speeds up
-repeat commits that don't touch a given project. CI (`.github/workflows/ci.yml`,
-triggered on `push`/`pull_request` to `main`) still runs the same
-`nx affected -t lint test` as the authoritative gate, since `--no-verify` or a
-merge can land changes the hook never saw. Branch protection on `main`
+repeat commits that don't touch a given project. `e2e` in particular can add
+real time to a commit that touches `bookshelf`/`bookshelf-backend`/
+`bookshelf-e2e` (or `food-maps`/`food-maps-backend`/`food-maps-e2e`) — a
+production `next build` plus a full Playwright run — but catching a broken
+e2e spec before it reaches CI is worth that cost; `make setup` installs the
+Playwright browsers this needs. CI (`.github/workflows/ci.yml`, triggered on
+`push`/`pull_request` to `main`) runs both `nx affected -t lint test` and,
+as a separate step, `nx affected -t e2e` as the authoritative gate, since
+`--no-verify` or a merge can land changes the hook never saw. Branch protection on `main`
 requires the `main`, `docker-build`, and `validate` (PR Title) checks to pass
 and the PR branch to be up to date before merging — `enforce_admins` is off,
 so this can still be bypassed manually if needed.

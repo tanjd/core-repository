@@ -1,3 +1,6 @@
+"use client";
+
+import { useState } from "react";
 import Image from "next/image";
 import { cn } from "@/lib/utils";
 import { gradientForTitle, hashString, wrapLines } from "@/lib/bookCoverColors";
@@ -162,9 +165,11 @@ interface BookCoverProps {
 
 // Drop-in replacement for the `cover_url ? <Image/> : <fallback/>` ternary
 // every book-rendering surface used to hand-roll — renders the real cover
-// photo when there is one, otherwise a generated BookCoverFallback. Works in
-// both Server and Client Components (no hooks), and intentionally doesn't
-// own the outer aspect-ratio/shadow/badge wrapper each call site already has.
+// photo when there is one, otherwise a generated BookCoverFallback. Also
+// falls back to BookCoverFallback if a present coverUrl fails to load (404,
+// dead host, CORS), rather than leaving a broken image in place. Client
+// Component (needs the load-error state), so every call site must already
+// be within a Client Component boundary.
 export function BookCover({
   title,
   author,
@@ -174,7 +179,9 @@ export function BookCover({
   className,
   priority,
 }: BookCoverProps) {
-  if (coverUrl) {
+  const [failed, setFailed] = useState(false);
+
+  if (coverUrl && !failed) {
     return (
       <Image
         src={coverUrl}
@@ -183,6 +190,7 @@ export function BookCover({
         sizes={sizes}
         priority={priority}
         className={cn("object-cover", className)}
+        onError={() => setFailed(true)}
       />
     );
   }

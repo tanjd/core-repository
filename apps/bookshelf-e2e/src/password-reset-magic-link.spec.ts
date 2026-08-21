@@ -1,12 +1,15 @@
 import { test, expect } from "@playwright/test";
 import { login, registerTestUser } from "./auth-helpers";
+import { E2E_TEST_USER_PASSWORD } from "./test-users";
 
 test("password reset via magic link requires no code entry", async ({
   page,
   request,
 }, testInfo) => {
   const email = `magic-link-${testInfo.project.name.replace(/\s+/g, "-")}-${Date.now()}@example.com`;
-  const originalPassword = "OriginalPassw0rd1";
+  // Standard test-user password, kept distinct from newPassword below so the
+  // reset flow's before/after can be told apart.
+  const originalPassword = E2E_TEST_USER_PASSWORD;
   const newPassword = "ResetViaLinkPassw0rd9";
 
   await registerTestUser(request, email, originalPassword, "Magic Link Tester");

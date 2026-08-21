@@ -6,8 +6,8 @@ conventions (Nx, deployment, release process).
 Next.js + Tailwind CSS + shadcn/ui frontend for `apps/bookshelf-backend`, squash-imported from the
 standalone `tanjd/bookshelf` repo's `frontend/` directory, no preserved history — same convention
 as every other app migration in this repo. All calls go through `src/app/api/[...path]/route.ts`,
-a Next.js proxy that forwards to `BACKEND_URL` (read at request time, not baked into the build) so
-the same image works across environments without a rebuild.
+a Next.js proxy that forwards to `BACKEND_URL` (read from `process.env` at server startup, not
+baked into the build) so the same image works across environments without a rebuild.
 
 See `apps/bookshelf-e2e/CLAUDE.md` for this app's e2e conventions — including the standing
 instruction to verify UI changes through that Playwright suite rather than an ad hoc
@@ -22,8 +22,9 @@ Next.js app-router convention) — `@nx/next:build` requires one to exist regard
 `public/.gitkeep` was added, matching `food-maps`'s convention.
 
 Dockerized (GHCR) and versioned independently via `nx release` (`release.projects` in root
-`nx.json`) — this is its first release; version starts at `0.1.0` (the source repo's own version
-history wasn't preserved either).
+`nx.json`); numbering restarted from `0.1.0` at migration rather than continuing the source repo's
+own version history (that wasn't preserved either) — current version is whatever
+`apps/bookshelf/CHANGELOG.md`'s latest entry says, not necessarily `0.x`.
 
 `next.config.ts` was rewritten to wrap the config in `@nx/next`'s `withNx`/`composePlugins` (the
 source repo used a plain `NextConfig` export) — without it, `@nx/next:build` silently doesn't emit
@@ -53,26 +54,38 @@ of the desktop view. Concretely:
   `md:hidden`, fixed to the viewport bottom): primary nav lives in thumb reach instead of behind
   an extra tap. `src/components/layout/navItems.ts`'s `primaryNavItems` is the single source of
   truth for both this and the desktop `NavBar` — add/rename/remove a destination there once.
-  - The tab bar is a **fixed 5-slot grid** (`grid-cols-5`): Notifications and Profile/Admin
-    always occupy two of the five, so at most **three** `primaryNavItems` entries can have
-    `mobileTab: true` (the default) at once. A `NavItem` opts out with `mobileTab: false` when
-    the bar is already full — its destination still shows in the desktop `NavBar`, and on mobile
-    it's reachable another way (see the FAB pattern below). `Share a Book` and `Wishlist` are
-    both `mobileTab: false` today, leaving Catalog/My Books/My Requests as the three tab slots.
-    Adding a fourth mobile tab means either bumping every other item's `mobileTab` decision or
-    changing the grid — it doesn't just slot in.
+  - The tab bar is a **fixed 5-slot grid** (`grid-cols-5`), Instagram-style: four `Link` tabs
+    (Catalog, My Books, My Requests, Wishlist — the `primaryNavItems` entries with `mobileTab:
+true`, the default) plus a centered, raised **"Share"** button between the first two and last
+    two. "Share" is a `Popover` (not a `Link`) offering "Scan ISBN" (`/share/scan`) and "Search"
+    (`/share`) — both are ways to add a book, so they share one entry point rather than each
+    claiming a tab slot. It's inserted via `tabs.slice(0, Math.ceil(tabs.length / 2))` /
+    `tabs.slice(...)` so it stays centered if the tab count changes. `Share a Book` is
+    `mobileTab: false` (its destination is reachable via Share's "Search" option instead of its
+    own tab). Notifications and Profile do **not** live in this bar — see the mobile header
+    below — so all five grid slots go to browse/action destinations. Changing the slot count
+    means revisiting this split-and-center logic, not just appending an item.
   - Padded with `style={{ paddingBottom: "env(safe-area-inset-bottom)" }}` for the iOS home
     indicator; every fixed-to-bottom mobile element in this app (tab bar, FABs) does the same.
+- **Profile menu, top-right (Facebook-style)**: `src/components/layout/NavBar.tsx` defines a
+  shared `ProfileMenu` component (a `Popover` wrapping a Profile/Admin link + Logout row) used
+  by both headers, so Logout is never its own always-visible control — tapping the profile
+  trigger opens the menu instead. Mobile's `md:hidden` block renders `NotificationBell`
+  (unread-badge popover), `ThemeToggle`, then `ProfileMenu` (icon-only trigger,
+  rightmost/corner-most). Desktop's `hidden md:flex` block keeps the same consolidation but with
+  a text trigger (`{profileItem.label}` + a `ChevronDown`) — desktop still shows the primary nav
+  as separate text links and the bell as its own icon (it has the horizontal room for those),
+  only Profile+Logout are consolidated to match mobile's interaction pattern.
 - **Content clears the tab bar**: `src/app/layout.tsx`'s `<main>` and `<footer>` both carry
   `pb-24 md:pb-6` — the extra bottom padding only applies below the `md` breakpoint, since the
   fixed tab bar would otherwise cover the last ~6rem of scrollable content on mobile.
-- **FAB for actions that lost their tab slot**: a page needing quick access to a `mobileTab:
-false` destination adds a `md:hidden fixed` circular button, positioned above the tab bar with
-  `bottom: "calc(env(safe-area-inset-bottom) + 4.5rem)"` (safe-area inset plus the tab bar's own
-  height). `src/app/catalog/page.tsx` uses a `Popover`-based speed-dial FAB (`Plus` icon, rotates
-  45° via `data-[state=open]:rotate-45` when open) once it needed to reach two destinations
-  (`/share` and `/wishlist`) from one button — a plain `<Link>` FAB only works for a single
-  target.
+- **In-bar popover trigger for multi-destination actions**: when one button needs to reach more
+  than one destination (like "Share" above), use a `Popover`-based trigger (`Plus`/relevant icon,
+  rotates 45° via `data-[state=open]:rotate-45` when open) rather than a plain `<Link>`, which
+  only works for a single target. This replaced an earlier per-page FAB on `src/app/catalog/page.tsx`
+  (`Share a Book` / `Scan ISBN` / `Wishlist`) once all three destinations got permanent global
+  homes (Add popover, Add popover, Wishlist tab) — prefer promoting a frequently-needed action
+  into the tab bar/header over adding a new page-local FAB, if there's a sensible slot for it.
 - **Cards over dense tables on narrow screens**: compact "glance" cards (e.g.
   `CurrentlyBorrowedCard.tsx`, `WishlistCard` in `src/app/wishlist/page.tsx`) show cover + title +
   the one or two facts that matter, in a `grid-cols-1 sm:grid-cols-2 lg:grid-cols-3` grid — full

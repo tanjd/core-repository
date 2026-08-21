@@ -1,5 +1,6 @@
 import { test, expect } from "@playwright/test";
 import { login, registerTestUser } from "./auth-helpers";
+import { E2E_TEST_USER_PASSWORD } from "./test-users";
 
 // Covers apps/bookshelf-backend's export/import round trip (GET
 // /copies/mine/export, POST /copies/mine/import{,/preview}) and the My Books
@@ -22,9 +23,8 @@ test("exporting then re-importing a book matches it to the existing catalog entr
   request,
 }, testInfo) => {
   const email = `import-export-${testInfo.project.name.replace(/\s+/g, "-")}-${Date.now()}@example.com`;
-  const password = "ImportExportTester1";
-  await registerTestUser(request, email, password);
-  await login(page, email, password);
+  await registerTestUser(request, email, E2E_TEST_USER_PASSWORD);
+  await login(page, email, E2E_TEST_USER_PASSWORD);
 
   const token = await page.evaluate(() =>
     localStorage.getItem("bookshelf_token"),
