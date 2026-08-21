@@ -79,10 +79,11 @@ func TestSanitizeImportRow(t *testing.T) {
 }
 
 func TestCopyHandler_ClassifyImportRow(t *testing.T) {
-	h, _, books, _ := newCopyHandler("")
+	h, copies, books, _ := newCopyHandler("")
 
 	existing := models.Book{Title: "Dune", Author: "Frank Herbert", OLKey: "OL893415W"}
 	require.NoError(t, books.Create(&existing))
+	require.NoError(t, copies.Create(&models.Copy{BookID: existing.ID, Status: "available"}))
 
 	t.Run("missing title is skipped", func(t *testing.T) {
 		plan := h.classifyImportRow(exportRow{Author: "No Title"})
@@ -99,6 +100,32 @@ func TestCopyHandler_ClassifyImportRow(t *testing.T) {
 	t.Run("no matching key creates a new book", func(t *testing.T) {
 		plan := h.classifyImportRow(exportRow{Title: "Some Other Book"})
 		require.Equal(t, actionCreateBook, plan.action)
+	})
+
+	t.Run("normalized title+author match with no external key is a possible match, not an auto-match", func(t *testing.T) {
+		plan := h.classifyImportRow(exportRow{Title: "  DUNE!! ", Author: "frank herbert"})
+		require.Equal(t, actionPossibleMatch, plan.action)
+		require.NotNil(t, plan.book)
+		require.Equal(t, existing.ID, plan.book.ID)
+	})
+
+	t.Run("blank title and author never fuzzy-matches another blank row", func(t *testing.T) {
+		blank := models.Book{Title: "", Author: ""}
+		require.NoError(t, books.Create(&blank))
+		require.NoError(t, copies.Create(&models.Copy{BookID: blank.ID, Status: "available"}))
+
+		plan := h.classifyImportRow(exportRow{Title: "Untitled", Author: ""})
+		require.NotEqual(t, actionPossibleMatch, plan.action)
+	})
+
+	t.Run("ambiguous candidates: returns the first catalog match rather than erroring", func(t *testing.T) {
+		dup := models.Book{Title: "Dune", Author: "Frank Herbert"}
+		require.NoError(t, books.Create(&dup))
+		require.NoError(t, copies.Create(&models.Copy{BookID: dup.ID, Status: "available"}))
+
+		plan := h.classifyImportRow(exportRow{Title: "Dune", Author: "Frank Herbert"})
+		require.Equal(t, actionPossibleMatch, plan.action)
+		require.NotNil(t, plan.book)
 	})
 }
 
@@ -133,6 +160,29 @@ func TestCopyHandler_PreviewImportBooks(t *testing.T) {
 		require.Equal(t, 1, out.Body.Summary.Skipped)
 
 		mine, err := h.copies.ListByOwnerID(1)
+		require.NoError(t, err)
+		require.Empty(t, mine, "preview must never persist anything")
+	})
+
+	t.Run("surfaces a possible_match row with candidate details, without writing anything", func(t *testing.T) {
+		h, copies, books, _ := newCopyHandler("")
+		existing := models.Book{Title: "Dune", Author: "Frank Herbert"}
+		require.NoError(t, books.Create(&existing))
+		require.NoError(t, copies.Create(&models.Copy{BookID: existing.ID, Status: "available"}))
+
+		input := &importInput{}
+		input.Body.Format = "json"
+		input.Body.Content = `[{"title": "Dune", "author": "Frank Herbert"}]`
+		out, err := h.previewImportBooks(fakeAuthedCtx(t, 1, "user"), input)
+		require.NoError(t, err)
+		require.Len(t, out.Body.Rows, 1)
+		require.Equal(t, actionPossibleMatch, out.Body.Rows[0].Action)
+		require.Equal(t, existing.ID, *out.Body.Rows[0].MatchedBookID)
+		require.Equal(t, "Dune", out.Body.Rows[0].MatchedBookTitle)
+		require.Equal(t, "Frank Herbert", out.Body.Rows[0].MatchedBookAuthor)
+		require.Equal(t, 1, out.Body.Summary.PossibleMatches)
+
+		mine, err := copies.ListByOwnerID(1)
 		require.NoError(t, err)
 		require.Empty(t, mine, "preview must never persist anything")
 	})
@@ -198,6 +248,74 @@ func TestCopyHandler_ImportBooks(t *testing.T) {
 		require.NoError(t, err)
 		require.Len(t, mine, 1)
 		require.Equal(t, existing.ID, mine[0].BookID, "must attach to the existing book, not create a duplicate")
+	})
+
+	t.Run("possible_match row with an accept_match decision attaches to the existing book", func(t *testing.T) {
+		h, copies, books, _ := newCopyHandler("")
+		existing := models.Book{Title: "Dune", Author: "Frank Herbert"}
+		require.NoError(t, books.Create(&existing))
+		require.NoError(t, copies.Create(&models.Copy{BookID: existing.ID, Status: "available"}))
+
+		input := &importInput{}
+		input.Body.Format = "json"
+		input.Body.Content = `[{"title": "Dune", "author": "Frank Herbert"}]`
+		input.Body.Decisions = map[string]string{"1": decisionAcceptMatch}
+
+		out, err := h.importBooks(fakeAuthedCtx(t, 1, "user"), input)
+		require.NoError(t, err)
+		require.Equal(t, actionMatchBook, out.Body.Rows[0].Action, "resolved action is reported, not possible_match")
+		require.Equal(t, existing.ID, *out.Body.Rows[0].MatchedBookID)
+		require.Equal(t, 1, out.Body.Summary.BooksMatched)
+		require.Equal(t, 0, out.Body.Summary.BooksCreated)
+
+		mine, err := copies.ListByOwnerID(1)
+		require.NoError(t, err)
+		require.Len(t, mine, 1)
+		require.Equal(t, existing.ID, mine[0].BookID)
+	})
+
+	t.Run("possible_match row defaults to create_new when no decision is given", func(t *testing.T) {
+		h, copies, books, _ := newCopyHandler("")
+		existing := models.Book{Title: "Dune", Author: "Frank Herbert"}
+		require.NoError(t, books.Create(&existing))
+		require.NoError(t, copies.Create(&models.Copy{BookID: existing.ID, Status: "available"}))
+
+		input := &importInput{}
+		input.Body.Format = "json"
+		input.Body.Content = `[{"title": "Dune", "author": "Frank Herbert"}]`
+
+		out, err := h.importBooks(fakeAuthedCtx(t, 1, "user"), input)
+		require.NoError(t, err)
+		require.Equal(t, actionCreateBook, out.Body.Rows[0].Action)
+		require.Nil(t, out.Body.Rows[0].MatchedBookID)
+		require.Equal(t, 1, out.Body.Summary.BooksCreated)
+		require.Equal(t, 0, out.Body.Summary.BooksMatched)
+
+		mine, err := copies.ListByOwnerID(1)
+		require.NoError(t, err)
+		require.Len(t, mine, 1)
+		require.NotEqual(t, existing.ID, mine[0].BookID, "a missed decision must never silently merge into the existing book")
+	})
+
+	t.Run("possible_match row with an explicit create_new decision also creates a new book", func(t *testing.T) {
+		h, copies, books, _ := newCopyHandler("")
+		existing := models.Book{Title: "Dune", Author: "Frank Herbert"}
+		require.NoError(t, books.Create(&existing))
+		require.NoError(t, copies.Create(&models.Copy{BookID: existing.ID, Status: "available"}))
+
+		input := &importInput{}
+		input.Body.Format = "json"
+		input.Body.Content = `[{"title": "Dune", "author": "Frank Herbert"}]`
+		input.Body.Decisions = map[string]string{"1": decisionCreateNew}
+
+		out, err := h.importBooks(fakeAuthedCtx(t, 1, "user"), input)
+		require.NoError(t, err)
+		require.Equal(t, actionCreateBook, out.Body.Rows[0].Action)
+
+		mine, err := copies.ListByOwnerID(1)
+		require.NoError(t, err)
+		require.Len(t, mine, 1)
+		require.NotEqual(t, existing.ID, mine[0].BookID)
 	})
 
 	t.Run("one bad row does not block the rest of the batch", func(t *testing.T) {

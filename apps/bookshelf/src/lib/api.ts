@@ -268,18 +268,26 @@ export async function downloadMyCopiesExport(
   );
 }
 
-export type ImportRowAction = "create_book" | "match_existing_book" | "skipped";
+export type ImportRowAction =
+  | "create_book"
+  | "match_existing_book"
+  | "possible_match"
+  | "skipped";
 
 export interface ImportRowResult {
   row: number;
   title: string;
   action: ImportRowAction;
   reason?: string;
+  matched_book_id?: number;
+  matched_book_title?: string;
+  matched_book_author?: string;
 }
 
 export interface ImportSummary {
   books_created: number;
   books_matched: number;
+  possible_matches: number;
   copies_created: number;
   skipped: number;
 }
@@ -288,6 +296,9 @@ export interface ImportResult {
   summary: ImportSummary;
   rows: ImportRowResult[];
 }
+
+/** Per-row resolution for a possible_match row, keyed by 1-based row number. */
+export type ImportDecision = "accept_match" | "create_new";
 
 async function request<T>(path: string, options?: RequestInit): Promise<T> {
   const token = getToken();
@@ -497,10 +508,14 @@ export const api = {
       method: "POST",
       body: JSON.stringify({ format, content }),
     }),
-  importBooks: (format: MyCopiesExportFormat, content: string) =>
+  importBooks: (
+    format: MyCopiesExportFormat,
+    content: string,
+    decisions?: Record<number, ImportDecision>,
+  ) =>
     request<ImportResult>("/copies/mine/import", {
       method: "POST",
-      body: JSON.stringify({ format, content }),
+      body: JSON.stringify({ format, content, decisions }),
     }),
 
   // Waitlist
