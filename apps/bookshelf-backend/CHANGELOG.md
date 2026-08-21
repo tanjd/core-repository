@@ -1,3 +1,13 @@
+## 0.13.0 (2026-08-21)
+
+### 🚀 Features
+
+- **bookshelf,bookshelf-backend,bookshelf-e2e:** magic-link registration ([#63](https://github.com/tanjd/core-repository/pull/63))
+
+### ❤️ Thank You
+
+- Jeddy Tan @tanjd
+
 ## 0.12.0 (2026-08-21)
 
 ### 🚀 Features
