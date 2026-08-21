@@ -43,12 +43,38 @@ type User struct {
 // (unlike User.OTPCode, which verifies an already-registered account). One
 // row per (channel, identifier) pair — a resend overwrites the existing row
 // rather than accumulating history.
+//
+// For the email channel it also parks the account details typed on the
+// registration form's first step (PendingRegistrationData below), so
+// verifying the code — from any device, including one that never saw the
+// form — is enough to create the account outright.
 type RegistrationVerification struct {
 	ID         uint      `gorm:"primarykey" json:"-"`
 	Channel    string    `gorm:"not null;uniqueIndex:idx_registration_verifications_channel_identifier" json:"-"`
 	Identifier string    `gorm:"not null;uniqueIndex:idx_registration_verifications_channel_identifier" json:"-"`
 	Code       string    `gorm:"not null" json:"-"`
 	ExpiresAt  time.Time `gorm:"column:expires_at;not null" json:"-"`
+
+	PendingRegistrationData `gorm:"embedded"`
+}
+
+// PendingRegistrationData is the not-yet-created account behind an
+// in-flight email verification: everything /auth/register used to take in a
+// second request, held server-side for the same 15 minutes as the code
+// itself and discarded with it.
+//
+// Never serialized — PendingPasswordHash in particular must not leave the
+// backend, and the whole point of storing these here rather than embedding
+// them in the magic-link JWT is that they never transit email or a URL.
+type PendingRegistrationData struct {
+	PendingName string `gorm:"column:pending_name" json:"-"`
+	// The email as the user typed it. The row's Identifier is normalized
+	// (lowercased) so the magic-link token can key off it; the account keeps
+	// the original casing purely so it displays back the way it was entered.
+	// Lookups are case-insensitive either way (see migration 000011).
+	PendingEmail        string `gorm:"column:pending_email" json:"-"`
+	PendingPasswordHash string `gorm:"column:pending_password_hash" json:"-"`
+	PendingPhone        string `gorm:"column:pending_phone" json:"-"`
 }
 
 // AppSetting is a runtime-configurable key-value pair stored in the database.

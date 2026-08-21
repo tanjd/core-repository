@@ -44,10 +44,20 @@ type UserRepository interface {
 // before any User row exists.
 type RegistrationVerificationRepository interface {
 	// Upsert replaces any existing code for (channel, identifier) with a new
-	// one — a resend supersedes rather than accumulates.
-	Upsert(channel, identifier, code string, expiresAt time.Time) error
+	// one — a resend supersedes rather than accumulates. pending carries the
+	// not-yet-created account details for the email channel (zero-valued for
+	// the phone channel), and is replaced wholesale alongside the code.
+	Upsert(channel, identifier, code string, expiresAt time.Time, pending models.PendingRegistrationData) error
 	Find(channel, identifier string) (*models.RegistrationVerification, error)
 	Delete(channel, identifier string) error
+	// DeleteExpired removes every row that expired before the given time,
+	// returning how many were deleted. Rows are normally cleared the moment a
+	// code is submitted (right or wrong), so this only sweeps up signups that
+	// were started and then abandoned — which for the email channel means
+	// rows still holding a bcrypt hash of a password the person very likely
+	// uses elsewhere. Keeping those past the 15 minutes they're useful for is
+	// retaining a credential for someone who never became a user.
+	DeleteExpired(before time.Time) (int64, error)
 }
 
 // BookRepository handles persistence for Book records.

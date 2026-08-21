@@ -1,0 +1,17 @@
+-- users.email's original UNIQUE constraint (000001) uses SQLite's default
+-- BINARY collation, so "Ada@example.com" and "ada@example.com" are two
+-- distinct rows — two accounts for one mailbox, each with its own password.
+-- Registration made that reachable: the pending-registration row is keyed by
+-- the *normalized* address while the account is created with the casing the
+-- user typed, so a duplicate check that missed the case variant would happily
+-- create the second account.
+--
+-- This index makes the app's view of email identity match reality: one
+-- address, one account, whatever the casing. UserRepository.FindByEmail
+-- queries COLLATE NOCASE to match it, so every lookup (login, password reset,
+-- email change, invite) is an index hit rather than a scan.
+--
+-- If a deployment somehow already holds two rows differing only by case, this
+-- migration fails rather than silently picking a winner — the right outcome:
+-- which of two real accounts to keep isn't a decision a migration can make.
+CREATE UNIQUE INDEX IF NOT EXISTS idx_users_email_nocase ON users (email COLLATE NOCASE);

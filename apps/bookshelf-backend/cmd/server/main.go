@@ -3,6 +3,7 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 	"os"
 	"os/signal"
@@ -107,6 +108,16 @@ func main() {
 
 	scheduler := services.NewScheduler(bookRepo, adminRepo, coversDir, cfg.MetadataRefreshInterval)
 	scheduler.RegisterJob("backup", "backup_interval", 24*time.Hour, backupSvc.CreateSnapshot)
+	// Sweeps abandoned signups out of registration_verifications. A row is
+	// deleted as soon as its code is submitted, right or wrong, so this only
+	// catches the ones nobody ever came back to — which for the email channel
+	// still hold a bcrypt hash of the password that was typed. Hourly is far
+	// more often than the 15-minute TTL needs, and the delete is a single
+	// indexed statement. Not seeded in db.Seed: there's no admin UI for this
+	// interval, so the fallback below is the setting unless someone sets the
+	// key by hand.
+	scheduler.RegisterJob("registration-prune", "registration_prune_interval", time.Hour,
+		pruneRegistrationVerifications(regVerificationRepo))
 
 	seedYAMLConfig(cfg.AppConfigPath, adminRepo)
 
@@ -266,5 +277,20 @@ func waitForShutdownSignal(cancel context.CancelFunc, srv *http.Server, database
 	}
 	if err := sqlDB.Close(); err != nil {
 		log.Error().Err(err).Msg("database close error")
+	}
+}
+
+// pruneRegistrationVerifications returns a scheduler job that deletes every
+// registration_verifications row past its expiry — the abandoned-signup
+// sweep described at its RegisterJob call site. Pulled out of main as its
+// own function (rather than an inline closure) purely to keep main's own
+// cognitive-complexity score down; the logic itself is a one-line delegate.
+func pruneRegistrationVerifications(repo repository.RegistrationVerificationRepository) func(context.Context) string {
+	return func(context.Context) string {
+		n, err := repo.DeleteExpired(time.Now())
+		if err != nil {
+			return "failed: " + err.Error()
+		}
+		return fmt.Sprintf("pruned %d expired registration verification(s)", n)
 	}
 }

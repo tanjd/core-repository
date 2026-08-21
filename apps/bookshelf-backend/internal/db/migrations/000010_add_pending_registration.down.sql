@@ -1,0 +1,5 @@
+-- No column drop: same rationale as 000003/000004/000005's down migrations —
+-- SQLite can drop a column cheaply as of 3.35+, but no other migration in
+-- this repo drops one, so there's no established pattern to follow and the
+-- columns are left in place here too. They're nullable and only read by the
+-- registration finalize path, so a rolled-back binary simply ignores them.

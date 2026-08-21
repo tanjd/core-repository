@@ -32,28 +32,41 @@ func newAuthHandlerWithVerifications() (*AuthHandler, *repotest.UserRepository, 
 	return h, users, admin, regVerifications
 }
 
-// mustEmailVerificationToken mints a valid email-verification token the way
-// verify-email-otp would, for tests that exercise register() directly
-// without going through the send/verify OTP endpoints.
-func mustEmailVerificationToken(t *testing.T, h *AuthHandler, email string) string {
+// sendRegistration submits the registration form (the details step) and
+// returns the emailed code, for tests that then verify it.
+func sendRegistration(t *testing.T, h *AuthHandler, name, email, password string, phone *string) string {
 	t.Helper()
-	token, err := h.issueRegistrationVerificationToken(registrationPurposeEmail, normalizeEmail(email))
+	in := &sendRegisterEmailOTPInput{}
+	in.Body.Name = name
+	in.Body.Email = email
+	in.Body.Password = password
+	in.Body.Phone = phone
+	out, err := h.sendRegisterEmailOTP(context.Background(), in)
 	require.NoError(t, err)
-	return token
+	require.NotEmpty(t, out.Body.DebugCode, "ENV=dev should surface the code so tests/dev don't need SMTP")
+	return out.Body.DebugCode
 }
 
-func TestRegister(t *testing.T) {
+// verifyRegistrationCode completes a registration by typing the code, the
+// same-tab path through verify-email-otp.
+func verifyRegistrationCode(h *AuthHandler, email, code string) (*verifyRegisterEmailOTPOutput, error) {
+	in := &verifyRegisterEmailOTPInput{}
+	in.Body.Email = email
+	in.Body.Code = code
+	return h.verifyRegisterEmailOTP(context.Background(), in)
+}
+
+// TestRegisterViaEmailOTP covers the whole of registration: verify-email-otp
+// creates the account outright, so there's no second call to test.
+func TestRegisterViaEmailOTP(t *testing.T) {
 	t.Run("creates a user and issues a token", func(t *testing.T) {
 		h, users, _ := newAuthHandler()
-		input := &registerInput{}
-		input.Body.Name = "Ada Lovelace"
-		input.Body.Email = "ada@example.com"
-		input.Body.Password = "Passw0rd1234"
-		input.Body.EmailVerificationToken = mustEmailVerificationToken(t, h, "ada@example.com")
+		code := sendRegistration(t, h, "Ada Lovelace", "ada@example.com", "Passw0rd1234", nil)
 
-		out, err := h.register(context.Background(), input)
+		out, err := verifyRegistrationCode(h, "ada@example.com", code)
 
 		require.NoError(t, err)
+		assert.Equal(t, "complete", out.Body.Status)
 		assert.NotEmpty(t, out.Body.Token)
 		assert.Equal(t, "Ada Lovelace", out.Body.User.Name)
 		assert.Equal(t, "user", out.Body.User.Role)
@@ -65,100 +78,66 @@ func TestRegister(t *testing.T) {
 		assert.NoError(t, bcrypt.CompareHashAndPassword([]byte(stored.Password), []byte("Passw0rd1234")))
 	})
 
-	t.Run("rejects registration without a valid email verification token", func(t *testing.T) {
-		h, _, _ := newAuthHandler()
-		input := &registerInput{}
-		input.Body.Name = "Ada"
-		input.Body.Email = "ada-noverify@example.com"
-		input.Body.Password = "Passw0rd1234"
-		input.Body.EmailVerificationToken = "not-a-real-token"
-
-		_, err := h.register(context.Background(), input)
-
-		require.Error(t, err)
-		assertStatus(t, err, 400)
-	})
-
-	t.Run("rejects a token minted for a different email", func(t *testing.T) {
-		h, _, _ := newAuthHandler()
-		input := &registerInput{}
-		input.Body.Name = "Ada"
-		input.Body.Email = "ada-mismatch@example.com"
-		input.Body.Password = "Passw0rd1234"
-		input.Body.EmailVerificationToken = mustEmailVerificationToken(t, h, "someone-else@example.com")
-
-		_, err := h.register(context.Background(), input)
-
-		require.Error(t, err)
-		assertStatus(t, err, 400)
-	})
-
-	t.Run("creates a phone-verified user when a phone and matching token are supplied", func(t *testing.T) {
+	t.Run("no account exists until the code is verified", func(t *testing.T) {
 		h, users, _ := newAuthHandler()
-		input := &registerInput{}
-		input.Body.Name = "Ada"
-		input.Body.Email = "ada-phone@example.com"
-		input.Body.Password = "Passw0rd1234"
-		input.Body.EmailVerificationToken = mustEmailVerificationToken(t, h, "ada-phone@example.com")
+		sendRegistration(t, h, "Ada", "ada-unverified@example.com", "Passw0rd1234", nil)
+
+		_, err := users.FindByEmail("ada-unverified@example.com")
+		assert.ErrorIs(t, err, repository.ErrNotFound)
+	})
+
+	t.Run("stores the account under the casing the user typed", func(t *testing.T) {
+		h, users, _ := newAuthHandler()
+		// The row is keyed by the normalized address, but users.email is
+		// looked up case-sensitively — creating the account lowercased would
+		// lock the user out of their own first login.
+		code := sendRegistration(t, h, "Ada", "Ada.Lovelace@Example.com", "Passw0rd1234", nil)
+
+		out, err := verifyRegistrationCode(h, "Ada.Lovelace@Example.com", code)
+
+		require.NoError(t, err)
+		assert.Equal(t, "Ada.Lovelace@Example.com", out.Body.User.Email)
+		_, findErr := users.FindByEmail("Ada.Lovelace@Example.com")
+		assert.NoError(t, findErr)
+	})
+
+	t.Run("stores a supplied phone without marking it verified", func(t *testing.T) {
+		h, users, _ := newAuthHandler()
 		phone := "+65 9123 4567"
-		input.Body.Phone = &phone
-		phoneToken, err := h.issueRegistrationVerificationToken(registrationPurposePhone, phone)
-		require.NoError(t, err)
-		input.Body.PhoneVerificationToken = &phoneToken
+		code := sendRegistration(t, h, "Ada", "ada-phone@example.com", "Passw0rd1234", &phone)
 
-		out, err := h.register(context.Background(), input)
+		out, err := verifyRegistrationCode(h, "ada-phone@example.com", code)
 
 		require.NoError(t, err)
-		assert.True(t, out.Body.User.PhoneVerified)
 		assert.Equal(t, phone, out.Body.User.Phone)
+		assert.False(t, out.Body.User.PhoneVerified, "no SMS provider is configured — a phone is on file, not verified")
 
 		stored, err := users.FindByEmail("ada-phone@example.com")
 		require.NoError(t, err)
-		assert.True(t, stored.PhoneVerified)
+		assert.Equal(t, phone, stored.Phone)
+		assert.False(t, stored.PhoneVerified)
 	})
 
-	t.Run("rejects a phone without a verification token", func(t *testing.T) {
+	t.Run("a blank phone is stored as empty rather than whitespace", func(t *testing.T) {
 		h, _, _ := newAuthHandler()
-		input := &registerInput{}
-		input.Body.Name = "Ada"
-		input.Body.Email = "ada-phone-noverify@example.com"
-		input.Body.Password = "Passw0rd1234"
-		input.Body.EmailVerificationToken = mustEmailVerificationToken(t, h, "ada-phone-noverify@example.com")
-		phone := "+65 9123 4567"
-		input.Body.Phone = &phone
+		phone := "   "
+		code := sendRegistration(t, h, "Ada", "ada-blank-phone@example.com", "Passw0rd1234", &phone)
 
-		_, err := h.register(context.Background(), input)
+		out, err := verifyRegistrationCode(h, "ada-blank-phone@example.com", code)
 
-		require.Error(t, err)
-		assertStatus(t, err, 400)
-	})
-
-	t.Run("rejects weak passwords", func(t *testing.T) {
-		h, _, _ := newAuthHandler()
-		input := &registerInput{}
-		input.Body.Name = "Ada"
-		input.Body.Email = "ada2@example.com"
-		input.Body.Password = "weak"
-		input.Body.EmailVerificationToken = mustEmailVerificationToken(t, h, "ada2@example.com")
-
-		_, err := h.register(context.Background(), input)
-
-		require.Error(t, err)
-		assertStatus(t, err, 400)
-	})
-
-	t.Run("rejects duplicate email", func(t *testing.T) {
-		h, _, _ := newAuthHandler()
-		input := &registerInput{}
-		input.Body.Name = "Ada"
-		input.Body.Email = "dup@example.com"
-		input.Body.Password = "Passw0rd1234"
-		input.Body.EmailVerificationToken = mustEmailVerificationToken(t, h, "dup@example.com")
-		_, err := h.register(context.Background(), input)
 		require.NoError(t, err)
+		assert.Empty(t, out.Body.User.Phone)
+	})
 
-		input.Body.EmailVerificationToken = mustEmailVerificationToken(t, h, "dup@example.com")
-		_, err = h.register(context.Background(), input)
+	t.Run("rejects weak passwords before sending a code", func(t *testing.T) {
+		h, _, _ := newAuthHandler()
+		in := &sendRegisterEmailOTPInput{}
+		in.Body.Name = "Ada"
+		in.Body.Email = "ada2@example.com"
+		in.Body.Password = "weak"
+
+		_, err := h.sendRegisterEmailOTP(context.Background(), in)
+
 		require.Error(t, err)
 		assertStatus(t, err, 400)
 	})
@@ -167,16 +146,37 @@ func TestRegister(t *testing.T) {
 		h, _, admin := newAuthHandler()
 		require.NoError(t, admin.UpsertSetting("allow_registration", "false"))
 
-		input := &registerInput{}
-		input.Body.Name = "Ada"
-		input.Body.Email = "ada3@example.com"
-		input.Body.Password = "Passw0rd1234"
-		input.Body.EmailVerificationToken = mustEmailVerificationToken(t, h, "ada3@example.com")
+		in := &sendRegisterEmailOTPInput{}
+		in.Body.Name = "Ada"
+		in.Body.Email = "ada3@example.com"
+		in.Body.Password = "Passw0rd1234"
 
-		_, err := h.register(context.Background(), input)
+		_, err := h.sendRegisterEmailOTP(context.Background(), in)
 
 		require.Error(t, err)
 		assertStatus(t, err, 403)
+	})
+
+	t.Run("rejects a code verified after registration was disabled mid-flow", func(t *testing.T) {
+		h, _, admin := newAuthHandler()
+		code := sendRegistration(t, h, "Ada", "ada-disabled-midflow@example.com", "Passw0rd1234", nil)
+		require.NoError(t, admin.UpsertSetting("allow_registration", "false"))
+
+		_, err := verifyRegistrationCode(h, "ada-disabled-midflow@example.com", code)
+
+		require.Error(t, err)
+		assertStatus(t, err, 403)
+	})
+
+	t.Run("rejects an email that was claimed between send and verify", func(t *testing.T) {
+		h, users, _ := newAuthHandler()
+		code := sendRegistration(t, h, "Ada", "ada-raced@example.com", "Passw0rd1234", nil)
+		require.NoError(t, users.Create(&models.User{Name: "Faster", Email: "ada-raced@example.com", Password: "x"}))
+
+		_, err := verifyRegistrationCode(h, "ada-raced@example.com", code)
+
+		require.Error(t, err)
+		assertStatus(t, err, 400)
 	})
 
 	t.Run("creates a pending, token-less account when approval is required", func(t *testing.T) {
@@ -190,15 +190,11 @@ func TestRegister(t *testing.T) {
 		require.NoError(t, admin.UpsertSetting("require_registration_approval", "true"))
 		require.NoError(t, admin.SaveUser(&models.User{ID: 1, Name: "Site Admin", Email: "admin@example.com", Role: "admin"}))
 
-		input := &registerInput{}
-		input.Body.Name = "Ada"
-		input.Body.Email = "ada4@example.com"
-		input.Body.Password = "Passw0rd1234"
-		input.Body.EmailVerificationToken = mustEmailVerificationToken(t, h, "ada4@example.com")
-
-		out, err := h.register(context.Background(), input)
+		code := sendRegistration(t, h, "Ada", "ada4@example.com", "Passw0rd1234", nil)
+		out, err := verifyRegistrationCode(h, "ada4@example.com", code)
 
 		require.NoError(t, err)
+		assert.Equal(t, "pending_approval", out.Body.Status)
 		assert.Empty(t, out.Body.Token)
 		assert.True(t, out.Body.User.PendingApproval)
 
@@ -212,6 +208,66 @@ func TestRegister(t *testing.T) {
 		assert.Equal(t, "user_pending_approval", adminNotifs[0].Type)
 		require.NotNil(t, adminNotifs[0].PendingUserID)
 		assert.Equal(t, stored.ID, *adminNotifs[0].PendingUserID)
+	})
+}
+
+func TestVerificationStatusPhoneFactor(t *testing.T) {
+	setup := func(t *testing.T, phone string, phoneVerified bool) (*AuthHandler, *models.User) {
+		t.Helper()
+		h, users, admin := newAuthHandler()
+		require.NoError(t, admin.UpsertSetting("verification_requires_phone", "true"))
+		user := &models.User{Name: "Ada", Email: "ada@example.com", Password: "x", Phone: phone, PhoneVerified: phoneVerified}
+		require.NoError(t, users.Create(user))
+		return h, user
+	}
+
+	phoneFactor := func(t *testing.T, out *verificationStatusOutput) verificationFactor {
+		t.Helper()
+		for _, f := range out.Body.Factors {
+			if f.Key == "phone" {
+				return f
+			}
+		}
+		t.Fatal("expected a phone factor when verification_requires_phone is on")
+		return verificationFactor{}
+	}
+
+	t.Run("a phone on file satisfies the factor even though it was never verified", func(t *testing.T) {
+		// Nothing sets PhoneVerified true any more, and checkPhoneRequirement
+		// (loan_requests.go) has only ever checked Phone != "" — so checking
+		// PhoneVerified here would make this permanently unsatisfiable.
+		h, user := setup(t, "+65 9123 4567", false)
+
+		out, err := h.verificationStatus(fakeAuthedCtx(t, user.ID, "user"), nil)
+
+		require.NoError(t, err)
+		f := phoneFactor(t, out)
+		assert.Equal(t, "Phone number on file", f.Label)
+		assert.True(t, f.Satisfied)
+		assert.True(t, out.Body.Eligible)
+	})
+
+	t.Run("no phone on file leaves the factor unsatisfied", func(t *testing.T) {
+		h, user := setup(t, "", false)
+
+		out, err := h.verificationStatus(fakeAuthedCtx(t, user.ID, "user"), nil)
+
+		require.NoError(t, err)
+		assert.False(t, phoneFactor(t, out).Satisfied)
+		assert.False(t, out.Body.Eligible)
+	})
+
+	t.Run("the factor is absent when the community does not require a phone", func(t *testing.T) {
+		h, users, _ := newAuthHandler()
+		user := &models.User{Name: "Ada", Email: "ada@example.com", Password: "x"}
+		require.NoError(t, users.Create(user))
+
+		out, err := h.verificationStatus(fakeAuthedCtx(t, user.ID, "user"), nil)
+
+		require.NoError(t, err)
+		for _, f := range out.Body.Factors {
+			assert.NotEqual(t, "phone", f.Key)
+		}
 	})
 }
 
@@ -979,52 +1035,62 @@ func TestConfirmEmailChange(t *testing.T) {
 }
 
 func TestSendVerifyRegisterEmailOTP(t *testing.T) {
-	t.Run("round trip: send, verify, use the token to register", func(t *testing.T) {
+	t.Run("round trip: send, then verify the code to finish registration", func(t *testing.T) {
 		h, _, _, _ := newAuthHandlerWithVerifications()
+		code := sendRegistration(t, h, "New User", "New.User@Example.com", "Passw0rd1234", nil)
 
-		sendIn := &sendRegisterEmailOTPInput{}
-		sendIn.Body.Email = "New.User@Example.com"
-		sendOut, err := h.sendRegisterEmailOTP(context.Background(), sendIn)
-		require.NoError(t, err)
-		require.NotEmpty(t, sendOut.Body.DebugCode, "ENV=dev should surface the code so tests/dev don't need SMTP")
+		out, err := verifyRegistrationCode(h, "New.User@Example.com", code)
 
-		verifyIn := &verifyRegisterEmailOTPInput{}
-		verifyIn.Body.Email = "New.User@Example.com"
-		verifyIn.Body.Code = sendOut.Body.DebugCode
-		verifyOut, err := h.verifyRegisterEmailOTP(context.Background(), verifyIn)
 		require.NoError(t, err)
-		require.NotEmpty(t, verifyOut.Body.VerificationToken)
-
-		regIn := &registerInput{}
-		regIn.Body.Name = "New User"
-		regIn.Body.Email = "New.User@Example.com"
-		regIn.Body.Password = "Passw0rd1234"
-		regIn.Body.EmailVerificationToken = verifyOut.Body.VerificationToken
-		out, err := h.register(context.Background(), regIn)
-		require.NoError(t, err)
+		assert.Equal(t, "complete", out.Body.Status)
 		assert.True(t, out.Body.User.Verified)
 	})
 
-	t.Run("verifies via a magic-link token, without submitting email or code", func(t *testing.T) {
-		h, _, _, _ := newAuthHandlerWithVerifications()
+	t.Run("the magic-link token alone finishes registration, with no form state", func(t *testing.T) {
+		// The reported bug: the link is read on a device that never saw the
+		// details step, so email+code aren't submitted and nothing but the
+		// token identifies the pending signup.
+		h, users, _, _ := newAuthHandlerWithVerifications()
+		phone := "+65 9123 4567"
+		code := sendRegistration(t, h, "Link User", "link.user@example.com", "Passw0rd1234", &phone)
 
-		sendIn := &sendRegisterEmailOTPInput{}
-		sendIn.Body.Email = "link.user@example.com"
-		sendOut, err := h.sendRegisterEmailOTP(context.Background(), sendIn)
-		require.NoError(t, err)
-
-		linkToken, err := h.issueOTPLinkToken(otpLinkPurposeRegisterEmail, normalizeEmail("link.user@example.com"), sendOut.Body.DebugCode)
+		linkToken, err := h.issueOTPLinkToken(otpLinkPurposeRegisterEmail, normalizeEmail("link.user@example.com"), code)
 		require.NoError(t, err)
 
 		verifyIn := &verifyRegisterEmailOTPInput{}
 		verifyIn.Body.Token = linkToken
-		verifyOut, err := h.verifyRegisterEmailOTP(context.Background(), verifyIn)
+		out, err := h.verifyRegisterEmailOTP(context.Background(), verifyIn)
 
 		require.NoError(t, err)
-		assert.NotEmpty(t, verifyOut.Body.VerificationToken)
+		assert.Equal(t, "complete", out.Body.Status)
+		assert.NotEmpty(t, out.Body.Token, "clicking the link signs the user in")
+		assert.Equal(t, "Link User", out.Body.User.Name)
+		assert.Equal(t, phone, out.Body.User.Phone)
+
+		stored, findErr := users.FindByEmail("link.user@example.com")
+		require.NoError(t, findErr)
+		assert.NoError(t, bcrypt.CompareHashAndPassword([]byte(stored.Password), []byte("Passw0rd1234")))
 	})
 
-	t.Run("debug_code is withheld outside dev", func(t *testing.T) {
+	t.Run("a case variant of a registered address is rejected, not made a second account", func(t *testing.T) {
+		// The pending row is keyed by the normalized address while the
+		// account is created with the casing that was typed, so a
+		// case-sensitive duplicate check here would let "Ada@Example.com"
+		// through and hand one mailbox two accounts with two passwords.
+		h, users, _, _ := newAuthHandlerWithVerifications()
+		require.NoError(t, users.Create(&models.User{Name: "Ada", Email: "ada@example.com", Password: "hash"}))
+
+		in := &sendRegisterEmailOTPInput{}
+		in.Body.Name = "Impostor"
+		in.Body.Email = "Ada@Example.com"
+		in.Body.Password = "Passw0rd1234"
+		_, err := h.sendRegisterEmailOTP(context.Background(), in)
+
+		require.Error(t, err)
+		assertStatus(t, err, 400)
+	})
+
+	t.Run("debug_code and debug_verify_link are withheld outside dev", func(t *testing.T) {
 		users := repotest.NewUserRepository()
 		admin := repotest.NewAdminRepository()
 		copies := repotest.NewCopyRepository()
@@ -1033,10 +1099,26 @@ func TestSendVerifyRegisterEmailOTP(t *testing.T) {
 		h := NewAuthHandler(users, admin, copies, regVerifications, testJWTSecret, "encryption-secret", noopEmail(), noopSMS(), registration, "prd")
 
 		sendIn := &sendRegisterEmailOTPInput{}
+		sendIn.Body.Name = "Prod User"
 		sendIn.Body.Email = "prod-user@example.com"
+		sendIn.Body.Password = "Passw0rd1234"
 		sendOut, err := h.sendRegisterEmailOTP(context.Background(), sendIn)
 		require.NoError(t, err)
 		assert.Empty(t, sendOut.Body.DebugCode)
+		assert.Empty(t, sendOut.Body.DebugVerifyLink)
+	})
+
+	t.Run("debug_verify_link points at the frontend's /register?verifyToken= route", func(t *testing.T) {
+		h, _, _, _ := newAuthHandlerWithVerifications()
+		sendIn := &sendRegisterEmailOTPInput{}
+		sendIn.Body.Name = "Dev User"
+		sendIn.Body.Email = "dev-user@example.com"
+		sendIn.Body.Password = "Passw0rd1234"
+
+		sendOut, err := h.sendRegisterEmailOTP(context.Background(), sendIn)
+
+		require.NoError(t, err)
+		assert.Contains(t, sendOut.Body.DebugVerifyLink, "/register?verifyToken=")
 	})
 
 	t.Run("rejects an already-registered email", func(t *testing.T) {
@@ -1044,7 +1126,9 @@ func TestSendVerifyRegisterEmailOTP(t *testing.T) {
 		require.NoError(t, users.Create(&models.User{Name: "Existing", Email: "existing@example.com", Password: "x"}))
 
 		sendIn := &sendRegisterEmailOTPInput{}
+		sendIn.Body.Name = "Existing"
 		sendIn.Body.Email = "existing@example.com"
+		sendIn.Body.Password = "Passw0rd1234"
 		_, err := h.sendRegisterEmailOTP(context.Background(), sendIn)
 
 		require.Error(t, err)
@@ -1053,15 +1137,9 @@ func TestSendVerifyRegisterEmailOTP(t *testing.T) {
 
 	t.Run("wrong code is rejected and invalidates the OTP", func(t *testing.T) {
 		h, _, _, regVerifications := newAuthHandlerWithVerifications()
-		sendIn := &sendRegisterEmailOTPInput{}
-		sendIn.Body.Email = "wrongcode@example.com"
-		_, err := h.sendRegisterEmailOTP(context.Background(), sendIn)
-		require.NoError(t, err)
+		sendRegistration(t, h, "Wrong Code", "wrongcode@example.com", "Passw0rd1234", nil)
 
-		verifyIn := &verifyRegisterEmailOTPInput{}
-		verifyIn.Body.Email = "wrongcode@example.com"
-		verifyIn.Body.Code = "000000"
-		_, err = h.verifyRegisterEmailOTP(context.Background(), verifyIn)
+		_, err := verifyRegistrationCode(h, "wrongcode@example.com", "000000")
 		require.Error(t, err)
 		assertStatus(t, err, 400)
 
@@ -1069,23 +1147,50 @@ func TestSendVerifyRegisterEmailOTP(t *testing.T) {
 		assert.ErrorIs(t, findErr, repository.ErrNotFound, "a failed attempt should invalidate the code")
 	})
 
+	t.Run("a code is single-use — replaying it cannot create a second account", func(t *testing.T) {
+		h, _, _, _ := newAuthHandlerWithVerifications()
+		code := sendRegistration(t, h, "Replay", "replay@example.com", "Passw0rd1234", nil)
+		_, err := verifyRegistrationCode(h, "replay@example.com", code)
+		require.NoError(t, err)
+
+		_, err = verifyRegistrationCode(h, "replay@example.com", code)
+		require.Error(t, err)
+		assertStatus(t, err, 400)
+	})
+
 	t.Run("expired code is rejected", func(t *testing.T) {
 		h, _, _, regVerifications := newAuthHandlerWithVerifications()
-		require.NoError(t, regVerifications.Upsert(registrationChannelEmail, "expired@example.com", "123456", time.Now().Add(-time.Minute)))
+		require.NoError(t, regVerifications.Upsert(
+			registrationChannelEmail, "expired@example.com", "123456", time.Now().Add(-time.Minute),
+			models.PendingRegistrationData{PendingName: "Expired", PendingEmail: "expired@example.com", PendingPasswordHash: "hash"},
+		))
 
-		verifyIn := &verifyRegisterEmailOTPInput{}
-		verifyIn.Body.Email = "expired@example.com"
-		verifyIn.Body.Code = "123456"
-		_, err := h.verifyRegisterEmailOTP(context.Background(), verifyIn)
+		_, err := verifyRegistrationCode(h, "expired@example.com", "123456")
 
 		require.Error(t, err)
 		assertStatus(t, err, 400)
 	})
 
+	t.Run("editing the details and resending replaces the pending account", func(t *testing.T) {
+		h, users, _, _ := newAuthHandlerWithVerifications()
+		sendRegistration(t, h, "First Draft", "resend@example.com", "Passw0rd1234", nil)
+		freshCode := sendRegistration(t, h, "Second Draft", "resend@example.com", "Passw0rd5678", nil)
+
+		out, err := verifyRegistrationCode(h, "resend@example.com", freshCode)
+
+		require.NoError(t, err)
+		assert.Equal(t, "Second Draft", out.Body.User.Name, "the resend supersedes the earlier draft rather than accumulating")
+		stored, findErr := users.FindByEmail("resend@example.com")
+		require.NoError(t, findErr)
+		assert.NoError(t, bcrypt.CompareHashAndPassword([]byte(stored.Password), []byte("Passw0rd5678")))
+	})
+
 	t.Run("rate limits repeated send requests for the same email", func(t *testing.T) {
 		h, _, _, _ := newAuthHandlerWithVerifications()
 		sendIn := &sendRegisterEmailOTPInput{}
+		sendIn.Body.Name = "Rate Limited"
 		sendIn.Body.Email = "ratelimited@example.com"
+		sendIn.Body.Password = "Passw0rd1234"
 
 		for range registrationOTPRateLimitAttempts {
 			_, err := h.sendRegisterEmailOTP(context.Background(), sendIn)
@@ -1098,8 +1203,13 @@ func TestSendVerifyRegisterEmailOTP(t *testing.T) {
 	})
 }
 
+// TestSendVerifyRegisterPhoneOTP covers endpoints the app itself no longer
+// calls — registration is a single email step now. They're kept working for
+// a future real SMS provider (see sendRegisterPhoneOTP's tech-debt note), so
+// they're kept tested too; the token they mint has no consumer, hence no
+// assertion here about anything downstream accepting it.
 func TestSendVerifyRegisterPhoneOTP(t *testing.T) {
-	t.Run("round trip: send (always mocked), verify, use the token to register", func(t *testing.T) {
+	t.Run("round trip: send (always mocked), then verify", func(t *testing.T) {
 		h, _, _, _ := newAuthHandlerWithVerifications()
 
 		sendIn := &sendRegisterPhoneOTPInput{}
@@ -1112,49 +1222,27 @@ func TestSendVerifyRegisterPhoneOTP(t *testing.T) {
 		verifyIn.Body.Phone = "+65 9123 4567"
 		verifyIn.Body.Code = sendOut.Body.MockCode
 		verifyOut, err := h.verifyRegisterPhoneOTP(context.Background(), verifyIn)
-		require.NoError(t, err)
-		require.NotEmpty(t, verifyOut.Body.VerificationToken)
 
-		regIn := &registerInput{}
-		regIn.Body.Name = "Phone User"
-		regIn.Body.Email = "phone-user@example.com"
-		regIn.Body.Password = "Passw0rd1234"
-		regIn.Body.EmailVerificationToken = mustEmailVerificationToken(t, h, "phone-user@example.com")
-		phone := "+65 9123 4567"
-		regIn.Body.Phone = &phone
-		regIn.Body.PhoneVerificationToken = &verifyOut.Body.VerificationToken
-
-		out, err := h.register(context.Background(), regIn)
 		require.NoError(t, err)
-		assert.True(t, out.Body.User.PhoneVerified)
+		assert.NotEmpty(t, verifyOut.Body.VerificationToken)
 	})
 
-	t.Run("a phone token cannot be replayed as an email token", func(t *testing.T) {
-		h, _, _, _ := newAuthHandlerWithVerifications()
-
+	t.Run("wrong code is rejected and invalidates the OTP", func(t *testing.T) {
+		h, _, _, regVerifications := newAuthHandlerWithVerifications()
 		sendIn := &sendRegisterPhoneOTPInput{}
-		sendIn.Body.Phone = "shared-identifier@example.com"
-		sendOut, err := h.sendRegisterPhoneOTP(context.Background(), sendIn)
+		sendIn.Body.Phone = "+65 9000 0001"
+		_, err := h.sendRegisterPhoneOTP(context.Background(), sendIn)
 		require.NoError(t, err)
 
 		verifyIn := &verifyRegisterPhoneOTPInput{}
-		verifyIn.Body.Phone = "shared-identifier@example.com"
-		verifyIn.Body.Code = sendOut.Body.MockCode
-		verifyOut, err := h.verifyRegisterPhoneOTP(context.Background(), verifyIn)
-		require.NoError(t, err)
-
-		regIn := &registerInput{}
-		regIn.Body.Name = "Confused User"
-		regIn.Body.Email = "shared-identifier@example.com"
-		regIn.Body.Password = "Passw0rd1234"
-		// A phone-purpose token presented as the email token, for the same
-		// identifier string, must still be rejected — purpose is checked
-		// independently of identifier.
-		regIn.Body.EmailVerificationToken = verifyOut.Body.VerificationToken
-
-		_, err = h.register(context.Background(), regIn)
+		verifyIn.Body.Phone = "+65 9000 0001"
+		verifyIn.Body.Code = "000000"
+		_, err = h.verifyRegisterPhoneOTP(context.Background(), verifyIn)
 		require.Error(t, err)
 		assertStatus(t, err, 400)
+
+		_, findErr := regVerifications.Find(registrationChannelPhone, "+65 9000 0001")
+		assert.ErrorIs(t, findErr, repository.ErrNotFound, "a failed attempt should invalidate the code")
 	})
 
 	t.Run("rate limits repeated send requests for the same phone", func(t *testing.T) {

@@ -29,12 +29,13 @@ func NewUserRepository() *UserRepository {
 }
 
 // Create inserts user, assigning it a new ID and defaulting Role to "user".
-// Returns repository.ErrConflict if the email is already taken.
+// Returns repository.ErrConflict if the email is already taken — compared
+// case-insensitively, mirroring idx_users_email_nocase (migration 000011).
 func (r *UserRepository) Create(user *models.User) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	for _, u := range r.byID {
-		if u.Email == user.Email {
+		if strings.EqualFold(u.Email, user.Email) {
 			return repository.ErrConflict
 		}
 	}
@@ -48,12 +49,14 @@ func (r *UserRepository) Create(user *models.User) error {
 	return nil
 }
 
-// FindByEmail returns the user with the given email, or repository.ErrNotFound.
+// FindByEmail returns the user with the given email, or
+// repository.ErrNotFound. Case-insensitive, matching the GORM
+// implementation's COLLATE NOCASE lookup.
 func (r *UserRepository) FindByEmail(email string) (*models.User, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	for _, u := range r.byID {
-		if u.Email == email {
+		if strings.EqualFold(u.Email, email) {
 			cp := *u
 			return &cp, nil
 		}
@@ -140,12 +143,18 @@ func regVerificationKey(channel, identifier string) string {
 	return channel + ":" + identifier
 }
 
-// Upsert replaces any existing code for (channel, identifier).
-func (r *RegistrationVerificationRepository) Upsert(channel, identifier, code string, expiresAt time.Time) error {
+// Upsert replaces any existing code (and pending registration data) for
+// (channel, identifier).
+func (r *RegistrationVerificationRepository) Upsert(
+	channel, identifier, code string,
+	expiresAt time.Time,
+	pending models.PendingRegistrationData,
+) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	r.byKey[regVerificationKey(channel, identifier)] = &models.RegistrationVerification{
 		Channel: channel, Identifier: identifier, Code: code, ExpiresAt: expiresAt,
+		PendingRegistrationData: pending,
 	}
 	return nil
 }
@@ -168,6 +177,21 @@ func (r *RegistrationVerificationRepository) Delete(channel, identifier string) 
 	defer r.mu.Unlock()
 	delete(r.byKey, regVerificationKey(channel, identifier))
 	return nil
+}
+
+// DeleteExpired removes every stored verification that expired before the
+// given time, returning how many were removed.
+func (r *RegistrationVerificationRepository) DeleteExpired(before time.Time) (int64, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	var n int64
+	for key, v := range r.byKey {
+		if v.ExpiresAt.Before(before) {
+			delete(r.byKey, key)
+			n++
+		}
+	}
+	return n, nil
 }
 
 // AdminRepository is an in-memory fake of repository.AdminRepository.

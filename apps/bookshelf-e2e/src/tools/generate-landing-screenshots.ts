@@ -94,23 +94,20 @@ async function seed() {
   const seedPassword = "LandingScreenshotSeed1";
   const { debug_code } = await jsonFetch(
     `${BACKEND}/auth/register/send-email-otp`,
-    { method: "POST", body: JSON.stringify({ email: seedEmail }) },
-  );
-  const { verification_token } = await jsonFetch(
-    `${BACKEND}/auth/register/verify-email-otp`,
     {
       method: "POST",
-      body: JSON.stringify({ email: seedEmail, code: debug_code }),
+      body: JSON.stringify({
+        name: "Community Seed",
+        email: seedEmail,
+        password: seedPassword,
+      }),
     },
   );
-  await jsonFetch(`${BACKEND}/auth/register`, {
+  // verify-email-otp creates the account outright — there's no separate
+  // /auth/register call any more.
+  await jsonFetch(`${BACKEND}/auth/register/verify-email-otp`, {
     method: "POST",
-    body: JSON.stringify({
-      name: "Community Seed",
-      email: seedEmail,
-      password: seedPassword,
-      email_verification_token: verification_token,
-    }),
+    body: JSON.stringify({ email: seedEmail, code: debug_code }),
   });
   const { token } = await jsonFetch(`${BACKEND}/auth/login`, {
     method: "POST",
