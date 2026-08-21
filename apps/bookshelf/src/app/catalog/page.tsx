@@ -153,7 +153,7 @@ export default function CatalogPage() {
   return (
     <div className="flex flex-col gap-8">
       {/* Recently added bookshelf (only when not searching) */}
-      {!search && <BookshelfRow limit={16} ownedBookIds={ownedBookIds} />}
+      {!search && <BookshelfRow limit={12} ownedBookIds={ownedBookIds} />}
 
       <div className="flex flex-col gap-1">
         <h1 className="text-2xl font-bold">Book Catalog</h1>

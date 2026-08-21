@@ -69,7 +69,7 @@ interface BookshelfRowProps {
   ownedBookIds: Set<number>;
 }
 
-export function BookshelfRow({ limit = 16, ownedBookIds }: BookshelfRowProps) {
+export function BookshelfRow({ limit = 12, ownedBookIds }: BookshelfRowProps) {
   const [books, setBooks] = useState<Book[]>([]);
   const [loading, setLoading] = useState(true);
 
