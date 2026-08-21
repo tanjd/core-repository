@@ -6,4 +6,4 @@ if [ -n "$STAGED_FILES" ]; then
   git add -- $STAGED_FILES
 fi
 
-pnpm nx affected -t lint test
+pnpm nx affected -t lint test e2e
