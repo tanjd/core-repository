@@ -1,3 +1,13 @@
+## 0.14.0 (2026-08-22)
+
+### 🚀 Features
+
+- **bookshelf,bookshelf-backend:** cross-edition description backfill ([#64](https://github.com/tanjd/core-repository/pull/64))
+
+### ❤️ Thank You
+
+- Jeddy Tan @tanjd
+
 ## 0.13.0 (2026-08-21)
 
 ### 🚀 Features
