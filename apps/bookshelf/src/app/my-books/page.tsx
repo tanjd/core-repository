@@ -12,6 +12,8 @@ import {
   Download,
   Upload,
   Search,
+  SlidersHorizontal,
+  X,
 } from "lucide-react";
 import { api, downloadMyCopiesExport } from "@/lib/api";
 import type {
@@ -30,6 +32,13 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Textarea } from "@/components/ui/textarea";
 import { Skeleton } from "@/components/ui/skeleton";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { BookCover } from "@/components/BookCover";
 import {
   Dialog,
@@ -94,6 +103,13 @@ const importActionLabel: Record<ImportRowAction, string> = {
   skipped: "Skipped",
 };
 
+const SORT_LABELS: Record<string, string> = {
+  title: "Title A–Z",
+  author: "Author A–Z",
+  copies: "Most Copies",
+  newest: "Recently Added",
+};
+
 function importSummaryText(summary: ImportSummary, isResult: boolean): string {
   const parts: string[] = [];
   if (summary.books_created > 0) {
@@ -128,6 +144,11 @@ export default function MyBooksPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [search, setSearch] = useState("");
+  const [sort, setSort] = useState<"title" | "author" | "copies" | "newest">(
+    "title",
+  );
+  const [statusFilter, setStatusFilter] = useState<string>("all");
+  const [conditionFilter, setConditionFilter] = useState<string>("all");
 
   // Edit dialog
   const [editCopy, setEditCopy] = useState<MyCopy | null>(null);
@@ -411,13 +432,55 @@ export default function MyBooksPage() {
   const totalPending = Object.values(pendingCounts).reduce((n, c) => n + c, 0);
 
   const query = search.trim().toLowerCase();
-  const filteredGroups = query
-    ? bookGroups.filter(
-        (g) =>
-          g.title.toLowerCase().includes(query) ||
-          g.author.toLowerCase().includes(query),
-      )
-    : bookGroups;
+  const hasActiveFilters =
+    !!query ||
+    statusFilter !== "all" ||
+    conditionFilter !== "all" ||
+    sort !== "title";
+
+  function clearFilters() {
+    setSearch("");
+    setStatusFilter("all");
+    setConditionFilter("all");
+    setSort("title");
+  }
+
+  const filteredGroups = bookGroups
+    .filter(
+      (g) =>
+        !query ||
+        g.title.toLowerCase().includes(query) ||
+        g.author.toLowerCase().includes(query),
+    )
+    .map((g) => ({
+      ...g,
+      copies: g.copies.filter(
+        (c) =>
+          (statusFilter === "all" || c.status === statusFilter) &&
+          (conditionFilter === "all" || c.condition === conditionFilter),
+      ),
+    }))
+    .filter((g) => g.copies.length > 0)
+    .sort((a, b) => {
+      switch (sort) {
+        case "author":
+          return (
+            a.author.localeCompare(b.author) || a.title.localeCompare(b.title)
+          );
+        case "copies":
+          return (
+            b.copies.length - a.copies.length || a.title.localeCompare(b.title)
+          );
+        case "newest":
+          return (
+            Math.max(...b.copies.map((c) => c.id)) -
+            Math.max(...a.copies.map((c) => c.id))
+          );
+        case "title":
+        default:
+          return a.title.localeCompare(b.title);
+      }
+    });
 
   if (loading) {
     return (
@@ -480,15 +543,125 @@ export default function MyBooksPage() {
       {error && <p className="text-sm text-destructive">{error}</p>}
 
       {totalCopies > 0 && (
-        <div className="relative max-w-xl">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground pointer-events-none" />
-          <Input
-            type="search"
-            placeholder="Search your books by title, author…"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            className="pl-9 h-10"
-          />
+        <div className="flex flex-col sm:flex-row gap-3 items-start sm:items-center">
+          <div className="relative flex-1 max-w-xl">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground pointer-events-none" />
+            <Input
+              type="search"
+              placeholder="Search your books by title, author…"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              className="pl-9 h-10"
+            />
+          </div>
+
+          <div className="flex items-center gap-3 flex-wrap">
+            <div className="flex items-center gap-1.5">
+              <SlidersHorizontal className="size-4 text-muted-foreground" />
+              <Select
+                value={sort}
+                onValueChange={(v) => setSort(v as typeof sort)}
+              >
+                <SelectTrigger className="h-10 w-40">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="title">Title A–Z</SelectItem>
+                  <SelectItem value="author">Author A–Z</SelectItem>
+                  <SelectItem value="copies">Most Copies</SelectItem>
+                  <SelectItem value="newest">Recently Added</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            <Select value={statusFilter} onValueChange={setStatusFilter}>
+              <SelectTrigger className="h-10 w-36">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All statuses</SelectItem>
+                <SelectItem value="available">Available</SelectItem>
+                <SelectItem value="unavailable">Unavailable</SelectItem>
+                <SelectItem value="loaned">Loaned</SelectItem>
+                <SelectItem value="requested">Requested</SelectItem>
+              </SelectContent>
+            </Select>
+
+            <Select value={conditionFilter} onValueChange={setConditionFilter}>
+              <SelectTrigger className="h-10 w-36">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All conditions</SelectItem>
+                <SelectItem value="good">Good</SelectItem>
+                <SelectItem value="fair">Fair</SelectItem>
+                <SelectItem value="worn">Worn</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+        </div>
+      )}
+
+      {totalCopies > 0 && hasActiveFilters && (
+        <div className="flex items-center gap-2 flex-wrap -mt-4">
+          {query && (
+            <Badge variant="secondary" className="gap-1 pr-1">
+              &ldquo;{search.trim()}&rdquo;
+              <button
+                type="button"
+                aria-label="Clear search"
+                onClick={() => setSearch("")}
+                className="rounded-full hover:bg-background/60 p-0.5"
+              >
+                <X className="size-3" />
+              </button>
+            </Badge>
+          )}
+          {statusFilter !== "all" && (
+            <Badge variant="secondary" className="gap-1 pr-1 capitalize">
+              {statusFilter}
+              <button
+                type="button"
+                aria-label="Remove status filter"
+                onClick={() => setStatusFilter("all")}
+                className="rounded-full hover:bg-background/60 p-0.5"
+              >
+                <X className="size-3" />
+              </button>
+            </Badge>
+          )}
+          {conditionFilter !== "all" && (
+            <Badge variant="secondary" className="gap-1 pr-1 capitalize">
+              {conditionFilter}
+              <button
+                type="button"
+                aria-label="Remove condition filter"
+                onClick={() => setConditionFilter("all")}
+                className="rounded-full hover:bg-background/60 p-0.5"
+              >
+                <X className="size-3" />
+              </button>
+            </Badge>
+          )}
+          {sort !== "title" && (
+            <Badge variant="secondary" className="gap-1 pr-1">
+              Sort: {SORT_LABELS[sort] ?? sort}
+              <button
+                type="button"
+                aria-label="Reset sort"
+                onClick={() => setSort("title")}
+                className="rounded-full hover:bg-background/60 p-0.5"
+              >
+                <X className="size-3" />
+              </button>
+            </Badge>
+          )}
+          <button
+            onClick={clearFilters}
+            className="text-xs text-muted-foreground hover:text-foreground hover:underline ml-1"
+          >
+            Clear all
+          </button>
         </div>
       )}
 
@@ -504,9 +677,14 @@ export default function MyBooksPage() {
           </Link>
         </div>
       ) : filteredGroups.length === 0 ? (
-        <p className="text-sm text-muted-foreground py-8 text-center">
-          No books match &quot;{search.trim()}&quot;.
-        </p>
+        <div className="flex flex-col items-center justify-center gap-3 py-8 text-center">
+          <p className="text-sm text-muted-foreground">
+            No books match your filters.
+          </p>
+          <Button variant="outline" size="sm" onClick={clearFilters}>
+            Clear filters
+          </Button>
+        </div>
       ) : (
         <div className="flex flex-col gap-6">
           {filteredGroups.map((group) => (

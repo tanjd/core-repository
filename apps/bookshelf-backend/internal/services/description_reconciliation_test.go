@@ -13,12 +13,19 @@ import (
 
 // newReconciliationDeps wires a fake BookRepository (with a CopyRepository,
 // since List only returns books with at least one copy) and the service
-// under test.
+// under test. The external-lookup client defaults to a stub with no canned
+// responses (every lookup "misses"), so tests that don't care about the
+// external-fallback pass never make a real network call — a test that does
+// care overrides svc.client itself, same as
+// TestDescriptionReconciliation_ExternalFallback_BackfillsWhenNoSiblingDonor.
 func newReconciliationDeps() (*DescriptionReconciliationService, *repotest.BookRepository, *repotest.CopyRepository) {
 	books := repotest.NewBookRepository()
 	copies := repotest.NewCopyRepository()
 	books.SetCopies(copies)
-	return NewDescriptionReconciliationService(books), books, copies
+	svc := NewDescriptionReconciliationService(books, "")
+	stubClient, _ := newStubClient(map[string]string{})
+	svc.client = stubClient
+	return svc, books, copies
 }
 
 // addCatalogBook creates book and gives it a copy, so it's visible to List.
@@ -157,4 +164,53 @@ func TestDescriptionReconciliation_SingleBookInCatalogNoPanic(t *testing.T) {
 		result := svc.Run(context.Background())
 		assert.Equal(t, "backfilled 0 of 1 books", result)
 	})
+}
+
+func TestDescriptionReconciliation_ExternalFallback_BackfillsWhenNoSiblingDonor(t *testing.T) {
+	svc, books, copies := newReconciliationDeps()
+	client, _ := newStubClient(map[string]string{
+		"bibkeys=ISBN:111": `{"ISBN:111":{}}`, // Open Library has no description for this ISBN
+		"volumes/GB1":      `{"volumeInfo":{"description":"from google"}}`,
+	})
+	svc.client = client
+	svc.googleBooksKey = "test-key"
+
+	target := addCatalogBook(t, books, copies, models.Book{Title: "Solo Work", Author: "Nobody Else", ISBN: "111", GoogleBooksID: "GB1"})
+
+	result := svc.Run(t.Context())
+
+	assert.Equal(t, "backfilled 1 of 1 books", result)
+	got := findBook(t, books, target.ID)
+	assert.Equal(t, "from google", got.Description)
+	assert.True(t, got.DescriptionEnriched)
+}
+
+func TestDescriptionReconciliation_ExternalFallback_NoResolvableKeyStaysEmpty(t *testing.T) {
+	svc, books, copies := newReconciliationDeps()
+	client, rt := newStubClient(map[string]string{})
+	svc.client = client
+
+	target := addCatalogBook(t, books, copies, models.Book{Title: "Solo Work", Author: "Nobody Else"})
+
+	result := svc.Run(t.Context())
+
+	assert.Equal(t, "backfilled 0 of 1 books", result)
+	assert.Empty(t, findBook(t, books, target.ID).Description)
+	assert.Empty(t, rt.calls, "a book with no external key should never trigger a lookup")
+}
+
+func TestDescriptionReconciliation_InCatalogDonorPassRunsBeforeAnyExternalCall(t *testing.T) {
+	svc, books, copies := newReconciliationDeps()
+	client, rt := newStubClient(map[string]string{
+		"bibkeys=ISBN:9780134190440": `{"ISBN:9780134190440":{}}`,
+	})
+	svc.client = client
+
+	addCatalogBook(t, books, copies, models.Book{Title: "Go in Action", Author: "Kennedy", ISBN: "9781617291769", Description: "A great book"})
+	addCatalogBook(t, books, copies, models.Book{Title: "Go in Action", Author: "Kennedy", ISBN: "9780134190440"})
+
+	result := svc.Run(t.Context())
+
+	assert.Equal(t, "backfilled 1 of 2 books", result)
+	assert.Empty(t, rt.calls, "the sibling donor already filled every empty description — no external lookup should have been needed")
 }

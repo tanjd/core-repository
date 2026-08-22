@@ -80,6 +80,46 @@ func TestCreateBook_DoesNotDedupByISBN_WhenOLKeyProvided(t *testing.T) {
 	assert.Equal(t, 2, books.Count())
 }
 
+func TestCreateBook_BackfillsCover_WhenExistingRowHasNone(t *testing.T) {
+	h, books := newBookHandler()
+
+	// Book first added with no cover available (e.g. metadata search found
+	// none) — matches the fallback case described in the bug report.
+	first, err := h.createBook(fakeAuthedCtx(t, 1, "user"), createBookBody("T1", "OL1", "", ""))
+	require.NoError(t, err)
+	require.Empty(t, first.Body.CoverURL)
+
+	// Re-adding the same book (e.g. after its last copy was removed, which
+	// leaves the keyed Book row in place — see maybeDeleteOrphanedBook) now
+	// carries a real cover. The existing row must pick it up, not keep
+	// serving the empty fallback forever.
+	body := createBookBody("T1", "OL1", "", "")
+	body.Body.CoverURL = "https://covers.openlibrary.org/b/id/12345-L.jpg"
+	second, err := h.createBook(fakeAuthedCtx(t, 1, "user"), body)
+	require.NoError(t, err)
+
+	assert.Equal(t, first.Body.ID, second.Body.ID)
+	assert.Equal(t, 1, books.Count())
+	assert.Equal(t, "https://covers.openlibrary.org/b/id/12345-L.jpg", second.Body.CoverURL)
+}
+
+func TestCreateBook_KeepsExistingCover_WhenAlreadySet(t *testing.T) {
+	h, books := newBookHandler()
+
+	first := createBookBody("T1", "OL1", "", "")
+	first.Body.CoverURL = "https://covers.openlibrary.org/b/id/11111-L.jpg"
+	_, err := h.createBook(fakeAuthedCtx(t, 1, "user"), first)
+	require.NoError(t, err)
+
+	second := createBookBody("T1 Reprint", "OL1", "", "")
+	second.Body.CoverURL = "https://covers.openlibrary.org/b/id/99999-L.jpg"
+	out, err := h.createBook(fakeAuthedCtx(t, 1, "user"), second)
+	require.NoError(t, err)
+
+	assert.Equal(t, 1, books.Count())
+	assert.Equal(t, "https://covers.openlibrary.org/b/id/11111-L.jpg", out.Body.CoverURL)
+}
+
 func TestCreateBook_CreatesNewBook_WhenNoMatch(t *testing.T) {
 	h, books := newBookHandler()
 

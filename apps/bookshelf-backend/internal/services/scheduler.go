@@ -388,7 +388,11 @@ func (s *Scheduler) setLastResult(result string) {
 
 // refreshBookCover downloads and caches book's cover if it has one hosted
 // externally (not already a locally-cached path). Returns true if the book
-// was updated.
+// was updated. Deliberately doesn't check services.IsCoverURLAllowed —
+// unlike the backfill jobs, this only ever re-fetches a CoverURL that was
+// already allowlist-checked once when it was first accepted (at createBook
+// or backfillCover time in internal/handlers/books.go), so it's not a new
+// untrusted-input surface.
 func (s *Scheduler) refreshBookCover(book *models.Book) bool {
 	if book.CoverURL == "" || strings.HasPrefix(book.CoverURL, "/") {
 		return false

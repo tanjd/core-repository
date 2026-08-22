@@ -175,3 +175,16 @@ cp -r /data/. /backup/`.
   no-`ON DELETE` FK in the schema, breaking `deleteCopy` outright instead of just leaving stale
   rows) and not a blocking guard on `deleteCopy` (would make any previously-borrowed copy nearly
   impossible to remove).
+- **No sweep for orphaned cover files under `data/covers/`.** `maybeDeleteOrphanedBook`
+  (`internal/handlers/copies.go`) cleans up a keyless book's cached cover on delete via
+  `deleteCachedCover`, but that's the only cleanup path that exists. `refreshBookCover`
+  (`internal/services/scheduler.go`) overwriting a `CoverURL` with a freshly re-downloaded
+  image (different URL/content → different SHA-256 filename, see `DownloadCover` in
+  `internal/services/covers.go`) leaves the old file behind, and nothing scans `data/covers/`
+  against live `Book.CoverURL` values to catch stragglers. `BackupService` (`internal/services/backup.go`)
+  archives the directory wholesale, so any accumulated orphans also bloat every backup
+  snapshot, bounded only by the retention count. Left as-is: this is a personal, self-hosted
+  app with a small catalog (dozens–low hundreds of books, each cover capped at 10MiB), so the
+  disk-space impact is negligible in practice. If this needs closing later, a scheduled sweep
+  job (list every `Book.CoverURL`, diff against `data/covers/`'s contents, delete
+  unreferenced files) following the existing `RegisterJob` pattern is the natural fix.

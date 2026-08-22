@@ -105,11 +105,13 @@ func main() {
 		log.Fatal().Err(err).Msg("failed to get underlying sql.DB")
 	}
 	backupSvc := services.NewBackupService(sqlDB, adminRepo, cfg.DBPath, coversDir, backupsDir)
-	descriptionReconciliationSvc := services.NewDescriptionReconciliationService(bookRepo)
+	descriptionReconciliationSvc := services.NewDescriptionReconciliationService(bookRepo, cfg.GoogleBooksAPIKey)
+	coverBackfillSvc := services.NewCoverBackfillService(bookRepo, coversDir, cfg.GoogleBooksAPIKey)
 
 	scheduler := services.NewScheduler(bookRepo, adminRepo, coversDir, cfg.MetadataRefreshInterval)
 	scheduler.RegisterJob("backup", "backup_interval", 24*time.Hour, backupSvc.CreateSnapshot)
 	scheduler.RegisterJob("description-reconciliation", "description_reconciliation_interval", 24*time.Hour, descriptionReconciliationSvc.Run)
+	scheduler.RegisterJob("cover-backfill", "cover_backfill_interval", 24*time.Hour, coverBackfillSvc.Run)
 	// Sweeps abandoned signups out of registration_verifications. A row is
 	// deleted as soon as its code is submitted, right or wrong, so this only
 	// catches the ones nobody ever came back to — which for the email channel

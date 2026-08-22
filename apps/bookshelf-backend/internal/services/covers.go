@@ -1,4 +1,4 @@
-package handlers
+package services
 
 import (
 	"context"
@@ -20,7 +20,8 @@ const coverMaxBytes = 10 << 20
 
 // allowedCoverHosts is the set of trusted external image hosts.
 // Only URLs whose host matches one of these suffixes are fetched server-side,
-// preventing SSRF attacks from user-supplied cover_url values.
+// preventing SSRF attacks from externally-sourced cover_url values (whether
+// user-submitted or returned by a metadata lookup).
 var allowedCoverHosts = []string{
 	"covers.openlibrary.org",
 	"books.google.com",
@@ -28,8 +29,8 @@ var allowedCoverHosts = []string{
 	"cover.books.readmill.com",
 }
 
-// isCoverURLAllowed reports whether the given URL is safe to fetch.
-func isCoverURLAllowed(rawURL string) bool {
+// IsCoverURLAllowed reports whether the given URL is safe to fetch.
+func IsCoverURLAllowed(rawURL string) bool {
 	u, err := url.Parse(rawURL)
 	if err != nil {
 		return false
@@ -46,11 +47,11 @@ func isCoverURLAllowed(rawURL string) bool {
 	return false
 }
 
-// downloadCover fetches an external image URL and saves it to destDir.
+// DownloadCover fetches an external image URL and saves it to destDir.
 // Returns the proxy-accessible path (/api/covers/<filename>) on success.
 // Returns ("", nil) if externalURL is empty or already a local path (skip).
 // On failure, returns ("", err); callers should log and keep the original URL.
-func downloadCover(ctx context.Context, externalURL, destDir string) (string, error) {
+func DownloadCover(ctx context.Context, externalURL, destDir string) (string, error) {
 	if externalURL == "" {
 		return "", nil
 	}
@@ -59,7 +60,7 @@ func downloadCover(ctx context.Context, externalURL, destDir string) (string, er
 		return externalURL, nil
 	}
 
-	if !isCoverURLAllowed(externalURL) {
+	if !IsCoverURLAllowed(externalURL) {
 		return "", fmt.Errorf("cover URL host not in allowlist: %s", externalURL)
 	}
 
@@ -68,7 +69,11 @@ func downloadCover(ctx context.Context, externalURL, destDir string) (string, er
 	baseName := fmt.Sprintf("%x", sum[:8])
 
 	client := &http.Client{Timeout: 10 * time.Second}
-	resp, err := client.Get(externalURL) //nolint:noctx,gosec
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, externalURL, nil)
+	if err != nil {
+		return "", err
+	}
+	resp, err := client.Do(req) //nolint:gosec
 	if err != nil {
 		return "", err
 	}

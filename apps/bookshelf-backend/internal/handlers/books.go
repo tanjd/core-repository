@@ -227,12 +227,13 @@ func (h *BookHandler) createBook(ctx context.Context, input *createBookInput) (*
 	}
 
 	if existing, err := findExistingBook(h.books, input.Body.OLKey, input.Body.GoogleBooksID, input.Body.ISBN); err == nil {
+		h.backfillCover(ctx, existing, input.Body.CoverURL)
 		return &createBookOutput{Body: *existing}, nil
 	}
 
 	coverURL := input.Body.CoverURL
 	if h.coversDir != "" && coverURL != "" {
-		if local, err := downloadCover(ctx, coverURL, h.coversDir); err != nil {
+		if local, err := services.DownloadCover(ctx, coverURL, h.coversDir); err != nil {
 			zerolog.Ctx(ctx).Warn().Err(err).Msg("cover download failed, keeping external url")
 		} else if local != "" {
 			coverURL = local
@@ -261,6 +262,32 @@ func (h *BookHandler) createBook(ctx context.Context, input *createBookInput) (*
 	}
 
 	return &createBookOutput{Body: book}, nil
+}
+
+// backfillCover fills in existing.CoverURL when a book matched by
+// findExistingBook predates a cover (e.g. it was first added before one was
+// available, or its last copy was removed and it's now being re-added —
+// keyed books survive that as an orphaned Book row, see
+// maybeDeleteOrphanedBook in copies.go). Without this, the caller's freshly
+// supplied CoverURL is silently dropped in favor of the empty fallback
+// forever — refreshBookCover's scheduled job only re-caches an
+// already-set CoverURL, it never populates one that's empty.
+func (h *BookHandler) backfillCover(ctx context.Context, existing *models.Book, newCoverURL string) {
+	if existing.CoverURL != "" || newCoverURL == "" {
+		return
+	}
+	coverURL := newCoverURL
+	if h.coversDir != "" {
+		if local, err := services.DownloadCover(ctx, coverURL, h.coversDir); err != nil {
+			zerolog.Ctx(ctx).Warn().Err(err).Msg("cover download failed, keeping external url")
+		} else if local != "" {
+			coverURL = local
+		}
+	}
+	existing.CoverURL = coverURL
+	if err := h.books.Save(existing); err != nil {
+		zerolog.Ctx(ctx).Warn().Err(err).Msg("failed to backfill cover on existing book")
+	}
 }
 
 // findExistingBook implements createBook's upsert precedence — also reused
