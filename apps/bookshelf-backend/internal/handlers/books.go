@@ -233,7 +233,7 @@ func (h *BookHandler) createBook(ctx context.Context, input *createBookInput) (*
 
 	coverURL := input.Body.CoverURL
 	if h.coversDir != "" && coverURL != "" {
-		if local, err := downloadCover(ctx, coverURL, h.coversDir); err != nil {
+		if local, err := services.DownloadCover(ctx, coverURL, h.coversDir); err != nil {
 			zerolog.Ctx(ctx).Warn().Err(err).Msg("cover download failed, keeping external url")
 		} else if local != "" {
 			coverURL = local
@@ -278,7 +278,7 @@ func (h *BookHandler) backfillCover(ctx context.Context, existing *models.Book, 
 	}
 	coverURL := newCoverURL
 	if h.coversDir != "" {
-		if local, err := downloadCover(ctx, coverURL, h.coversDir); err != nil {
+		if local, err := services.DownloadCover(ctx, coverURL, h.coversDir); err != nil {
 			zerolog.Ctx(ctx).Warn().Err(err).Msg("cover download failed, keeping external url")
 		} else if local != "" {
 			coverURL = local
