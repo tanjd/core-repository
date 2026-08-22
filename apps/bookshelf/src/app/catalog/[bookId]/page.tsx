@@ -166,9 +166,16 @@ export default function BookDetailPage() {
             </Badge>
           )}
           {book.description && (
-            <p className="text-sm text-muted-foreground leading-relaxed max-w-prose mt-2">
-              {book.description}
-            </p>
+            <div className="flex flex-col gap-1 mt-2">
+              <p className="text-sm text-muted-foreground leading-relaxed max-w-prose">
+                {book.description}
+              </p>
+              {book.description_enriched && (
+                <p className="text-[10px] text-muted-foreground italic">
+                  Description from another edition
+                </p>
+              )}
+            </div>
           )}
         </div>
       </div>

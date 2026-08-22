@@ -1,6 +1,12 @@
 # Spec: cross-edition metadata enrichment in search results
 
-Status: **not yet implemented** — spec only, for a future dev session to pick up.
+Status: **implemented**. See [`metadata-search.md`](./metadata-search.md) for the current,
+consolidated explanation of the whole search pipeline (this doc plus everything built after it) —
+this doc remains the historical record of why each piece exists. Also required (and applied) fixing `deduplicateIntoGroups`'s
+title+author fallback, which previously fired whenever an ISBN lookup missed rather than only
+when the incoming result itself had no ISBN — silently merging distinct-ISBN editions with
+matching title+author into one row before `enrichAcrossEditions` could ever see them as separate
+entries. See `findExistingGroup` in `internal/handlers/metadata_consolidate.go`.
 
 ## Problem
 

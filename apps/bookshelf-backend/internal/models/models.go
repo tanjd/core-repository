@@ -99,7 +99,13 @@ type Book struct {
 	Language      string    `json:"language"`
 	GoogleBooksID string    `json:"google_books_id"`
 	CreatedAt     time.Time `json:"created_at"`
-	Copies        []Copy    `json:"copies,omitempty"`
+	// DescriptionEnriched marks Description as backfilled from a sibling
+	// edition of the same work by the description-reconciliation job, rather
+	// than sourced for this book itself — see
+	// internal/services/description_reconciliation.go. Never cleared
+	// automatically if Description is later edited directly.
+	DescriptionEnriched bool   `gorm:"not null;default:false" json:"description_enriched"`
+	Copies              []Copy `json:"copies,omitempty"`
 }
 
 // Copy is a physical instance of a Book owned by a church member.

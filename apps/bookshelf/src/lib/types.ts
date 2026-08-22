@@ -49,6 +49,7 @@ export interface Book {
   created_at?: string;
   copies?: Copy[];
   available_copies?: number;
+  description_enriched?: boolean;
 }
 
 export interface Copy {
@@ -191,6 +192,8 @@ export interface BookMetadataResult {
   ol_key: string;
   google_books_id: string;
   bookbrainz_id?: string;
+  enriched_fields?: string[];
+  work_key?: string;
 }
 
 export interface VerificationFactor {

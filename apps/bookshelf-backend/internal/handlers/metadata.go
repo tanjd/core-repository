@@ -36,6 +36,13 @@ type BookMetadataResult struct {
 	OLKey         string `json:"ol_key"`
 	GoogleBooksID string `json:"google_books_id"`
 	BookBrainzID  string `json:"bookbrainz_id,omitempty"`
+	// EnrichedFields lists fields on this result that were backfilled from a
+	// sibling edition of the same work, rather than from this result's own source.
+	EnrichedFields []string `json:"enriched_fields,omitempty"`
+	// WorkKey is the normalizeTitleAuthor bucket key for this result, used by the
+	// frontend to cluster distinct editions of the same work for display. Empty
+	// when Title or Author is empty (never bucketed).
+	WorkKey string `json:"work_key,omitempty"`
 }
 
 const searchCacheTTL = 1 * time.Hour
@@ -116,9 +123,14 @@ func (h *MetadataHandler) searchMetadata(ctx context.Context, input *searchMetad
 		return &searchMetadataOutput{Body: cached}, nil
 	}
 
+	queriedISBN := normalizeISBN(q)
 	results := fetchAllSources(ctx, q, apiKey)
+	if queriedISBN != "" {
+		results = append(results, expandSiblingEditions(ctx, results, apiKey)...)
+	}
 
 	consolidated := consolidateResults(results)
+	consolidated = promoteQueriedEdition(consolidated, queriedISBN)
 	h.cache.Set(cacheKey, consolidated)
 	return &searchMetadataOutput{Body: consolidated}, nil
 }
@@ -178,6 +190,22 @@ func fetchAllSources(ctx context.Context, q, apiKey string) []BookMetadataResult
 
 	wg.Wait()
 	return results
+}
+
+// expandSiblingEditions re-queries all sources by title+author when the
+// original query was an ISBN. An ISBN-only query only ever surfaces the
+// exact edition indexed under that ISBN — sibling editions (different
+// printing, hardcover vs. paperback, different territory) carry different
+// ISBNs and never enter the result set otherwise, so consolidateResults'
+// dedup/enrich/bucket pipeline (see docs/metadata-search.md) never gets a
+// chance to see them as the same work. Returns nil if the ISBN hit(s) didn't
+// carry a usable Title/Author to search by.
+func expandSiblingEditions(ctx context.Context, isbnResults []BookMetadataResult, apiKey string) []BookMetadataResult {
+	title, author := bestTitleAuthorForExpansion(isbnResults)
+	if title == "" || author == "" {
+		return nil
+	}
+	return fetchAllSources(ctx, title+" "+author, apiKey)
 }
 
 func (h *MetadataHandler) getOLDescription(_ context.Context, input *olDescriptionInput) (*olDescriptionOutput, error) {
@@ -364,12 +392,26 @@ func preferredISBN(ids []googleBooksIndustryIdentifier) string {
 	return ""
 }
 
+// googleBooksQueryFor returns the query string to send to Google Books for
+// q. Google Books' free-text search does not reliably match a bare ISBN
+// string — a valid, indexed ISBN can return zero results without the
+// "isbn:" search operator — so ISBN-shaped queries are rewritten to use it.
+// Non-ISBN queries (title/author, including expandSiblingEditions' re-fetch)
+// pass through unchanged.
+func googleBooksQueryFor(q string) string {
+	if isbn := normalizeISBN(q); isbn != "" {
+		return "isbn:" + isbn
+	}
+	return q
+}
+
 // fetchGoogleBooks calls the Google Books API and returns normalised results.
 func fetchGoogleBooks(ctx context.Context, q, apiKey string) ([]BookMetadataResult, error) {
-	zerolog.Ctx(ctx).Debug().Str("query", q).Msg("searching Google Books")
+	query := googleBooksQueryFor(q)
+	zerolog.Ctx(ctx).Debug().Str("query", query).Msg("searching Google Books")
 	apiURL := fmt.Sprintf(
 		"https://www.googleapis.com/books/v1/volumes?q=%s&key=%s&maxResults=10",
-		url.QueryEscape(q),
+		url.QueryEscape(query),
 		url.QueryEscape(apiKey),
 	)
 	resp, err := metadataClient.Get(apiURL) //nolint:noctx,gosec
