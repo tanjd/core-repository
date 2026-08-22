@@ -191,6 +191,8 @@ export interface BookMetadataResult {
   ol_key: string;
   google_books_id: string;
   bookbrainz_id?: string;
+  enriched_fields?: string[];
+  work_key?: string;
 }
 
 export interface VerificationFactor {

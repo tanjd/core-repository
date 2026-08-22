@@ -36,6 +36,13 @@ type BookMetadataResult struct {
 	OLKey         string `json:"ol_key"`
 	GoogleBooksID string `json:"google_books_id"`
 	BookBrainzID  string `json:"bookbrainz_id,omitempty"`
+	// EnrichedFields lists fields on this result that were backfilled from a
+	// sibling edition of the same work, rather than from this result's own source.
+	EnrichedFields []string `json:"enriched_fields,omitempty"`
+	// WorkKey is the normalizeTitleAuthor bucket key for this result, used by the
+	// frontend to cluster distinct editions of the same work for display. Empty
+	// when Title or Author is empty (never bucketed).
+	WorkKey string `json:"work_key,omitempty"`
 }
 
 const searchCacheTTL = 1 * time.Hour

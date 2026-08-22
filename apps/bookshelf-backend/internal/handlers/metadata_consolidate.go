@@ -92,26 +92,40 @@ func normalizeTitleAuthor(title, author string) string {
 }
 
 // deduplicateIntoGroups groups results that refer to the same book.
-// ISBN (normalized to ISBN-13) is the primary key; title+author is the fallback.
+// ISBN (normalized to ISBN-13) is the primary key; title+author is the
+// fallback. A result with its own valid ISBN may still join an existing
+// title+author group (e.g. BookBrainz never sets ISBN, so its hit for an
+// edition also returned with an ISBN by another source must still merge) —
+// but only as long as that group hasn't already acquired a *different*
+// confirmed ISBN from an earlier member. Once a group has a confirmed ISBN,
+// a differently-ISBN'd result is a genuinely distinct edition and must get
+// its own group, never silently fold in and discard one identity.
 func deduplicateIntoGroups(results []BookMetadataResult) [][]BookMetadataResult {
 	groups := [][]BookMetadataResult{}
 	isbnIndex := map[string]int{}
 	titleAuthorIndex := map[string]int{}
+	groupHasISBN := map[int]bool{}
 
 	for _, r := range results {
 		normISBN := normalizeISBN(r.ISBN)
 		normTA := normalizeTitleAuthor(r.Title, r.Author)
 
-		idx, found := findExistingGroup(isbnIndex, titleAuthorIndex, normISBN, normTA)
+		idx, found := findExistingGroup(isbnIndex, titleAuthorIndex, groupHasISBN, normISBN, normTA)
 		if found {
 			groups[idx] = append(groups[idx], r)
 			registerISBN(isbnIndex, normISBN, idx)
+			if normISBN != "" {
+				groupHasISBN[idx] = true
+			}
 			continue
 		}
 
 		idx = len(groups)
 		groups = append(groups, []BookMetadataResult{r})
 		registerISBN(isbnIndex, normISBN, idx)
+		if normISBN != "" {
+			groupHasISBN[idx] = true
+		}
 		if normTA != "|" {
 			titleAuthorIndex[normTA] = idx
 		}
@@ -120,13 +134,22 @@ func deduplicateIntoGroups(results []BookMetadataResult) [][]BookMetadataResult 
 	return groups
 }
 
-// findExistingGroup looks up an existing group index by ISBN first, falling
-// back to the title+author key.
-func findExistingGroup(isbnIndex, titleAuthorIndex map[string]int, normISBN, normTA string) (int, bool) {
+// findExistingGroup looks up an existing group index by ISBN first. Failing
+// that, it falls back to the title+author group — but a result carrying its
+// own ISBN may only join that fallback group if the group doesn't already
+// have a different confirmed ISBN (groupHasISBN), since joining would
+// otherwise silently discard one of two genuinely distinct editions.
+func findExistingGroup(isbnIndex, titleAuthorIndex map[string]int, groupHasISBN map[int]bool, normISBN, normTA string) (int, bool) {
 	if normISBN != "" {
 		if i, ok := isbnIndex[normISBN]; ok {
 			return i, true
 		}
+		if normTA != "|" {
+			if i, ok := titleAuthorIndex[normTA]; ok && !groupHasISBN[i] {
+				return i, true
+			}
+		}
+		return -1, false
 	}
 	if normTA != "|" {
 		if i, ok := titleAuthorIndex[normTA]; ok {
@@ -230,6 +253,86 @@ func scoreResult(r BookMetadataResult) int {
 	return score
 }
 
+// enrichAcrossEditions buckets already-merged, one-per-edition results by
+// normalizeTitleAuthor and backfills empty Description fields from the best
+// other member of the bucket (by sourcePriority then scoreResult). Never
+// overwrites an already-non-empty field, never touches edition-specific
+// fields (Publisher/PublishedDate/PageCount) or identity keys, and skips a
+// donor whose Language differs from the target's when both are set. Also
+// stamps WorkKey on every result with a non-empty bucket key.
+func enrichAcrossEditions(merged []BookMetadataResult) []BookMetadataResult {
+	buckets := bucketByWorkKey(merged)
+	for _, idxs := range buckets {
+		if len(idxs) < 2 {
+			continue
+		}
+		fillBucketDescriptions(merged, idxs)
+	}
+	return merged
+}
+
+// bucketByWorkKey stamps WorkKey (the normalizeTitleAuthor key) onto every
+// result with a non-empty Title and Author, and groups their indices into
+// merged by that key. Results with an empty Title or Author are excluded
+// from bucketing entirely.
+func bucketByWorkKey(merged []BookMetadataResult) map[string][]int {
+	buckets := map[string][]int{}
+	for i, r := range merged {
+		if r.Title == "" || r.Author == "" {
+			continue
+		}
+		key := normalizeTitleAuthor(r.Title, r.Author)
+		merged[i].WorkKey = key
+		buckets[key] = append(buckets[key], i)
+	}
+	return buckets
+}
+
+// fillBucketDescriptions backfills each empty-Description member of the
+// bucket (indices into merged) from the best other member, computed against
+// a stable snapshot so fills don't cascade or depend on iteration order.
+func fillBucketDescriptions(merged []BookMetadataResult, idxs []int) {
+	snapshot := make([]BookMetadataResult, len(idxs))
+	for i, idx := range idxs {
+		snapshot[i] = merged[idx]
+	}
+	sort.SliceStable(snapshot, func(i, j int) bool {
+		pi, pj := sourcePriority(snapshot[i].Source), sourcePriority(snapshot[j].Source)
+		if pi != pj {
+			return pi < pj
+		}
+		return scoreResult(snapshot[i]) > scoreResult(snapshot[j])
+	})
+
+	for _, idx := range idxs {
+		target := &merged[idx]
+		if target.Description != "" {
+			continue
+		}
+		if donor := bestDescriptionDonor(snapshot, target.Language); donor != "" {
+			target.Description = donor
+			target.EnrichedFields = append(target.EnrichedFields, "description")
+		}
+	}
+}
+
+// bestDescriptionDonor returns the first non-empty Description in snapshot
+// (already priority/score ordered) whose Language doesn't conflict with
+// targetLanguage, or "" if none qualifies.
+func bestDescriptionDonor(snapshot []BookMetadataResult, targetLanguage string) string {
+	for _, donor := range snapshot {
+		if donor.Description == "" {
+			continue
+		}
+		if targetLanguage != "" && donor.Language != "" &&
+			!strings.EqualFold(targetLanguage, donor.Language) {
+			continue
+		}
+		return donor.Description
+	}
+	return ""
+}
+
 // consolidateResults deduplicates, merges, and ranks results from all sources.
 func consolidateResults(results []BookMetadataResult) []BookMetadataResult {
 	if len(results) == 0 {
@@ -242,6 +345,8 @@ func consolidateResults(results []BookMetadataResult) []BookMetadataResult {
 	for _, group := range groups {
 		merged = append(merged, mergeGroup(group))
 	}
+
+	merged = enrichAcrossEditions(merged)
 
 	sort.SliceStable(merged, func(i, j int) bool {
 		si, sj := scoreResult(merged[i]), scoreResult(merged[j])
