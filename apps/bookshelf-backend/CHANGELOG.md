@@ -1,3 +1,13 @@
+## 0.14.1 (2026-08-22)
+
+### 🩹 Fixes
+
+- **bookshelf,bookshelf-backend:** backfill book covers/descriptions and add My Books sort/filter ([#65](https://github.com/tanjd/core-repository/pull/65))
+
+### ❤️ Thank You
+
+- Jeddy Tan @tanjd
+
 ## 0.14.0 (2026-08-22)
 
 ### 🚀 Features
