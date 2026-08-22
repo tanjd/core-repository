@@ -1,3 +1,13 @@
+## 0.17.2 (2026-08-22)
+
+### 🩹 Fixes
+
+- **bookshelf,bookshelf-backend:** surface per-book results for cover-backfill job ([#66](https://github.com/tanjd/core-repository/pull/66))
+
+### ❤️ Thank You
+
+- Jeddy Tan @tanjd
+
 ## 0.17.1 (2026-08-22)
 
 ### 🩹 Fixes
