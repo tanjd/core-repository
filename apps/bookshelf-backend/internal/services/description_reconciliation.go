@@ -91,7 +91,7 @@ func (s *DescriptionReconciliationService) fillFromExternalSources(ctx context.C
 		}
 		first = false
 
-		data := resolveExternalData(ctx, s.client, *book, s.googleBooksKey)
+		data, _ := resolveExternalData(ctx, s.client, *book, s.googleBooksKey)
 		if data.description == "" {
 			continue
 		}

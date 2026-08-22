@@ -66,7 +66,7 @@ func TestResolveExternalData_PrefersOLKeyOverGoogleBooksIDOverISBN(t *testing.T)
 	})
 
 	book := models.Book{OLKey: "OL1M", GoogleBooksID: "GB1", ISBN: "123"}
-	data := resolveExternalData(t.Context(), client, book, "test-key")
+	data, _ := resolveExternalData(t.Context(), client, book, "test-key")
 
 	if data.coverURL != "https://covers.openlibrary.org/b/id/1-L.jpg" {
 		t.Fatalf("expected OLKey result to win, got %+v", data)
@@ -82,7 +82,7 @@ func TestResolveExternalData_FallsThroughWhenOLKeyEmpty(t *testing.T) {
 	})
 
 	book := models.Book{GoogleBooksID: "GB1"}
-	data := resolveExternalData(t.Context(), client, book, "test-key")
+	data, _ := resolveExternalData(t.Context(), client, book, "test-key")
 
 	if data.coverURL != "https://books.google.com/gb1.jpg" || data.description != "from google" {
 		t.Fatalf("expected Google Books result, got %+v", data)
@@ -96,7 +96,7 @@ func TestResolveExternalData_FallsThroughOnEmptySource(t *testing.T) {
 	})
 
 	book := models.Book{OLKey: "OL1M", ISBN: "123"}
-	data := resolveExternalData(t.Context(), client, book, "")
+	data, _ := resolveExternalData(t.Context(), client, book, "")
 
 	if data.coverURL != "https://covers.openlibrary.org/b/id/3-L.jpg" {
 		t.Fatalf("expected fallthrough to ISBN result, got %+v", data)
@@ -108,7 +108,7 @@ func TestLookupGoogleBooksData_SkipsWhenNoAPIKey(t *testing.T) {
 		"volumes/GB1": `{"volumeInfo":{"description":"should not be seen"}}`,
 	})
 
-	data, err := lookupGoogleBooksData(t.Context(), client, "GB1", "")
+	data, _, err := lookupGoogleBooksData(t.Context(), client, "GB1", "")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -133,7 +133,7 @@ func TestResolveExternalData_ISBNFallsThroughToGoogleBooksSearch(t *testing.T) {
 	})
 
 	book := models.Book{ISBN: "9781433578113"}
-	data := resolveExternalData(t.Context(), client, book, "test-key")
+	data, _ := resolveExternalData(t.Context(), client, book, "test-key")
 
 	if data.coverURL != "https://books.google.com/books/content?id=4qErzgEACAAJ" {
 		t.Fatalf("expected Google Books ISBN-search cover, got %+v", data)
@@ -153,7 +153,7 @@ func TestResolveExternalData_ISBNGoogleBooksSearchSkippedWithoutAPIKey(t *testin
 	})
 
 	book := models.Book{ISBN: "111"}
-	data := resolveExternalData(t.Context(), client, book, "")
+	data, _ := resolveExternalData(t.Context(), client, book, "")
 
 	if !data.empty() {
 		t.Fatalf("expected empty result without an API key, got %+v", data)
@@ -166,7 +166,7 @@ func TestResolveExternalData_ISBNGoogleBooksSearchSkippedWithoutAPIKey(t *testin
 func TestResolveExternalData_NoKeysReturnsEmpty(t *testing.T) {
 	client, rt := newStubClient(map[string]string{})
 
-	data := resolveExternalData(t.Context(), client, models.Book{}, "test-key")
+	data, _ := resolveExternalData(t.Context(), client, models.Book{}, "test-key")
 
 	if !data.empty() {
 		t.Fatalf("expected empty result for a book with no external keys, got %+v", data)
