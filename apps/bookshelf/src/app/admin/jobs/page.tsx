@@ -20,6 +20,11 @@ const JOB_META: Record<string, { label: string; description: string }> = {
     description:
       "Fills in missing book descriptions from other editions of the same book. Runs automatically on the configured interval.",
   },
+  "cover-backfill": {
+    label: "Cover Backfill",
+    description:
+      "Looks up a cover from Open Library/Google Books for any book that still has none. Runs automatically on the configured interval.",
+  },
 };
 
 const INTERVAL_PRESETS = ["1h", "6h", "12h", "24h", "48h", "168h"];
@@ -35,6 +40,7 @@ const INTERVAL_LABELS: Record<string, string> = {
 const JOB_SETTING_KEYS: Record<string, string> = {
   "cover-refresh": "cover_refresh_interval",
   "description-reconciliation": "description_reconciliation_interval",
+  "cover-backfill": "cover_backfill_interval",
 };
 
 export default function AdminJobsPage() {

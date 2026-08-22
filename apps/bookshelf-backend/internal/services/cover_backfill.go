@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/rs/zerolog/log"
@@ -47,7 +48,9 @@ func NewCoverBackfillService(books repository.BookRepository, coversDir, googleB
 
 // Run backfills covers across the catalog and returns a human-readable
 // summary for JobStatus.LastResult, matching the signature RegisterJob
-// expects.
+// expects. The summary includes one line per candidate book so an admin can
+// see which books were (or weren't) backfilled and why, without digging
+// through container logs.
 func (s *CoverBackfillService) Run(ctx context.Context) string {
 	books, err := s.books.List("", "title", false)
 	if err != nil {
@@ -58,6 +61,7 @@ func (s *CoverBackfillService) Run(ctx context.Context) string {
 	candidates := coverBackfillCandidates(books)
 
 	backfilled := 0
+	lines := make([]string, 0, len(candidates))
 booksLoop:
 	for i, book := range candidates {
 		if i > 0 {
@@ -67,14 +71,21 @@ booksLoop:
 			case <-time.After(coverBackfillSpacing):
 			}
 		}
-		if s.backfillOne(ctx, &book) {
+		ok, detail := s.backfillOne(ctx, &book)
+		if ok {
 			backfilled++
+			lines = append(lines, fmt.Sprintf("✓ %s", book.Title))
+		} else {
+			lines = append(lines, fmt.Sprintf("✗ %s — %s", book.Title, detail))
 		}
 	}
 
 	result := fmt.Sprintf("backfilled %d of %d books", backfilled, len(candidates))
 	log.Info().Int("backfilled", backfilled).Int("candidates", len(candidates)).Msg("cover-backfill: complete")
-	return result
+	if len(lines) == 0 {
+		return result
+	}
+	return result + "\n" + strings.Join(lines, "\n")
 }
 
 // coverBackfillCandidates returns books with no cover but at least one
@@ -95,21 +106,24 @@ func coverBackfillCandidates(books []models.Book) []models.Book {
 
 // backfillOne resolves and saves a cover for one book. Any failure is
 // logged and treated as "no cover found this run" — never aborts the batch.
-func (s *CoverBackfillService) backfillOne(ctx context.Context, book *models.Book) bool {
-	data := resolveExternalData(ctx, s.client, *book, s.googleBooksKey)
+// The returned string is a short reason for JobStatus.LastResult, populated
+// on both success (which source it came from) and failure (why not, e.g. a
+// quota-exceeded Google Books call rather than a genuine "no cover exists").
+func (s *CoverBackfillService) backfillOne(ctx context.Context, book *models.Book) (bool, string) {
+	data, attempts := resolveExternalData(ctx, s.client, *book, s.googleBooksKey)
 	if data.coverURL == "" {
-		return false
+		return false, attemptsSummary(attempts)
 	}
 
 	if !IsCoverURLAllowed(data.coverURL) {
 		log.Warn().Uint("book_id", book.ID).Msg("cover-backfill: resolved cover URL host not in allowlist, skipping")
-		return false
+		return false, "resolved cover URL host not in allowlist"
 	}
 
 	localPath, err := DownloadCover(ctx, data.coverURL, s.coversDir)
 	if err != nil {
 		log.Warn().Err(err).Uint("book_id", book.ID).Msg("cover-backfill: cover download failed")
-		return false
+		return false, "cover download failed: " + err.Error()
 	}
 	if localPath == "" {
 		localPath = data.coverURL
@@ -118,7 +132,21 @@ func (s *CoverBackfillService) backfillOne(ctx context.Context, book *models.Boo
 	book.CoverURL = localPath
 	if err := s.books.Save(book); err != nil {
 		log.Warn().Err(err).Uint("book_id", book.ID).Msg("cover-backfill: failed to save book")
-		return false
+		return false, "failed to save book: " + err.Error()
 	}
-	return true
+	return true, ""
+}
+
+// attemptsSummary renders lookupAttempts as a semicolon-joined list for
+// JobStatus.LastResult, e.g. "openlibrary(key): no cover/description;
+// google_books(id): http 429".
+func attemptsSummary(attempts []lookupAttempt) string {
+	if len(attempts) == 0 {
+		return "no external key (ISBN/OL key/Google Books ID) to look up"
+	}
+	parts := make([]string, len(attempts))
+	for i, a := range attempts {
+		parts[i] = a.String()
+	}
+	return strings.Join(parts, "; ")
 }

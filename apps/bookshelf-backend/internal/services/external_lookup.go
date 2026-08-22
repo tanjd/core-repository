@@ -22,6 +22,20 @@ func (d externalBookData) empty() bool {
 	return d.coverURL == "" && d.description == ""
 }
 
+// lookupAttempt records what one source contributed (or why it didn't) for
+// a single book, so a caller whose overall lookup came up empty can report
+// *why* rather than just "no cover found" — e.g. distinguishing "Open
+// Library genuinely has nothing for this edition" from "Google Books quota
+// exceeded, never actually checked."
+type lookupAttempt struct {
+	source string
+	status string
+}
+
+func (a lookupAttempt) String() string {
+	return a.source + ": " + a.status
+}
+
 // lookupOpenLibraryCover looks up a cover by ISBN or OpenLibrary edition key
 // via the Books API (jscmd=data), which — unlike the raw
 // covers.openlibrary.org/b/<key>/<value>-L.jpg image endpoint — only includes
@@ -97,48 +111,51 @@ func (v googleBooksVolumeInfo) toExternalBookData() externalBookData {
 }
 
 // doGoogleBooksRequest issues a GET against the Google Books API and decodes
-// the JSON response into dest. Returns (false, nil) without decoding if
-// apiKey is empty — mirrors fetchGoogleBooks' existing behavior in
-// metadata.go — or if the API returns a non-200 (e.g. 404 for no match).
-func doGoogleBooksRequest(ctx context.Context, client *http.Client, reqURL, apiKey string, dest any) (bool, error) {
+// the JSON response into dest. Returns (false, "no api key configured", nil)
+// without decoding if apiKey is empty — mirrors fetchGoogleBooks' existing
+// behavior in metadata.go. A non-200 (e.g. 404 for no match, 429 for quota
+// exceeded) also returns ok=false, but with the status code in the returned
+// string so a caller reporting "nothing found" can distinguish a genuine
+// empty result from a request that never actually got answered.
+func doGoogleBooksRequest(ctx context.Context, client *http.Client, reqURL, apiKey string, dest any) (bool, string, error) {
 	if apiKey == "" {
-		return false, nil
+		return false, "no api key configured", nil
 	}
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, reqURL+"&key="+url.QueryEscape(apiKey), nil)
 	if err != nil {
-		return false, err
+		return false, "", err
 	}
 
 	resp, err := client.Do(req)
 	if err != nil {
-		return false, err
+		return false, "", err
 	}
 	defer resp.Body.Close() //nolint:errcheck
 
 	if resp.StatusCode != http.StatusOK {
-		return false, nil
+		return false, fmt.Sprintf("http %d", resp.StatusCode), nil
 	}
 
 	if err := json.NewDecoder(resp.Body).Decode(dest); err != nil {
-		return false, err
+		return false, "", err
 	}
-	return true, nil
+	return true, "", nil
 }
 
 // lookupGoogleBooksData looks up a cover and description by Google Books
 // volume ID — the precise, no-ambiguity path used when the book already has
 // a GoogleBooksID on record.
-func lookupGoogleBooksData(ctx context.Context, client *http.Client, volumeID, apiKey string) (externalBookData, error) {
+func lookupGoogleBooksData(ctx context.Context, client *http.Client, volumeID, apiKey string) (externalBookData, string, error) {
 	reqURL := "https://www.googleapis.com/books/v1/volumes/" + url.PathEscape(volumeID) + "?alt=json"
 	var parsed struct {
 		VolumeInfo googleBooksVolumeInfo `json:"volumeInfo"`
 	}
-	ok, err := doGoogleBooksRequest(ctx, client, reqURL, apiKey, &parsed)
+	ok, status, err := doGoogleBooksRequest(ctx, client, reqURL, apiKey, &parsed)
 	if err != nil || !ok {
-		return externalBookData{}, err
+		return externalBookData{}, status, err
 	}
-	return parsed.VolumeInfo.toExternalBookData(), nil
+	return parsed.VolumeInfo.toExternalBookData(), "", nil
 }
 
 // lookupGoogleBooksByISBN searches Google Books by ISBN — a fallback for
@@ -147,44 +164,71 @@ func lookupGoogleBooksData(ctx context.Context, client *http.Client, volumeID, a
 // stuck depending solely on Open Library, which doesn't always have a cover
 // or description either. Takes the first search result, same as how
 // createBook's original metadata search would have surfaced one.
-func lookupGoogleBooksByISBN(ctx context.Context, client *http.Client, isbn, apiKey string) (externalBookData, error) {
+func lookupGoogleBooksByISBN(ctx context.Context, client *http.Client, isbn, apiKey string) (externalBookData, string, error) {
 	reqURL := "https://www.googleapis.com/books/v1/volumes?q=isbn:" + url.QueryEscape(isbn)
 	var parsed struct {
 		Items []struct {
 			VolumeInfo googleBooksVolumeInfo `json:"volumeInfo"`
 		} `json:"items"`
 	}
-	ok, err := doGoogleBooksRequest(ctx, client, reqURL, apiKey, &parsed)
-	if err != nil || !ok || len(parsed.Items) == 0 {
-		return externalBookData{}, err
+	ok, status, err := doGoogleBooksRequest(ctx, client, reqURL, apiKey, &parsed)
+	if err != nil || !ok {
+		return externalBookData{}, status, err
 	}
-	return parsed.Items[0].VolumeInfo.toExternalBookData(), nil
+	if len(parsed.Items) == 0 {
+		return externalBookData{}, "no results", nil
+	}
+	return parsed.Items[0].VolumeInfo.toExternalBookData(), "", nil
 }
 
 // resolveExternalData tries book's external keys in the same trust order
 // findExistingBook uses (OLKey, then GoogleBooksID, then ISBN), returning the
-// first source that yields any usable data. A source erroring or coming back
-// empty falls through to the next rather than aborting the lookup. The ISBN
-// branch tries Open Library first (free, no API key needed) before Google
-// Books by ISBN search, to minimize paid/key-gated calls.
-func resolveExternalData(ctx context.Context, client *http.Client, book models.Book, googleBooksAPIKey string) externalBookData {
+// first source that yields any usable data, plus a log of every source tried
+// along the way (used to report *why* nothing was found when the overall
+// result is empty — see CoverBackfillService.backfillOne). A source erroring
+// or coming back empty falls through to the next rather than aborting the
+// lookup. The ISBN branch tries Open Library first (free, no API key
+// needed) before Google Books by ISBN search, to minimize paid/key-gated
+// calls.
+func resolveExternalData(ctx context.Context, client *http.Client, book models.Book, googleBooksAPIKey string) (externalBookData, []lookupAttempt) {
+	var attempts []lookupAttempt
+
+	record := func(source string, data externalBookData, status string, err error) (externalBookData, bool) {
+		switch {
+		case err != nil:
+			attempts = append(attempts, lookupAttempt{source, "error: " + err.Error()})
+		case !data.empty():
+			attempts = append(attempts, lookupAttempt{source, "found"})
+			return data, true
+		case status != "":
+			attempts = append(attempts, lookupAttempt{source, status})
+		default:
+			attempts = append(attempts, lookupAttempt{source, "no cover/description"})
+		}
+		return externalBookData{}, false
+	}
+
 	if book.OLKey != "" {
-		if data, err := lookupOpenLibraryCover(ctx, client, "OLID:"+book.OLKey); err == nil && !data.empty() {
-			return data
+		data, err := lookupOpenLibraryCover(ctx, client, "OLID:"+book.OLKey)
+		if data, ok := record("openlibrary(key)", data, "", err); ok {
+			return data, attempts
 		}
 	}
 	if book.GoogleBooksID != "" {
-		if data, err := lookupGoogleBooksData(ctx, client, book.GoogleBooksID, googleBooksAPIKey); err == nil && !data.empty() {
-			return data
+		data, status, err := lookupGoogleBooksData(ctx, client, book.GoogleBooksID, googleBooksAPIKey)
+		if data, ok := record("google_books(id)", data, status, err); ok {
+			return data, attempts
 		}
 	}
 	if book.ISBN != "" {
-		if data, err := lookupOpenLibraryCover(ctx, client, "ISBN:"+book.ISBN); err == nil && !data.empty() {
-			return data
+		data, err := lookupOpenLibraryCover(ctx, client, "ISBN:"+book.ISBN)
+		if data, ok := record("openlibrary(isbn)", data, "", err); ok {
+			return data, attempts
 		}
-		if data, err := lookupGoogleBooksByISBN(ctx, client, book.ISBN, googleBooksAPIKey); err == nil && !data.empty() {
-			return data
+		data, status, err := lookupGoogleBooksByISBN(ctx, client, book.ISBN, googleBooksAPIKey)
+		if data, ok := record("google_books(isbn)", data, status, err); ok {
+			return data, attempts
 		}
 	}
-	return externalBookData{}
+	return externalBookData{}, attempts
 }

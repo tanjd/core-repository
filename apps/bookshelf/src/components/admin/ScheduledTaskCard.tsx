@@ -53,6 +53,9 @@ export function ScheduledTaskCard({
   const [intervalInput, setIntervalInput] = useState("");
   const [savingInterval, setSavingInterval] = useState(false);
 
+  const [resultSummary, ...resultDetailLines] =
+    status?.last_result?.split("\n") ?? [];
+
   async function handleSaveInterval() {
     const value = intervalInput.trim();
     if (!value) return;
@@ -121,13 +124,29 @@ export function ScheduledTaskCard({
               ? timeUntil(status.next_run_at)
               : "pending first run"}
         </span>
-        {status?.last_result && !status.running && (
+        {resultSummary && !status?.running && (
           <span>
             <span className="font-medium text-foreground">Result:</span>{" "}
-            {status.last_result}
+            {resultSummary}
           </span>
         )}
       </div>
+
+      {resultDetailLines.length > 0 && !status?.running && (
+        <div className="max-h-40 overflow-y-auto rounded border bg-muted/40 px-2 py-1.5 text-xs font-mono leading-5">
+          {resultDetailLines.map((line, i) => (
+            <div
+              key={i}
+              className={cn(
+                "truncate",
+                line.startsWith("✗") && "text-destructive",
+              )}
+            >
+              {line}
+            </div>
+          ))}
+        </div>
+      )}
 
       {/* Interval row */}
       <div className="flex flex-col gap-2 border-t pt-3">

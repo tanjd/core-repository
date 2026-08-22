@@ -2,6 +2,7 @@ package services
 
 import (
 	"net/http"
+	"strings"
 	"testing"
 
 	"github.com/tanjd/core-repository/apps/bookshelf-backend/internal/models"
@@ -32,8 +33,8 @@ func TestCoverBackfillService_Run_OneFailureDoesNotStopTheRun(t *testing.T) {
 	})
 
 	repo := &stubBookRepo{books: []models.Book{
-		{ID: 1, ISBN: "111"},
-		{ID: 2, ISBN: "222"},
+		{ID: 1, ISBN: "111", Title: "No Cover Anywhere"},
+		{ID: 2, ISBN: "222", Title: "Has A Cover"},
 	}}
 
 	svc := &CoverBackfillService{books: repo, coversDir: t.TempDir(), client: client}
@@ -56,8 +57,14 @@ func TestCoverBackfillService_Run_OneFailureDoesNotStopTheRun(t *testing.T) {
 
 	result := svc.Run(t.Context())
 
-	if result != "backfilled 1 of 2 books" {
+	if !strings.HasPrefix(result, "backfilled 1 of 2 books") {
 		t.Fatalf("expected 1 of 2 backfilled (one has no external cover), got %q", result)
+	}
+	if !strings.Contains(result, "✓ Has A Cover") {
+		t.Fatalf("expected success line for the backfilled book, got %q", result)
+	}
+	if !strings.Contains(result, "✗ No Cover Anywhere — openlibrary(isbn): no cover/description; google_books(isbn): no api key configured") {
+		t.Fatalf("expected failure line explaining why, got %q", result)
 	}
 }
 
