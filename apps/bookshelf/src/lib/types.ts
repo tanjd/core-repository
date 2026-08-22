@@ -49,6 +49,7 @@ export interface Book {
   created_at?: string;
   copies?: Copy[];
   available_copies?: number;
+  description_enriched?: boolean;
 }
 
 export interface Copy {

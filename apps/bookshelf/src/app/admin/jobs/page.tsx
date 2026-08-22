@@ -15,6 +15,11 @@ const JOB_META: Record<string, { label: string; description: string }> = {
     description:
       "Downloads and caches external book cover images locally. Runs automatically on the configured interval.",
   },
+  "description-reconciliation": {
+    label: "Description Reconciliation",
+    description:
+      "Fills in missing book descriptions from other editions of the same book. Runs automatically on the configured interval.",
+  },
 };
 
 const INTERVAL_PRESETS = ["1h", "6h", "12h", "24h", "48h", "168h"];
@@ -29,6 +34,7 @@ const INTERVAL_LABELS: Record<string, string> = {
 
 const JOB_SETTING_KEYS: Record<string, string> = {
   "cover-refresh": "cover_refresh_interval",
+  "description-reconciliation": "description_reconciliation_interval",
 };
 
 export default function AdminJobsPage() {

@@ -1,0 +1,1 @@
+ALTER TABLE books ADD COLUMN description_enriched BOOLEAN NOT NULL DEFAULT FALSE;
