@@ -182,60 +182,189 @@ export default function SharePage() {
   }
 
   // --- Render ---
-  if (step === "manual") {
-    return (
-      <div className="flex flex-col gap-6 max-w-lg mx-auto">
-        <Button
-          variant="ghost"
-          size="sm"
-          onClick={() => setStep("search")}
-          className="self-start -ml-1"
-        >
-          <ArrowLeft className="size-4" /> Back to search
-        </Button>
+  // Step 1: Search. MetadataSearchStep manages its own hero/results-mode
+  // switch; it's keyed on prefillQuery readiness so it mounts once, after
+  // the URL prefill (if any) is known — see the effect above.
+  if (prefillQuery === null) return null;
 
-        <div>
-          <h1 className="text-2xl font-bold">Enter book manually</h1>
-          <p className="text-muted-foreground text-sm mt-1">
-            Fill in the book details yourself
-          </p>
-        </div>
+  const metaChips = selected
+    ? ([
+        selected.isbn && `ISBN ${selected.isbn}`,
+        selected.publisher &&
+          (selected.publishedDate
+            ? `${selected.publisher}, ${selected.publishedDate}`
+            : selected.publisher),
+        !selected.publisher && selected.publishedDate,
+        selected.pageCount > 0 && `${selected.pageCount} pages`,
+        selected.language && selected.language.toUpperCase(),
+      ].filter(Boolean) as string[])
+    : [];
 
-        <div className="flex flex-col gap-4">
-          <div className="flex flex-col gap-1.5">
-            <label className="text-sm font-medium">Title *</label>
-            <Input
-              value={manualTitle}
-              onChange={(e) => setManualTitle(e.target.value)}
-              placeholder="Book title"
-            />
-          </div>
-          <div className="flex flex-col gap-1.5">
-            <label className="text-sm font-medium">Author</label>
-            <Input
-              value={manualAuthor}
-              onChange={(e) => setManualAuthor(e.target.value)}
-              placeholder="Author name"
-            />
-          </div>
-          <div className="flex flex-col gap-1.5">
-            <label className="text-sm font-medium">ISBN</label>
-            <Input
-              value={manualIsbn}
-              onChange={(e) => setManualIsbn(e.target.value)}
-              placeholder="ISBN (optional)"
-            />
-          </div>
-
-          <Separator />
+  // All three steps stay mounted simultaneously (toggled via `hidden` rather
+  // than each being its own early `return`) so MetadataSearchStep is never
+  // unmounted — going "back" to search from confirm/manual used to remount
+  // it fresh, silently discarding whatever query/results were already there.
+  return (
+    <>
+      <div className={step === "manual" ? "" : "hidden"}>
+        <div className="flex flex-col gap-6 max-w-lg mx-auto">
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => setStep("search")}
+            className="self-start -ml-1"
+          >
+            <ArrowLeft className="size-4" /> Back to search
+          </Button>
 
           <div>
-            <p className="text-sm font-medium mb-3">Your copy</p>
-            <div className="flex flex-col gap-4">
-              <ConditionPicker
-                value={manualCondition}
-                onChange={setManualCondition}
+            <h1 className="text-2xl font-bold">Enter book manually</h1>
+            <p className="text-muted-foreground text-sm mt-1">
+              Fill in the book details yourself
+            </p>
+          </div>
+
+          <div className="flex flex-col gap-4">
+            <div className="flex flex-col gap-1.5">
+              <label className="text-sm font-medium">Title *</label>
+              <Input
+                value={manualTitle}
+                onChange={(e) => setManualTitle(e.target.value)}
+                placeholder="Book title"
               />
+            </div>
+            <div className="flex flex-col gap-1.5">
+              <label className="text-sm font-medium">Author</label>
+              <Input
+                value={manualAuthor}
+                onChange={(e) => setManualAuthor(e.target.value)}
+                placeholder="Author name"
+              />
+            </div>
+            <div className="flex flex-col gap-1.5">
+              <label className="text-sm font-medium">ISBN</label>
+              <Input
+                value={manualIsbn}
+                onChange={(e) => setManualIsbn(e.target.value)}
+                placeholder="ISBN (optional)"
+              />
+            </div>
+
+            <Separator />
+
+            <div>
+              <p className="text-sm font-medium mb-3">Your copy</p>
+              <div className="flex flex-col gap-4">
+                <ConditionPicker
+                  value={manualCondition}
+                  onChange={setManualCondition}
+                />
+
+                <div className="flex flex-col gap-1.5">
+                  <label className="text-sm font-medium">
+                    Notes{" "}
+                    <span className="text-muted-foreground font-normal">
+                      (optional)
+                    </span>
+                  </label>
+                  <textarea
+                    className="flex min-h-[80px] w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm outline-none resize-none placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50"
+                    placeholder="Any notes about your copy…"
+                    value={manualNotes}
+                    onChange={(e) => setManualNotes(e.target.value)}
+                  />
+                </div>
+
+                <CopySettings
+                  autoApprove={manualAutoApprove}
+                  returnDateRequired={manualReturnDateRequired}
+                  hideOwner={manualHideOwner}
+                  onAutoApproveChange={setManualAutoApprove}
+                  onReturnDateRequiredChange={setManualReturnDateRequired}
+                  onHideOwnerChange={setManualHideOwner}
+                />
+              </div>
+            </div>
+
+            <Button onClick={handleManualSubmit} disabled={manualSubmitting}>
+              <BookPlus className="size-4" />
+              {manualSubmitting ? "Sharing…" : "Share this book"}
+            </Button>
+          </div>
+        </div>
+      </div>
+
+      <div className={step === "confirm" && selected ? "" : "hidden"}>
+        {selected && (
+          <div className="flex flex-col gap-6 max-w-lg mx-auto">
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => setStep("search")}
+              className="self-start -ml-1"
+            >
+              <ArrowLeft className="size-4" /> Back to search
+            </Button>
+
+            <div>
+              <h1 className="text-2xl font-bold">Confirm & share</h1>
+              <p className="text-muted-foreground text-sm mt-1">
+                Review the book details and describe your copy
+              </p>
+            </div>
+
+            {/* Book preview */}
+            <Card>
+              <CardHeader className="flex-row gap-4 items-start pb-3">
+                <div className="relative w-20 aspect-[2/3] rounded overflow-hidden shrink-0 bg-muted">
+                  <BookCover
+                    title={selected.title}
+                    author={selected.author}
+                    coverUrl={selected.coverUrl}
+                    sizes="80px"
+                  />
+                </div>
+                <div className="flex flex-col gap-1.5 min-w-0 flex-1">
+                  <CardTitle className="text-base leading-snug">
+                    {selected.title}
+                  </CardTitle>
+                  {selected.author && (
+                    <CardDescription>{selected.author}</CardDescription>
+                  )}
+                  {metaChips.length > 0 && (
+                    <p className="text-xs text-muted-foreground">
+                      {metaChips.join(" · ")}
+                    </p>
+                  )}
+                </div>
+              </CardHeader>
+              {selected.description && (
+                <CardContent className="pt-0">
+                  <p className="text-sm text-muted-foreground line-clamp-4">
+                    {selected.description}
+                  </p>
+                </CardContent>
+              )}
+              <div className="px-6 pb-4">
+                <button
+                  onClick={() => setStep("search")}
+                  className="text-xs text-muted-foreground hover:text-foreground transition-colors"
+                >
+                  Not the right edition? Go back →
+                </button>
+              </div>
+            </Card>
+
+            {/* Copy settings */}
+            <div className="flex flex-col gap-4">
+              <div>
+                <p className="text-sm font-semibold">Your copy</p>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  Describe the physical copy you&apos;re sharing
+                </p>
+              </div>
+
+              <ConditionPicker value={condition} onChange={setCondition} />
 
               <div className="flex flex-col gap-1.5">
                 <label className="text-sm font-medium">
@@ -246,169 +375,52 @@ export default function SharePage() {
                 </label>
                 <textarea
                   className="flex min-h-[80px] w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm outline-none resize-none placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50"
-                  placeholder="Any notes about your copy…"
-                  value={manualNotes}
-                  onChange={(e) => setManualNotes(e.target.value)}
+                  placeholder="e.g. spine slightly creased, all pages intact…"
+                  value={notes}
+                  onChange={(e) => setNotes(e.target.value)}
                 />
               </div>
 
               <CopySettings
-                autoApprove={manualAutoApprove}
-                returnDateRequired={manualReturnDateRequired}
-                hideOwner={manualHideOwner}
-                onAutoApproveChange={setManualAutoApprove}
-                onReturnDateRequiredChange={setManualReturnDateRequired}
-                onHideOwnerChange={setManualHideOwner}
+                autoApprove={autoApprove}
+                returnDateRequired={returnDateRequired}
+                hideOwner={hideOwner}
+                onAutoApproveChange={setAutoApprove}
+                onReturnDateRequiredChange={setReturnDateRequired}
+                onHideOwnerChange={setHideOwner}
               />
+
+              <Button
+                onClick={handleSubmitShare}
+                disabled={submitting}
+                size="lg"
+              >
+                <BookPlus className="size-4" />
+                {submitting ? "Sharing…" : "Share this book"}
+              </Button>
             </div>
           </div>
-
-          <Button onClick={handleManualSubmit} disabled={manualSubmitting}>
-            <BookPlus className="size-4" />
-            {manualSubmitting ? "Sharing…" : "Share this book"}
-          </Button>
-        </div>
+        )}
       </div>
-    );
-  }
 
-  if (step === "confirm" && selected) {
-    const metaChips = [
-      selected.isbn && `ISBN ${selected.isbn}`,
-      selected.publisher &&
-        (selected.publishedDate
-          ? `${selected.publisher}, ${selected.publishedDate}`
-          : selected.publisher),
-      !selected.publisher && selected.publishedDate,
-      selected.pageCount > 0 && `${selected.pageCount} pages`,
-      selected.language && selected.language.toUpperCase(),
-    ].filter(Boolean) as string[];
-
-    return (
-      <div className="flex flex-col gap-6 max-w-lg mx-auto">
-        <Button
-          variant="ghost"
-          size="sm"
-          onClick={() => setStep("search")}
-          className="self-start -ml-1"
-        >
-          <ArrowLeft className="size-4" /> Back to search
-        </Button>
-
-        <div>
-          <h1 className="text-2xl font-bold">Confirm & share</h1>
-          <p className="text-muted-foreground text-sm mt-1">
-            Review the book details and describe your copy
-          </p>
-        </div>
-
-        {/* Book preview */}
-        <Card>
-          <CardHeader className="flex-row gap-4 items-start pb-3">
-            <div className="relative w-20 aspect-[2/3] rounded overflow-hidden shrink-0 bg-muted">
-              <BookCover
-                title={selected.title}
-                author={selected.author}
-                coverUrl={selected.coverUrl}
-                sizes="80px"
-              />
-            </div>
-            <div className="flex flex-col gap-1.5 min-w-0 flex-1">
-              <CardTitle className="text-base leading-snug">
-                {selected.title}
-              </CardTitle>
-              {selected.author && (
-                <CardDescription>{selected.author}</CardDescription>
-              )}
-              {metaChips.length > 0 && (
-                <p className="text-xs text-muted-foreground">
-                  {metaChips.join(" · ")}
-                </p>
-              )}
-            </div>
-          </CardHeader>
-          {selected.description && (
-            <CardContent className="pt-0">
-              <p className="text-sm text-muted-foreground line-clamp-4">
-                {selected.description}
-              </p>
-            </CardContent>
-          )}
-          <div className="px-6 pb-4">
-            <button
-              onClick={() => setStep("search")}
-              className="text-xs text-muted-foreground hover:text-foreground transition-colors"
-            >
-              Not the right edition? Go back →
-            </button>
-          </div>
-        </Card>
-
-        {/* Copy settings */}
-        <div className="flex flex-col gap-4">
-          <div>
-            <p className="text-sm font-semibold">Your copy</p>
-            <p className="text-xs text-muted-foreground mt-0.5">
-              Describe the physical copy you&apos;re sharing
-            </p>
-          </div>
-
-          <ConditionPicker value={condition} onChange={setCondition} />
-
-          <div className="flex flex-col gap-1.5">
-            <label className="text-sm font-medium">
-              Notes{" "}
-              <span className="text-muted-foreground font-normal">
-                (optional)
-              </span>
-            </label>
-            <textarea
-              className="flex min-h-[80px] w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm outline-none resize-none placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50"
-              placeholder="e.g. spine slightly creased, all pages intact…"
-              value={notes}
-              onChange={(e) => setNotes(e.target.value)}
-            />
-          </div>
-
-          <CopySettings
-            autoApprove={autoApprove}
-            returnDateRequired={returnDateRequired}
-            hideOwner={hideOwner}
-            onAutoApproveChange={setAutoApprove}
-            onReturnDateRequiredChange={setReturnDateRequired}
-            onHideOwnerChange={setHideOwner}
+      <div className={step === "search" ? "" : "hidden"}>
+        <div className="flex flex-col gap-4 max-w-2xl mx-auto w-full">
+          <MetadataSearchStep
+            key={prefillQuery}
+            initialQuery={prefillQuery}
+            onSelect={handleSelectResult}
+            onManualEntry={() => setStep("manual")}
           />
 
-          <Button onClick={handleSubmitShare} disabled={submitting} size="lg">
-            <BookPlus className="size-4" />
-            {submitting ? "Sharing…" : "Share this book"}
-          </Button>
+          <Link
+            href="/share/scan"
+            className="md:hidden flex items-center justify-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors"
+          >
+            <ScanLine className="size-4" />
+            Scan a barcode instead
+          </Link>
         </div>
       </div>
-    );
-  }
-
-  // Step 1: Search. MetadataSearchStep manages its own hero/results-mode
-  // switch; it's keyed on prefillQuery readiness so it mounts once, after
-  // the URL prefill (if any) is known — see the effect above.
-  if (prefillQuery === null) return null;
-
-  return (
-    <div className="flex flex-col gap-4 max-w-2xl mx-auto w-full">
-      <MetadataSearchStep
-        key={prefillQuery}
-        initialQuery={prefillQuery}
-        onSelect={handleSelectResult}
-        onManualEntry={() => setStep("manual")}
-      />
-
-      <Link
-        href="/share/scan"
-        className="md:hidden flex items-center justify-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors"
-      >
-        <ScanLine className="size-4" />
-        Scan a barcode instead
-      </Link>
-    </div>
+    </>
   );
 }
