@@ -37,7 +37,13 @@ GET /books/metadata/search?q=...
         ├─ 1. deduplicateIntoGroups — group same-book hits from different sources/queries
         ├─ 2. mergeGroup            — merge each group into one BookMetadataResult
         ├─ 3. enrichAcrossEditions  — backfill empty Description across sibling editions
-        ├─ 4. sort                  — by completeness score, then Title
+        ├─ 4. sort                  — by completeness score, then Title (case-insensitive)
+        │
+        ▼
+  is q ISBN-shaped? ── promoteQueriedEdition(consolidated, normalizeISBN(q)): pin the result
+        │              whose own ISBN matches q to #1, regardless of completeness score. (See
+        │              "Ranking the exact-ISBN edition first" below.) Called from searchMetadata
+        │              itself, after consolidateResults returns — not part of consolidateResults.
         │
         ▼
   cache.Set(cacheKey, consolidated) → response
@@ -119,6 +125,52 @@ This roughly doubles the external calls made per ISBN query (two rounds of 2–3
 of one). Both rounds share the same `cache.Set` at the end, so a repeated identical query is still
 one cache hit, not two more fan-outs.
 
+## Google Books needs the `isbn:` operator for an ISBN query (`googleBooksQueryFor`)
+
+`fetchAllSources` sends `q` unchanged to every provider (see above), but Google Books' free-text
+search does not reliably match a bare ISBN string — verified live: `?q=9781433532337` returns
+`totalItems: 0` for a real, indexed ISBN, while `?q=isbn:9781433532337` returns exactly the right
+edition. Without this, the first round of an ISBN search got **no** Google Books contribution at
+all, leaving only Open Library's sparse, work-level hit (see below) in the pool.
+
+`googleBooksQueryFor` (`metadata.go`) rewrites the query to `"isbn:" + normalizeISBN(q)` whenever
+`q` is ISBN-shaped, and passes non-ISBN queries through unchanged — so `expandSiblingEditions`'s
+later title+author re-fetch is unaffected. This is scoped to Google Books only: Open Library
+already matches a bare ISBN string correctly for this case (confirmed live), and BookBrainz's
+search is unrelated/noisy for this kind of query regardless of prefix.
+
+## Ranking the exact-ISBN edition first (`promoteQueriedEdition`)
+
+`expandSiblingEditions` above exists so a sparse ISBN hit can be backfilled from a richer sibling —
+but nothing about completeness-score ranking (step 4) guarantees the literal edition the user
+searched for stays the top pick once siblings are in the pool. Real example: searching ISBN
+`9781433532337` ("Church Discipline" by Jonathan Leeman), once Google Books actually returns it
+(see `googleBooksQueryFor` above), gets the correct English edition — cover, description,
+publisher, but `PageCount: 0` (Google's own catalog entry is incomplete on that one field) — while
+`expandSiblingEditions`'s broader title+author query surfaces several translated siblings, one of
+which (a Burmese edition) Google reports with a non-zero page count. That single extra point is
+enough for the Burmese edition to genuinely outscore the correct one under `scoreResult` — not a
+tie, a real score difference.
+
+`promoteQueriedEdition` (`metadata_consolidate.go`) fixes this directly: called from
+`searchMetadata` right after `consolidateResults`, it moves the result whose own (normalized) ISBN
+equals the queried ISBN to index 0, unconditionally — completeness score no longer decides the #1
+slot once the query itself is an unambiguous identifier. It's a no-op when the query wasn't
+ISBN-shaped, or when no fetched result actually carries the queried ISBN (the existing "ISBN
+expansion can't recover from a completely empty first round" limitation below still applies in that
+case — there's nothing to promote).
+
+**Important dependency**: `promoteQueriedEdition` can only promote a result that's actually in the
+pool. Open Library folds every edition of a work into one search hit and reports only one
+representative ISBN (`isbn[0]` of a possibly-long array, in whatever order OL's index happens to
+store it) — for this book, that's `9781433532368`, a _sibling_ of the queried `9781433532337`, not
+the queried ISBN itself. So Open Library alone was never enough for `promoteQueriedEdition` to find
+a match; it depends on Google Books actually returning the literal queried ISBN, which is exactly
+what `googleBooksQueryFor` fixes. The two fixes are a pair — either alone leaves this case broken.
+
+This only covers ISBN queries. A free-text title/author query has no single "the thing that was
+literally asked for" to pin to — see "Future direction" below.
+
 ## Known limitations
 
 - **Bucket/backfill matching is exact-normalized-string only.** If the winning source for one
@@ -132,6 +184,37 @@ one cache hit, not two more fan-outs.
   (repointing `Copy`/`WishlistRequest.FulfilledBookID`, etc.) is still unaddressed anywhere.
 - **ISBN expansion can't recover from a completely empty first round.** If all three providers
   fail or return no usable Title/Author for the ISBN itself, there's nothing to expand from.
+- **Open Library's `language` field is unreliable and isn't used for ranking.** Many translated
+  editions are mistagged `"eng"` in OL's own index (e.g. Burmese/Chinese/Kurdish translations of
+  "Church Discipline" by Jonathan Leeman all report `language: ["eng"]`), so language can't be used
+  to deprioritize a mismatched-language sibling edition in the final sort — only the exact-string
+  `Language` equality check in `enrichAcrossEditions`'s description backfill relies on it, and only
+  as a best-effort skip, not a ranking signal. `promoteQueriedEdition` (above) sidesteps this for
+  ISBN queries by pinning on identity rather than language; free-text queries have no such anchor
+  and remain exposed to this.
+- **Free-text query ranking has no equivalent to `promoteQueriedEdition`.** A title/author search
+  has no single unambiguous "the thing that was asked for" to pin to the way an ISBN does, so a
+  translated or otherwise tangential sibling edition can still legitimately win the top slot on raw
+  completeness score for a plain-text query. This is a genuinely harder relevance problem than the
+  ISBN case — see "Future direction" below.
+
+## Future direction: a relevance regression suite
+
+`promoteQueriedEdition` fixes the one case that was reported and verified against live data, but
+completeness-score ranking is inherently going to keep producing edge cases like it — this is a
+search relevance problem, not a single bug, and it matters for user experience. The next step,
+deliberately not built in the same session as this fix, is a **fixture-based relevance regression
+suite**: capture real (sanitized) API responses for known-tricky queries as static JSON fixtures
+checked into the repo, and replay them through `consolidateResults`/`promoteQueriedEdition` in CI to
+assert the expected top result — catching future regressions the way today's Church Discipline
+scenario was caught by hand.
+
+This needs one prerequisite: `fetchOpenLibrary`/`fetchGoogleBooks`/`fetchBookBrainz`
+(`metadata.go`) currently call the package-level `metadataClient` directly, so the fetch layer has
+no test coverage at all today (see the note above). They'd need to accept an injectable HTTP client
+(or an interface seam) before recorded fixtures could stand in for live network calls. The
+`TestConsolidateResults_PromoteQueriedEdition_ExactISBNBeatsHigherScoringSibling` test added
+alongside this fix is a natural first candidate to seed that suite with, once the seam exists.
 
 ## Where to look for each concern
 
@@ -139,6 +222,7 @@ one cache hit, not two more fan-outs.
 | ----------------------------------------------------------------------------------- | ---------------------------------------------------------------- |
 | Route registration, request/response shape, provider fan-out, ISBN expansion        | `internal/handlers/metadata.go`                                  |
 | Grouping, merging, cross-edition backfill, scoring, ISBN/title-author normalization | `internal/handlers/metadata_consolidate.go`                      |
+| Pinning the exact-ISBN edition to #1 (`promoteQueriedEdition`)                      | `internal/handlers/metadata_consolidate.go`                      |
 | Search result cache (in-memory, 1h TTL)                                             | `internal/handlers/metadata_cache.go`                            |
 | Frontend bucketed-card display, "from another edition" label                        | `apps/bookshelf/src/app/share/components/MetadataSearchStep.tsx` |
 | Scheduled reconciliation for already-persisted `Book` rows                          | `catalog-description-reconciliation-job.md`                      |

@@ -123,12 +123,14 @@ func (h *MetadataHandler) searchMetadata(ctx context.Context, input *searchMetad
 		return &searchMetadataOutput{Body: cached}, nil
 	}
 
+	queriedISBN := normalizeISBN(q)
 	results := fetchAllSources(ctx, q, apiKey)
-	if normalizeISBN(q) != "" {
+	if queriedISBN != "" {
 		results = append(results, expandSiblingEditions(ctx, results, apiKey)...)
 	}
 
 	consolidated := consolidateResults(results)
+	consolidated = promoteQueriedEdition(consolidated, queriedISBN)
 	h.cache.Set(cacheKey, consolidated)
 	return &searchMetadataOutput{Body: consolidated}, nil
 }
@@ -390,12 +392,26 @@ func preferredISBN(ids []googleBooksIndustryIdentifier) string {
 	return ""
 }
 
+// googleBooksQueryFor returns the query string to send to Google Books for
+// q. Google Books' free-text search does not reliably match a bare ISBN
+// string — a valid, indexed ISBN can return zero results without the
+// "isbn:" search operator — so ISBN-shaped queries are rewritten to use it.
+// Non-ISBN queries (title/author, including expandSiblingEditions' re-fetch)
+// pass through unchanged.
+func googleBooksQueryFor(q string) string {
+	if isbn := normalizeISBN(q); isbn != "" {
+		return "isbn:" + isbn
+	}
+	return q
+}
+
 // fetchGoogleBooks calls the Google Books API and returns normalised results.
 func fetchGoogleBooks(ctx context.Context, q, apiKey string) ([]BookMetadataResult, error) {
-	zerolog.Ctx(ctx).Debug().Str("query", q).Msg("searching Google Books")
+	query := googleBooksQueryFor(q)
+	zerolog.Ctx(ctx).Debug().Str("query", query).Msg("searching Google Books")
 	apiURL := fmt.Sprintf(
 		"https://www.googleapis.com/books/v1/volumes?q=%s&key=%s&maxResults=10",
-		url.QueryEscape(q),
+		url.QueryEscape(query),
 		url.QueryEscape(apiKey),
 	)
 	resp, err := metadataClient.Get(apiURL) //nolint:noctx,gosec

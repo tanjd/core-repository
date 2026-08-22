@@ -149,6 +149,28 @@ func TestConsolidateResults_RanksByCompletenessThenTitle(t *testing.T) {
 	assert.Equal(t, "Sparse Book", got[1].Title)
 }
 
+func TestConsolidateResults_RankTieBreakIsCaseInsensitive(t *testing.T) {
+	// Regression test for a real-world ranking bug: Open Library's title
+	// casing is inconsistent across editions of the same work — the genuine
+	// English edition of "Church Discipline" by Jonathan Leeman is indexed as
+	// "Church discipline" (lowercase "d"), while a Burmese translation is
+	// indexed as "Church Discipline (Burmese)" (capital "D"). Neither carries
+	// a cover from Open Library's search endpoint, so both tie on
+	// scoreResult (ISBN only), and a case-sensitive tie-break let the
+	// capitalized Burmese title sort first purely as an ASCII-ordering
+	// artifact, not because it was actually the better match.
+	results := []BookMetadataResult{
+		{Source: "openlibrary", Title: "Church Discipline (Burmese)", Author: "Jonathan Leeman", ISBN: "9781955768849"},
+		{Source: "openlibrary", Title: "Church discipline", Author: "Jonathan Leeman", ISBN: "9781433532368"},
+	}
+
+	got := consolidateResults(results)
+
+	require.Len(t, got, 2)
+	assert.Equal(t, "Church discipline", got[0].Title, "the genuine English edition must rank first, not a differently-cased translated sibling")
+	assert.Equal(t, "Church Discipline (Burmese)", got[1].Title)
+}
+
 func TestConsolidateResults_EmptyInput(t *testing.T) {
 	got := consolidateResults(nil)
 	assert.Empty(t, got)
@@ -460,4 +482,99 @@ func TestBestTitleAuthorForExpansion_EmptyInput(t *testing.T) {
 
 	assert.Empty(t, title)
 	assert.Empty(t, author)
+}
+
+func TestPromoteQueriedEdition_MovesMatchToFront(t *testing.T) {
+	sorted := []BookMetadataResult{
+		{Title: "Sibling A", ISBN: "9781111111111"},
+		{Title: "Sibling B", ISBN: "9782222222222"},
+		{Title: "Queried Edition", ISBN: "9783333333333"},
+	}
+
+	got := promoteQueriedEdition(sorted, "9783333333333")
+
+	require.Len(t, got, 3)
+	assert.Equal(t, "Queried Edition", got[0].Title)
+	assert.Equal(t, "Sibling A", got[1].Title, "relative order of the rest is preserved")
+	assert.Equal(t, "Sibling B", got[2].Title)
+}
+
+func TestPromoteQueriedEdition_NoopWhenAlreadyFirst(t *testing.T) {
+	sorted := []BookMetadataResult{
+		{Title: "Queried Edition", ISBN: "9783333333333"},
+		{Title: "Sibling A", ISBN: "9781111111111"},
+	}
+
+	got := promoteQueriedEdition(sorted, "9783333333333")
+
+	assert.Equal(t, "Queried Edition", got[0].Title)
+	assert.Equal(t, "Sibling A", got[1].Title)
+}
+
+func TestPromoteQueriedEdition_NoopWhenQueriedISBNEmpty(t *testing.T) {
+	sorted := []BookMetadataResult{
+		{Title: "Sibling A", ISBN: "9781111111111"},
+		{Title: "Queried Edition", ISBN: "9783333333333"},
+	}
+
+	got := promoteQueriedEdition(sorted, "")
+
+	assert.Equal(t, "Sibling A", got[0].Title, "no queried ISBN means nothing to promote")
+}
+
+func TestPromoteQueriedEdition_NoopWhenNoMatch(t *testing.T) {
+	sorted := []BookMetadataResult{
+		{Title: "Sibling A", ISBN: "9781111111111"},
+		{Title: "Sibling B", ISBN: "9782222222222"},
+	}
+
+	got := promoteQueriedEdition(sorted, "9789999999999")
+
+	assert.Equal(t, "Sibling A", got[0].Title)
+	assert.Equal(t, "Sibling B", got[1].Title)
+}
+
+func TestPromoteQueriedEdition_MatchesAcrossISBNFormats(t *testing.T) {
+	// The merged result's ISBN may be hyphenated/ISBN-10 depending on which
+	// source won the field by priority; promotion must normalize both sides.
+	sorted := []BookMetadataResult{
+		{Title: "Sibling A", ISBN: "9781111111111"},
+		{Title: "Queried Edition", ISBN: "978-1-433532-33-7"},
+	}
+
+	got := promoteQueriedEdition(sorted, normalizeISBN("9781433532337"))
+
+	assert.Equal(t, "Queried Edition", got[0].Title)
+}
+
+func TestConsolidateResults_PromoteQueriedEdition_ExactISBNBeatsHigherScoringSibling(t *testing.T) {
+	// Regression test for the real-world case that motivated
+	// promoteQueriedEdition: searching ISBN 9781433532337 ("Church
+	// Discipline" by Jonathan Leeman) returns the correct English edition
+	// from Google Books (cover, description, publisher, but PageCount: 0 —
+	// Google's own catalog entry is incomplete on that one field) plus,
+	// via expandSiblingEditions, a Burmese translation that Google reports
+	// with a non-zero PageCount, which genuinely outscores the correct
+	// edition under scoreResult. Without promotion, the Burmese edition
+	// would rank first purely because of a better-documented minor field.
+	results := []BookMetadataResult{
+		{
+			Source: "google_books", Title: "Church Discipline", Author: "Jonathan Leeman",
+			ISBN: "9781433532337", CoverURL: "cover.jpg", Description: "How the Church Protects the Name of Jesus",
+			Publisher: "9marks", PageCount: 0,
+		},
+		{
+			Source: "google_books", Title: "Church Discipline (Burmese)", Author: "Jonathan Leeman",
+			ISBN: "9781955768849", CoverURL: "burmese-cover.jpg", Description: "...",
+			Publisher: "Building Healthy Churches (Burmese)", PageCount: 194,
+		},
+	}
+
+	consolidated := consolidateResults(results)
+	require.Len(t, consolidated, 2)
+	require.Equal(t, "Church Discipline (Burmese)", consolidated[0].Title, "sanity check: the Burmese edition does genuinely outscore the exact match on completeness alone")
+
+	got := promoteQueriedEdition(consolidated, normalizeISBN("9781433532337"))
+
+	assert.Equal(t, "Church Discipline", got[0].Title, "the exact-ISBN edition must win the top slot regardless of completeness score")
 }

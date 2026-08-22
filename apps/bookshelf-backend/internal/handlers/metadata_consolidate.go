@@ -384,8 +384,34 @@ func consolidateResults(results []BookMetadataResult) []BookMetadataResult {
 		if si != sj {
 			return si > sj
 		}
-		return merged[i].Title < merged[j].Title
+		return strings.ToLower(merged[i].Title) < strings.ToLower(merged[j].Title)
 	})
 
 	return merged
+}
+
+// promoteQueriedEdition moves the result whose normalized ISBN matches
+// queriedISBN to the front of sorted, if present. Sibling editions surfaced
+// by expandSiblingEditions (metadata.go) exist to backfill missing fields on
+// the literally-requested edition, not to outrank it — a translation with a
+// better-documented minor field (e.g. a page count Google never recorded for
+// the original print) must never displace the edition the user actually
+// searched for. No-op if queriedISBN is empty or matches nothing in sorted.
+func promoteQueriedEdition(sorted []BookMetadataResult, queriedISBN string) []BookMetadataResult {
+	if queriedISBN == "" {
+		return sorted
+	}
+	for i, r := range sorted {
+		if normalizeISBN(r.ISBN) != queriedISBN {
+			continue
+		}
+		if i == 0 {
+			return sorted
+		}
+		promoted := r
+		copy(sorted[1:i+1], sorted[0:i])
+		sorted[0] = promoted
+		return sorted
+	}
+	return sorted
 }
