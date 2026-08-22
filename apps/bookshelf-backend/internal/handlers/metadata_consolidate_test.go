@@ -416,3 +416,48 @@ func TestConsolidateResults_KnownLimitation_AuthorFormatDivergenceFromMergeBlock
 		}
 	}
 }
+
+func TestBestTitleAuthorForExpansion_PicksHighestPriorityCompleteResult(t *testing.T) {
+	results := []BookMetadataResult{
+		{Source: "bookbrainz", Title: "Church Discipline", Author: "Jonathan Leeman"},
+		{Source: "openlibrary", Title: "", Author: ""},
+		{Source: "google_books", Title: "Church Discipline", Author: "Jonathan Leeman", Description: "..."},
+	}
+
+	title, author := bestTitleAuthorForExpansion(results)
+
+	assert.Equal(t, "Church Discipline", title)
+	assert.Equal(t, "Jonathan Leeman", author, "google_books outranks bookbrainz by source priority")
+}
+
+func TestBestTitleAuthorForExpansion_SkipsResultsMissingEitherField(t *testing.T) {
+	results := []BookMetadataResult{
+		{Source: "google_books", Title: "Church Discipline", Author: ""},
+		{Source: "openlibrary", Title: "", Author: "Jonathan Leeman"},
+		{Source: "bookbrainz", Title: "Church Discipline", Author: "Jonathan Leeman"},
+	}
+
+	title, author := bestTitleAuthorForExpansion(results)
+
+	assert.Equal(t, "Church Discipline", title)
+	assert.Equal(t, "Jonathan Leeman", author)
+}
+
+func TestBestTitleAuthorForExpansion_ReturnsEmptyWhenNoResultHasBothFields(t *testing.T) {
+	results := []BookMetadataResult{
+		{Source: "google_books", Title: "Church Discipline", Author: ""},
+		{Source: "openlibrary", Title: "", ISBN: "9781433532337"},
+	}
+
+	title, author := bestTitleAuthorForExpansion(results)
+
+	assert.Empty(t, title)
+	assert.Empty(t, author)
+}
+
+func TestBestTitleAuthorForExpansion_EmptyInput(t *testing.T) {
+	title, author := bestTitleAuthorForExpansion(nil)
+
+	assert.Empty(t, title)
+	assert.Empty(t, author)
+}

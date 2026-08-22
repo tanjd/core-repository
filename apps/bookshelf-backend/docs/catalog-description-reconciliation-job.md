@@ -1,6 +1,7 @@
 # Spec: catalog description reconciliation job
 
-Status: **implemented**.
+Status: **implemented**. See [`metadata-search.md`](./metadata-search.md) for the current,
+consolidated explanation of the search-time pipeline this job complements.
 
 Extends [`cross-edition-metadata-enrichment.md`](./cross-edition-metadata-enrichment.md), whose
 `Description`-only backfill only ever touches the ephemeral `/books/metadata/search` response.

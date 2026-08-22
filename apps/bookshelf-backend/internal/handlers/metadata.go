@@ -124,6 +124,9 @@ func (h *MetadataHandler) searchMetadata(ctx context.Context, input *searchMetad
 	}
 
 	results := fetchAllSources(ctx, q, apiKey)
+	if normalizeISBN(q) != "" {
+		results = append(results, expandSiblingEditions(ctx, results, apiKey)...)
+	}
 
 	consolidated := consolidateResults(results)
 	h.cache.Set(cacheKey, consolidated)
@@ -185,6 +188,22 @@ func fetchAllSources(ctx context.Context, q, apiKey string) []BookMetadataResult
 
 	wg.Wait()
 	return results
+}
+
+// expandSiblingEditions re-queries all sources by title+author when the
+// original query was an ISBN. An ISBN-only query only ever surfaces the
+// exact edition indexed under that ISBN — sibling editions (different
+// printing, hardcover vs. paperback, different territory) carry different
+// ISBNs and never enter the result set otherwise, so consolidateResults'
+// dedup/enrich/bucket pipeline (see docs/metadata-search.md) never gets a
+// chance to see them as the same work. Returns nil if the ISBN hit(s) didn't
+// carry a usable Title/Author to search by.
+func expandSiblingEditions(ctx context.Context, isbnResults []BookMetadataResult, apiKey string) []BookMetadataResult {
+	title, author := bestTitleAuthorForExpansion(isbnResults)
+	if title == "" || author == "" {
+		return nil
+	}
+	return fetchAllSources(ctx, title+" "+author, apiKey)
 }
 
 func (h *MetadataHandler) getOLDescription(_ context.Context, input *olDescriptionInput) (*olDescriptionOutput, error) {

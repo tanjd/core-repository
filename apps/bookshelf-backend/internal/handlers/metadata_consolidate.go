@@ -333,6 +333,37 @@ func bestDescriptionDonor(snapshot []BookMetadataResult, targetLanguage string) 
 	return ""
 }
 
+// bestTitleAuthorForExpansion returns the Title/Author pair from results with
+// the best source-priority/completeness score, for use as a follow-up search
+// query when the original query was an ISBN (see expandSiblingEditions in
+// metadata.go). Returns "", "" if no result carries both fields.
+func bestTitleAuthorForExpansion(results []BookMetadataResult) (title, author string) {
+	var best *BookMetadataResult
+	for i, r := range results {
+		if r.Title == "" || r.Author == "" {
+			continue
+		}
+		if best == nil || isBetterExpansionCandidate(r, *best) {
+			best = &results[i]
+		}
+	}
+	if best == nil {
+		return "", ""
+	}
+	return best.Title, best.Author
+}
+
+// isBetterExpansionCandidate reports whether a is a better source of
+// Title/Author than b, by the same sourcePriority-then-scoreResult ordering
+// used everywhere else in this file.
+func isBetterExpansionCandidate(a, b BookMetadataResult) bool {
+	pa, pb := sourcePriority(a.Source), sourcePriority(b.Source)
+	if pa != pb {
+		return pa < pb
+	}
+	return scoreResult(a) > scoreResult(b)
+}
+
 // consolidateResults deduplicates, merges, and ranks results from all sources.
 func consolidateResults(results []BookMetadataResult) []BookMetadataResult {
 	if len(results) == 0 {
