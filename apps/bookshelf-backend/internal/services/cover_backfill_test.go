@@ -37,7 +37,7 @@ func TestCoverBackfillService_Run_OneFailureDoesNotStopTheRun(t *testing.T) {
 		{ID: 2, ISBN: "222", Title: "Has A Cover"},
 	}}
 
-	svc := &CoverBackfillService{books: repo, coversDir: t.TempDir(), client: client}
+	svc := &CoverBackfillService{books: repo, coversDir: t.TempDir(), client: client, googleBooksKeyPool: NewGoogleBooksKeyPool(nil)}
 
 	// services.DownloadCover builds its own http.Client internally rather
 	// than accepting one, so it falls back to http.DefaultTransport — swap
@@ -73,7 +73,7 @@ func TestCoverBackfillService_Run_NoCandidatesIsANoop(t *testing.T) {
 		{ID: 1, CoverURL: "/api/covers/already-set.jpg", ISBN: "111"},
 	}}
 
-	svc := NewCoverBackfillService(repo, t.TempDir(), "")
+	svc := NewCoverBackfillService(repo, t.TempDir(), NewGoogleBooksKeyPool(nil))
 	result := svc.Run(t.Context())
 
 	if result != "backfilled 0 of 0 books" {

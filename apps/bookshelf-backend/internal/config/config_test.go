@@ -33,6 +33,7 @@ func TestLoadAppliesDefaults(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, "8000", cfg.Port)
 	assert.Equal(t, "dev-secret-change-me", cfg.JWTSecret)
+	assert.Equal(t, "dev-encryption-secret-change-me", cfg.EncryptionSecret)
 	assert.Equal(t, []string{"http://localhost:3000"}, cfg.CORSOrigins)
 }
 
@@ -60,8 +61,40 @@ func TestLogFieldsRedactsSensitiveValues(t *testing.T) {
 
 	assert.Equal(t, "***REDACTED***", fields["jwt_secret"], "secret value must never appear in logs")
 	assert.Equal(t, "***REDACTED***", fields["smtp_password"])
-	assert.Equal(t, "(unset)", fields["encryption_secret"], "unset secrets should say so without a fake value")
+	assert.Equal(t, "***REDACTED***", fields["encryption_secret"], "even the dev-default placeholder must never appear in logs")
+	assert.Equal(t, "(unset)", fields["google_books_api_key"], "unset secrets should say so without a fake value")
 	assert.Equal(t, "smtp.example.com", fields["smtp_host"], "non-sensitive fields log their real value")
+}
+
+func TestLoadParsesMultipleGoogleBooksAPIKeys(t *testing.T) {
+	clearConfigEnv(t)
+	t.Setenv("GOOGLE_BOOKS_API_KEY", "key-one, key-two,key-three")
+
+	cfg, err := Load()
+
+	require.NoError(t, err)
+	assert.Equal(t, []string{"key-one", "key-two", "key-three"}, cfg.GoogleBooksAPIKeys, "entries are trimmed regardless of surrounding whitespace")
+}
+
+func TestLoadSingleGoogleBooksAPIKeyStillWorks(t *testing.T) {
+	clearConfigEnv(t)
+	t.Setenv("GOOGLE_BOOKS_API_KEY", "only-key")
+
+	cfg, err := Load()
+
+	require.NoError(t, err)
+	assert.Equal(t, []string{"only-key"}, cfg.GoogleBooksAPIKeys)
+}
+
+func TestLogFieldsRedactsGoogleBooksAPIKeysCountOnly(t *testing.T) {
+	clearConfigEnv(t)
+	t.Setenv("GOOGLE_BOOKS_API_KEY", "key-one,key-two")
+	cfg, err := Load()
+	require.NoError(t, err)
+
+	fields := cfg.LogFields()
+
+	assert.Equal(t, "***REDACTED*** (2 keys)", fields["google_books_api_key"], "reveals the pool size, never the key values")
 }
 
 func TestLogFieldsJoinsSliceFields(t *testing.T) {

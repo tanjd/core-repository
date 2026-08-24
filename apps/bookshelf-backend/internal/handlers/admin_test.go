@@ -22,7 +22,7 @@ func newAdminHandlerWithCopiesAndLoans() (*AdminHandler, *repotest.AdminReposito
 	loans := repotest.NewLoanRequestRepository(copies, repotest.NewNotificationRepository(), repotest.NewUserRepository())
 	email := services.NewEmailService("", "", "", "", "", "", "", "http://localhost:3000")
 	registration := services.NewRegistrationWorkflow(admin, repotest.NewNotificationRepository(), repotest.NewBookRepository(), email)
-	return NewAdminHandler(admin, copies, loans, "", registration), admin, copies, loans
+	return NewAdminHandler(admin, copies, loans, services.NewGoogleBooksKeyPool(nil), registration), admin, copies, loans
 }
 
 func TestAdminHandler_RequiresAdmin(t *testing.T) {
@@ -182,7 +182,7 @@ func TestUpdateUser_ApprovalNotifiesUser(t *testing.T) {
 	notifs := repotest.NewNotificationRepository()
 	email := services.NewEmailService("", "", "", "", "", "", "", "http://localhost:3000")
 	registration := services.NewRegistrationWorkflow(admin, notifs, repotest.NewBookRepository(), email)
-	h := NewAdminHandler(admin, copies, loans, "", registration)
+	h := NewAdminHandler(admin, copies, loans, services.NewGoogleBooksKeyPool(nil), registration)
 
 	require.NoError(t, admin.SaveUser(&models.User{ID: 1, Role: "admin"}))
 	require.NoError(t, admin.SaveUser(&models.User{ID: 2, Role: "user", PendingApproval: true}))

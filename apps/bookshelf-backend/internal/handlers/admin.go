@@ -24,16 +24,16 @@ type exportSettingsOutput struct {
 
 // AdminHandler holds dependencies for admin routes.
 type AdminHandler struct {
-	admin             repository.AdminRepository
-	copies            repository.CopyRepository
-	loans             repository.LoanRequestRepository
-	googleBooksAPIKey string
-	registration      *services.RegistrationWorkflow
+	admin              repository.AdminRepository
+	copies             repository.CopyRepository
+	loans              repository.LoanRequestRepository
+	googleBooksKeyPool *services.GoogleBooksKeyPool
+	registration       *services.RegistrationWorkflow
 }
 
 // NewAdminHandler creates a new AdminHandler.
-func NewAdminHandler(admin repository.AdminRepository, copies repository.CopyRepository, loans repository.LoanRequestRepository, googleBooksAPIKey string, registration *services.RegistrationWorkflow) *AdminHandler {
-	return &AdminHandler{admin: admin, copies: copies, loans: loans, googleBooksAPIKey: googleBooksAPIKey, registration: registration}
+func NewAdminHandler(admin repository.AdminRepository, copies repository.CopyRepository, loans repository.LoanRequestRepository, googleBooksKeyPool *services.GoogleBooksKeyPool, registration *services.RegistrationWorkflow) *AdminHandler {
+	return &AdminHandler{admin: admin, copies: copies, loans: loans, googleBooksKeyPool: googleBooksKeyPool, registration: registration}
 }
 
 // --- Input / Output types ---
@@ -435,6 +435,7 @@ func (h *AdminHandler) getMetadataStatus(ctx context.Context, _ *struct{}) (*met
 		url string
 	}
 
+	googleBooksKey := h.googleBooksKeyPool.Key()
 	probes := []probe{
 		{
 			name:    "openlibrary",
@@ -443,8 +444,8 @@ func (h *AdminHandler) getMetadataStatus(ctx context.Context, _ *struct{}) (*met
 		},
 		{
 			name:    "google_books",
-			enabled: h.googleBooksAPIKey != "",
-			url:     "https://www.googleapis.com/books/v1/volumes?q=test&maxResults=1&key=" + h.googleBooksAPIKey,
+			enabled: googleBooksKey != "",
+			url:     "https://www.googleapis.com/books/v1/volumes?q=test&maxResults=1&key=" + googleBooksKey,
 		},
 		{
 			name:    "bookbrainz",

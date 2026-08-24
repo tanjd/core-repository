@@ -16,6 +16,7 @@ import (
 
 	"github.com/tanjd/core-repository/apps/bookshelf-backend/internal/middleware"
 	"github.com/tanjd/core-repository/apps/bookshelf-backend/internal/repository"
+	"github.com/tanjd/core-repository/apps/bookshelf-backend/internal/services"
 )
 
 // metadataClient is a shared HTTP client with a timeout for all metadata fetches.
@@ -49,19 +50,19 @@ const searchCacheTTL = 1 * time.Hour
 
 // MetadataHandler handles book metadata search routes.
 type MetadataHandler struct {
-	googleBooksAPIKey string
-	encryptionSecret  string
-	users             repository.UserRepository
-	cache             MetadataCache
+	googleBooksKeyPool *services.GoogleBooksKeyPool
+	encryptionSecret   string
+	users              repository.UserRepository
+	cache              MetadataCache
 }
 
 // NewMetadataHandler creates a MetadataHandler.
-func NewMetadataHandler(ctx context.Context, googleBooksAPIKey, encryptionSecret string, users repository.UserRepository) *MetadataHandler {
+func NewMetadataHandler(ctx context.Context, googleBooksKeyPool *services.GoogleBooksKeyPool, encryptionSecret string, users repository.UserRepository) *MetadataHandler {
 	return &MetadataHandler{
-		googleBooksAPIKey: googleBooksAPIKey,
-		encryptionSecret:  encryptionSecret,
-		users:             users,
-		cache:             NewInMemoryMetadataCache(ctx, searchCacheTTL),
+		googleBooksKeyPool: googleBooksKeyPool,
+		encryptionSecret:   encryptionSecret,
+		users:              users,
+		cache:              NewInMemoryMetadataCache(ctx, searchCacheTTL),
 	}
 }
 
@@ -124,9 +125,9 @@ func (h *MetadataHandler) searchMetadata(ctx context.Context, input *searchMetad
 	}
 
 	queriedISBN := normalizeISBN(q)
-	results := fetchAllSources(ctx, q, apiKey)
+	results := fetchAllSources(ctx, q, apiKey, h.googleBooksKeyPool)
 	if queriedISBN != "" {
-		results = append(results, expandSiblingEditions(ctx, results, apiKey)...)
+		results = append(results, expandSiblingEditions(ctx, results, apiKey, h.googleBooksKeyPool)...)
 	}
 
 	consolidated := consolidateResults(results)
@@ -139,7 +140,7 @@ func (h *MetadataHandler) searchMetadata(ctx context.Context, input *searchMetad
 // falling back to the server-wide key when unauthenticated, unset, or
 // undecryptable.
 func (h *MetadataHandler) resolveGoogleBooksAPIKey(ctx context.Context) string {
-	apiKey := h.googleBooksAPIKey
+	apiKey := h.googleBooksKeyPool.Key()
 
 	userID, err := middleware.GetRequiredUserID(ctx)
 	if err != nil {
@@ -160,7 +161,7 @@ func (h *MetadataHandler) resolveGoogleBooksAPIKey(ctx context.Context) string {
 // fetchAllSources queries Open Library, Google Books (if apiKey is set), and
 // BookBrainz concurrently, merging all results. A per-source failure is
 // logged and otherwise ignored.
-func fetchAllSources(ctx context.Context, q, apiKey string) []BookMetadataResult {
+func fetchAllSources(ctx context.Context, q, apiKey string, pool *services.GoogleBooksKeyPool) []BookMetadataResult {
 	var mu sync.Mutex
 	var results []BookMetadataResult
 	var wg sync.WaitGroup
@@ -182,7 +183,7 @@ func fetchAllSources(ctx context.Context, q, apiKey string) []BookMetadataResult
 
 	if apiKey != "" {
 		wg.Add(1)
-		go fetch("google books", func() ([]BookMetadataResult, error) { return fetchGoogleBooks(ctx, q, apiKey) })
+		go fetch("google books", func() ([]BookMetadataResult, error) { return fetchGoogleBooks(ctx, q, apiKey, pool) })
 	}
 
 	wg.Add(1)
@@ -200,12 +201,12 @@ func fetchAllSources(ctx context.Context, q, apiKey string) []BookMetadataResult
 // dedup/enrich/bucket pipeline (see docs/metadata-search.md) never gets a
 // chance to see them as the same work. Returns nil if the ISBN hit(s) didn't
 // carry a usable Title/Author to search by.
-func expandSiblingEditions(ctx context.Context, isbnResults []BookMetadataResult, apiKey string) []BookMetadataResult {
+func expandSiblingEditions(ctx context.Context, isbnResults []BookMetadataResult, apiKey string, pool *services.GoogleBooksKeyPool) []BookMetadataResult {
 	title, author := bestTitleAuthorForExpansion(isbnResults)
 	if title == "" || author == "" {
 		return nil
 	}
-	return fetchAllSources(ctx, title+" "+author, apiKey)
+	return fetchAllSources(ctx, title+" "+author, apiKey, pool)
 }
 
 func (h *MetadataHandler) getOLDescription(_ context.Context, input *olDescriptionInput) (*olDescriptionOutput, error) {
@@ -406,7 +407,11 @@ func googleBooksQueryFor(q string) string {
 }
 
 // fetchGoogleBooks calls the Google Books API and returns normalised results.
-func fetchGoogleBooks(ctx context.Context, q, apiKey string) ([]BookMetadataResult, error) {
+// A 429 marks apiKey as rate-limited on pool (nil-safe — a user's personal
+// key, not drawn from pool, is simply not found there and ignored) so the
+// next call round-robins onto a different key instead of retrying the same
+// exhausted one.
+func fetchGoogleBooks(ctx context.Context, q, apiKey string, pool *services.GoogleBooksKeyPool) ([]BookMetadataResult, error) {
 	query := googleBooksQueryFor(q)
 	zerolog.Ctx(ctx).Debug().Str("query", query).Msg("searching Google Books")
 	apiURL := fmt.Sprintf(
@@ -421,6 +426,9 @@ func fetchGoogleBooks(ctx context.Context, q, apiKey string) ([]BookMetadataResu
 	defer resp.Body.Close() //nolint:errcheck
 
 	if resp.StatusCode != http.StatusOK {
+		if resp.StatusCode == http.StatusTooManyRequests && pool != nil {
+			pool.MarkRateLimited(apiKey)
+		}
 		return nil, fmt.Errorf("google books returned %d", resp.StatusCode)
 	}
 
