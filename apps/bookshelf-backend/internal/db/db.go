@@ -97,6 +97,7 @@ func Seed(database *gorm.DB) {
 		{Key: "cover_backfill_interval", Value: "24h"},
 		{Key: "backup_interval", Value: "24h"},
 		{Key: "backup_retention_count", Value: "7"},
+		{Key: "registration_prune_interval", Value: "1h"},
 		{Key: "verification_requires_phone", Value: "false"},
 		{Key: "verification_min_books_shared", Value: "0"},
 		{Key: "require_email_confirmation_on_change", Value: "true"},

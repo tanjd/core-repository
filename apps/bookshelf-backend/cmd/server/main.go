@@ -117,9 +117,7 @@ func main() {
 	// catches the ones nobody ever came back to — which for the email channel
 	// still hold a bcrypt hash of the password that was typed. Hourly is far
 	// more often than the 15-minute TTL needs, and the delete is a single
-	// indexed statement. Not seeded in db.Seed: there's no admin UI for this
-	// interval, so the fallback below is the setting unless someone sets the
-	// key by hand.
+	// indexed statement.
 	scheduler.RegisterJob("registration-prune", "registration_prune_interval", time.Hour,
 		pruneRegistrationVerifications(regVerificationRepo))
 

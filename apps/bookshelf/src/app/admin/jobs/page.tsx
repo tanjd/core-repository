@@ -25,6 +25,11 @@ const JOB_META: Record<string, { label: string; description: string }> = {
     description:
       "Looks up a cover from Open Library/Google Books for any book that still has none. Runs automatically on the configured interval.",
   },
+  "registration-prune": {
+    label: "Registration Prune",
+    description:
+      "Deletes abandoned signups that never submitted their verification code. Runs automatically on the configured interval.",
+  },
 };
 
 const INTERVAL_PRESETS = ["1h", "6h", "12h", "24h", "48h", "168h"];
@@ -41,6 +46,7 @@ const JOB_SETTING_KEYS: Record<string, string> = {
   "cover-refresh": "cover_refresh_interval",
   "description-reconciliation": "description_reconciliation_interval",
   "cover-backfill": "cover_backfill_interval",
+  "registration-prune": "registration_prune_interval",
 };
 
 export default function AdminJobsPage() {
