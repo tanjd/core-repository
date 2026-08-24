@@ -138,12 +138,12 @@ export default function BookDetailPage() {
 
       {/* Book header */}
       <div className="flex flex-col sm:flex-row gap-6">
-        <div className="relative w-36 aspect-[2/3] rounded-lg overflow-hidden bg-muted shrink-0">
+        <div className="relative w-36 sm:w-48 lg:w-56 aspect-[2/3] rounded-lg overflow-hidden bg-muted shrink-0">
           <BookCover
             title={book.title}
             author={book.author}
             coverUrl={book.cover_url}
-            sizes="144px"
+            sizes="(max-width: 640px) 144px, (max-width: 1024px) 192px, 224px"
           />
         </div>
 
