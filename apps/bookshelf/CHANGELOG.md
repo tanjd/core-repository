@@ -1,3 +1,13 @@
+## 0.18.0 (2026-08-24)
+
+### 🚀 Features
+
+- **bookshelf-backend,bookshelf:** send registration approval and welcome emails ([#69](https://github.com/tanjd/core-repository/pull/69))
+
+### ❤️ Thank You
+
+- Jeddy Tan @tanjd
+
 ## 0.17.3 (2026-08-24)
 
 ### 🩹 Fixes
