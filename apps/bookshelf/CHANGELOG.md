@@ -1,3 +1,13 @@
+## 0.17.3 (2026-08-24)
+
+### 🩹 Fixes
+
+- **bookshelf:** fix catalog cover sizing and back-navigation paging ([#67](https://github.com/tanjd/core-repository/pull/67))
+
+### ❤️ Thank You
+
+- Jeddy Tan @tanjd
+
 ## 0.17.2 (2026-08-22)
 
 ### 🩹 Fixes
