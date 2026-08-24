@@ -1,3 +1,13 @@
+## 0.19.1 (2026-08-24)
+
+### 🩹 Fixes
+
+- **bookshelf,bookshelf-backend,bookshelf-e2e:** loan request UX fixes ([#71](https://github.com/tanjd/core-repository/pull/71))
+
+### ❤️ Thank You
+
+- Jeddy Tan @tanjd
+
 ## 0.19.0 (2026-08-24)
 
 ### 🚀 Features
