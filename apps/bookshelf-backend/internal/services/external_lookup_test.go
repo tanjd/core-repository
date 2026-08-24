@@ -59,6 +59,11 @@ func newStubClient(responses map[string]string) (*http.Client, *stubRoundTripper
 }
 
 func TestResolveExternalData_PrefersOLKeyOverGoogleBooksIDOverISBN(t *testing.T) {
+	// OLKey's Open Library lookup can only ever contribute a cover (never a
+	// description — see lookupOpenLibraryCover), so it must not short-circuit
+	// the GoogleBooksID lookup that follows it: the merged result should have
+	// both fields, sourced from whichever source could actually supply each,
+	// and the ISBN branch should never be reached since both are now filled.
 	client, rt := newStubClient(map[string]string{
 		"bibkeys=OLID:OL1M": `{"OLID:OL1M":{"cover":{"large":"https://covers.openlibrary.org/b/id/1-L.jpg"}}}`,
 		"volumes/GB1":       `{"volumeInfo":{"description":"from google"}}`,
@@ -69,10 +74,13 @@ func TestResolveExternalData_PrefersOLKeyOverGoogleBooksIDOverISBN(t *testing.T)
 	data, _ := resolveExternalData(t.Context(), client, book, "test-key")
 
 	if data.coverURL != "https://covers.openlibrary.org/b/id/1-L.jpg" {
-		t.Fatalf("expected OLKey result to win, got %+v", data)
+		t.Fatalf("expected OLKey result to win for cover, got %+v", data)
 	}
-	if len(rt.calls) != 1 {
-		t.Fatalf("expected only the OLKey lookup to be called, got %v", rt.calls)
+	if data.description != "from google" {
+		t.Fatalf("expected GoogleBooksID result to fill description, got %+v", data)
+	}
+	if len(rt.calls) != 2 {
+		t.Fatalf("expected OLKey then GoogleBooksID lookups (stopping before ISBN, since both fields were filled), got %v", rt.calls)
 	}
 }
 

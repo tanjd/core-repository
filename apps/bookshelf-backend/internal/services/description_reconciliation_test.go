@@ -2,6 +2,7 @@ package services
 
 import (
 	"context"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -113,7 +114,7 @@ func TestDescriptionReconciliation_LanguageGuardSurvivesCascadeThroughEarlierBac
 
 	result := svc.Run(context.Background())
 
-	assert.Equal(t, "backfilled 2 of 4 books", result)
+	assert.True(t, strings.HasPrefix(result, "backfilled 2 of 4 books"), "got %q", result)
 	assert.Equal(t, "Une bonne description", findBook(t, books, a.ID).Description, "unset-language target still fills best-effort")
 	assert.Empty(t, findBook(t, books, d.ID).Description, "English target must never receive a French description, even via a cascade")
 }
@@ -162,7 +163,7 @@ func TestDescriptionReconciliation_SingleBookInCatalogNoPanic(t *testing.T) {
 
 	assert.NotPanics(t, func() {
 		result := svc.Run(context.Background())
-		assert.Equal(t, "backfilled 0 of 1 books", result)
+		assert.True(t, strings.HasPrefix(result, "backfilled 0 of 1 books"), "got %q", result)
 	})
 }
 
@@ -179,9 +180,37 @@ func TestDescriptionReconciliation_ExternalFallback_BackfillsWhenNoSiblingDonor(
 
 	result := svc.Run(t.Context())
 
-	assert.Equal(t, "backfilled 1 of 1 books", result)
+	assert.Equal(t, "backfilled 1 of 1 books\n✓ Solo Work", result)
 	got := findBook(t, books, target.ID)
 	assert.Equal(t, "from google", got.Description)
+	assert.True(t, got.DescriptionEnriched)
+}
+
+func TestDescriptionReconciliation_ExternalFallback_OpenLibraryCoverDoesNotBlockGoogleBooksDescription(t *testing.T) {
+	// Regression test: an earlier version of resolveExternalData stopped at
+	// the first source with *any* usable data. Open Library can supply a
+	// cover but never a description (it lives on a separate Work record this
+	// codebase never queries — see lookupOpenLibraryCover), so a book with an
+	// Open Library cover hit (very common) would never even be checked
+	// against Google Books, the only source that can supply a description —
+	// this is the exact shape of "Astonished by God" (ISBN 9781941114551).
+	svc, books, copies := newReconciliationDeps()
+	client, _ := newStubClient(map[string]string{
+		"bibkeys=ISBN:9781941114551": `{"ISBN:9781941114551":{"cover":{"large":"https://covers.openlibrary.org/b/id/1-L.jpg"}}}`,
+		"volumes?q=isbn:9781941114551": `{"items":[{"volumeInfo":{
+			"description":"A collection of essays on the wonder of God."
+		}}]}`,
+	})
+	svc.client = client
+	svc.googleBooksKey = "test-key"
+
+	target := addCatalogBook(t, books, copies, models.Book{Title: "Astonished by God", Author: "John Piper", ISBN: "9781941114551"})
+
+	result := svc.Run(t.Context())
+
+	assert.Equal(t, "backfilled 1 of 1 books\n✓ Astonished by God", result)
+	got := findBook(t, books, target.ID)
+	assert.Equal(t, "A collection of essays on the wonder of God.", got.Description)
 	assert.True(t, got.DescriptionEnriched)
 }
 

@@ -59,19 +59,26 @@ func (s *DescriptionReconciliationService) Run(ctx context.Context) string {
 		backfilled += s.fillBucketDescriptions(books, idxs)
 	}
 
-	backfilled += s.fillFromExternalSources(ctx, books)
+	externalBackfilled, lines := s.fillFromExternalSources(ctx, books)
+	backfilled += externalBackfilled
 
 	result := fmt.Sprintf("backfilled %d of %d books", backfilled, len(books))
 	log.Info().Int("backfilled", backfilled).Int("total", len(books)).Msg("description-reconciliation: complete")
-	return result
+	if len(lines) == 0 {
+		return result
+	}
+	return result + "\n" + strings.Join(lines, "\n")
 }
 
 // fillFromExternalSources looks up a description for any book still empty
 // after the in-catalog donor pass, sequentially with a delay between books —
 // same pacing rationale as CoverBackfillService, since this makes a fresh
-// outbound request per book.
-func (s *DescriptionReconciliationService) fillFromExternalSources(ctx context.Context, books []models.Book) int {
+// outbound request per book. Returns per-book result lines (same "✓/✗ reason"
+// shape as CoverBackfillService.Run) so an admin can see why a specific book
+// wasn't backfilled without digging through container logs.
+func (s *DescriptionReconciliationService) fillFromExternalSources(ctx context.Context, books []models.Book) (int, []string) {
 	backfilled := 0
+	var lines []string
 	first := true
 	for i := range books {
 		book := &books[i]
@@ -85,25 +92,28 @@ func (s *DescriptionReconciliationService) fillFromExternalSources(ctx context.C
 		if !first {
 			select {
 			case <-ctx.Done():
-				return backfilled
+				return backfilled, lines
 			case <-time.After(coverBackfillSpacing):
 			}
 		}
 		first = false
 
-		data, _ := resolveExternalData(ctx, s.client, *book, s.googleBooksKey)
+		data, attempts := resolveExternalData(ctx, s.client, *book, s.googleBooksKey)
 		if data.description == "" {
+			lines = append(lines, fmt.Sprintf("✗ %s — %s", book.Title, attemptsSummary(attempts)))
 			continue
 		}
 		book.Description = data.description
 		book.DescriptionEnriched = true
 		if err := s.books.Save(book); err != nil {
 			log.Warn().Err(err).Uint("book_id", book.ID).Msg("description-reconciliation: failed to save externally-backfilled book")
+			lines = append(lines, fmt.Sprintf("✗ %s — failed to save: %s", book.Title, err.Error()))
 			continue
 		}
 		backfilled++
+		lines = append(lines, fmt.Sprintf("✓ %s", book.Title))
 	}
-	return backfilled
+	return backfilled, lines
 }
 
 // bucketByWorkKey groups books' indices by bookmatch.NormalizeTitleAuthor.
