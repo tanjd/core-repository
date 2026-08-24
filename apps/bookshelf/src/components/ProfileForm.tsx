@@ -13,6 +13,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Separator } from "@/components/ui/separator";
 import { Switch } from "@/components/ui/switch";
+import { Textarea } from "@/components/ui/textarea";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   Card,
@@ -37,6 +38,7 @@ export function ProfileForm() {
     useState(true);
   const [telegramUsername, setTelegramUsername] = useState("");
   const [whatsappUsername, setWhatsappUsername] = useState("");
+  const [contactNote, setContactNote] = useState("");
   const [saving, setSaving] = useState(false);
 
   // Change password
@@ -85,6 +87,7 @@ export function ProfileForm() {
         setEmailNotificationsEnabled(u.email_notifications_enabled);
         setTelegramUsername(u.telegram_username ?? "");
         setWhatsappUsername(u.whatsapp_username ?? "");
+        setContactNote(u.contact_note ?? "");
         if (u.pending_email) {
           setEmailChangePending(true);
           setPendingEmailTarget(u.pending_email);
@@ -133,6 +136,7 @@ export function ProfileForm() {
         email_notifications_enabled: emailNotificationsEnabled,
         telegram_username: telegramUsername.trim(),
         whatsapp_username: whatsappUsername.trim(),
+        contact_note: contactNote.trim(),
       });
       if (updated.pending_email) {
         setUser(updated);
@@ -531,6 +535,21 @@ export function ProfileForm() {
                       value={whatsappUsername}
                       onChange={(e) => setWhatsappUsername(e.target.value)}
                       placeholder="Your WhatsApp handle or number"
+                    />
+                  </div>
+                  <div className="flex flex-col gap-1.5">
+                    <label
+                      htmlFor="profile-contact-note"
+                      className="text-sm font-medium"
+                    >
+                      Contact note
+                    </label>
+                    <Textarea
+                      id="profile-contact-note"
+                      value={contactNote}
+                      onChange={(e) => setContactNote(e.target.value)}
+                      placeholder="e.g. best days/times to meet, or a preferred meeting spot"
+                      maxLength={500}
                     />
                   </div>
                   <div className="flex items-center justify-between">

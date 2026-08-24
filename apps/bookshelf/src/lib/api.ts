@@ -384,6 +384,7 @@ export const api = {
     email_notifications_enabled?: boolean;
     telegram_username?: string;
     whatsapp_username?: string;
+    contact_note?: string;
   }) =>
     request<User & { pending_email_debug_code?: string }>("/auth/me", {
       method: "PATCH",

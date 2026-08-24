@@ -391,6 +391,13 @@ export default function CopyRequestsPage() {
                                     name={request.borrower.name}
                                     email={request.borrower.email}
                                     phone={request.borrower.phone}
+                                    telegramUsername={
+                                      request.borrower.telegram_username
+                                    }
+                                    whatsappUsername={
+                                      request.borrower.whatsapp_username
+                                    }
+                                    contactNote={request.borrower.contact_note}
                                   />
                                 </div>
                               )}

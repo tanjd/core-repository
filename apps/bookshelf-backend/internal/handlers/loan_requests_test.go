@@ -505,6 +505,12 @@ func TestUpdateLoanRequest_InvalidTransition(t *testing.T) {
 func TestGetLoanRequest_ContactInfoOnlyRevealedWhenAccepted(t *testing.T) {
 	d := newLoanRequestHandler()
 	owner, borrower, bookCopy := seedOwnerAndBorrower(t, d)
+	owner.TelegramUsername = "@owner"
+	owner.WhatsAppUsername = "+15550100"
+	owner.ContactNote = "prefer evenings"
+	require.NoError(t, d.users.Save(owner))
+	bookCopy.Owner = *owner
+	require.NoError(t, d.copies.Save(bookCopy))
 
 	createInput := &createLoanRequestInput{}
 	createInput.Body.CopyID = bookCopy.ID
@@ -515,6 +521,9 @@ func TestGetLoanRequest_ContactInfoOnlyRevealedWhenAccepted(t *testing.T) {
 	pending, err := d.handler.getLoanRequest(fakeAuthedCtx(t, borrower.ID, "user"), getInput)
 	require.NoError(t, err)
 	assert.Empty(t, pending.Body.Copy.Owner.Email, "contact info must stay hidden before acceptance")
+	assert.Empty(t, pending.Body.Copy.Owner.TelegramUsername, "telegram must stay hidden before acceptance")
+	assert.Empty(t, pending.Body.Copy.Owner.WhatsAppUsername, "whatsapp must stay hidden before acceptance")
+	assert.Empty(t, pending.Body.Copy.Owner.ContactNote, "contact note must stay hidden before acceptance")
 
 	acceptInput := &updateLoanRequestInput{ID: created.Body.ID}
 	acceptInput.Body.Status = "accepted"
@@ -524,6 +533,9 @@ func TestGetLoanRequest_ContactInfoOnlyRevealedWhenAccepted(t *testing.T) {
 	accepted, err := d.handler.getLoanRequest(fakeAuthedCtx(t, borrower.ID, "user"), getInput)
 	require.NoError(t, err)
 	assert.Equal(t, owner.Email, accepted.Body.Copy.Owner.Email, "contact info should be revealed once accepted")
+	assert.Equal(t, "@owner", accepted.Body.Copy.Owner.TelegramUsername, "telegram should be revealed once accepted")
+	assert.Equal(t, "+15550100", accepted.Body.Copy.Owner.WhatsAppUsername, "whatsapp should be revealed once accepted")
+	assert.Equal(t, "prefer evenings", accepted.Body.Copy.Owner.ContactNote, "contact note should be revealed once accepted")
 }
 
 func TestGetLoanRequest_AccessDeniedToUninvolvedUser(t *testing.T) {
@@ -566,6 +578,44 @@ func TestListLoanRequests_OnlyOwnerCanList(t *testing.T) {
 		require.Error(t, err)
 		assertStatus(t, err, 403)
 	})
+}
+
+func TestListLoanRequests_ContactInfoOnlyRevealedWhenAccepted(t *testing.T) {
+	d := newLoanRequestHandler()
+	owner, borrower, bookCopy := seedOwnerAndBorrower(t, d)
+	owner.TelegramUsername = "@owner"
+	owner.WhatsAppUsername = "+15550100"
+	owner.ContactNote = "prefer evenings"
+	require.NoError(t, d.users.Save(owner))
+	bookCopy.Owner = *owner
+	require.NoError(t, d.copies.Save(bookCopy))
+
+	createInput := &createLoanRequestInput{}
+	createInput.Body.CopyID = bookCopy.ID
+	created, err := d.handler.createLoanRequest(fakeAuthedCtx(t, borrower.ID, "user"), createInput)
+	require.NoError(t, err)
+
+	listInput := &listLoanRequestsInput{CopyID: bookCopy.ID}
+
+	pending, err := d.handler.listLoanRequests(fakeAuthedCtx(t, owner.ID, "user"), listInput)
+	require.NoError(t, err)
+	require.Len(t, pending.Body, 1)
+	assert.Empty(t, pending.Body[0].Copy.Owner.Email, "contact info must stay hidden before acceptance")
+	assert.Empty(t, pending.Body[0].Copy.Owner.TelegramUsername, "telegram must stay hidden before acceptance")
+	assert.Empty(t, pending.Body[0].Copy.Owner.WhatsAppUsername, "whatsapp must stay hidden before acceptance")
+	assert.Empty(t, pending.Body[0].Copy.Owner.ContactNote, "contact note must stay hidden before acceptance")
+
+	acceptInput := &updateLoanRequestInput{ID: created.Body.ID}
+	acceptInput.Body.Status = "accepted"
+	_, err = d.handler.updateLoanRequest(fakeAuthedCtx(t, owner.ID, "user"), acceptInput)
+	require.NoError(t, err)
+
+	accepted, err := d.handler.listLoanRequests(fakeAuthedCtx(t, owner.ID, "user"), listInput)
+	require.NoError(t, err)
+	require.Len(t, accepted.Body, 1)
+	assert.Equal(t, "@owner", accepted.Body[0].Copy.Owner.TelegramUsername, "telegram should be revealed once accepted")
+	assert.Equal(t, "+15550100", accepted.Body[0].Copy.Owner.WhatsAppUsername, "whatsapp should be revealed once accepted")
+	assert.Equal(t, "prefer evenings", accepted.Body[0].Copy.Owner.ContactNote, "contact note should be revealed once accepted")
 }
 
 func TestListMine_ViewFilter(t *testing.T) {

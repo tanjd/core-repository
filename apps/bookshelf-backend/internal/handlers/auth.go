@@ -454,8 +454,9 @@ type updateMeBody struct {
 	Email                     *string `json:"email,omitempty" format:"email" doc:"New email address"`
 	GoogleBooksAPIKey         *string `json:"google_books_api_key,omitempty" doc:"Your Google Books API key. Set to empty string to remove."`
 	EmailNotificationsEnabled *bool   `json:"email_notifications_enabled,omitempty" doc:"Whether to receive non-transactional notification emails (loan requests, wishlist matches). Account/security emails are unaffected."`
-	TelegramUsername          *string `json:"telegram_username,omitempty" doc:"Telegram username, for other members to reach you. Set to empty string to remove."`
-	WhatsAppUsername          *string `json:"whatsapp_username,omitempty" doc:"WhatsApp username, for other members to reach you. Set to empty string to remove."`
+	TelegramUsername          *string `json:"telegram_username,omitempty" maxLength:"100" doc:"Telegram username, for other members to reach you. Set to empty string to remove."`
+	WhatsAppUsername          *string `json:"whatsapp_username,omitempty" maxLength:"100" doc:"WhatsApp username, for other members to reach you. Set to empty string to remove."`
+	ContactNote               *string `json:"contact_note,omitempty" maxLength:"500" doc:"Free-text note on the best way/times to arrange pickup, shown to the other party once a loan request is accepted. Set to empty string to remove."`
 }
 
 type testGoogleBooksKeyInput struct {
@@ -1210,6 +1211,9 @@ func applyContactPrefsUpdate(user *models.User, body updateMeBody) {
 	}
 	if body.WhatsAppUsername != nil {
 		user.WhatsAppUsername = *body.WhatsAppUsername
+	}
+	if body.ContactNote != nil {
+		user.ContactNote = strings.TrimSpace(*body.ContactNote)
 	}
 }
 

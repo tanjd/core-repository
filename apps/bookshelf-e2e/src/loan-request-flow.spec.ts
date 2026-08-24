@@ -342,4 +342,58 @@ test.describe("loan request flow", () => {
 
     await contextOwner.close();
   });
+
+  test("accepting a request reveals the owner's Telegram username and contact note to the borrower", async ({
+    page,
+    request,
+  }, testInfo) => {
+    test.skip(
+      testInfo.project.name === MOBILE_PROJECT,
+      "not viewport-dependent — see the header comment",
+    );
+    const bookTitle = `E2E Contact Extras ${Date.now()}`;
+    const { bookId, copyId } = await createBookAndCopy(request, ownerToken, {
+      title: bookTitle,
+    });
+
+    const profileRes = await request.patch(`${BACKEND_URL}/auth/me`, {
+      headers: { Authorization: `Bearer ${ownerToken}` },
+      data: {
+        telegram_username: "@e2e_owner",
+        contact_note: "meet at the front desk on Saturdays",
+      },
+    });
+    expect(profileRes.ok()).toBeTruthy();
+
+    await login(page, borrowerEmail, E2E_TEST_USER_PASSWORD);
+    await page.goto(`/catalog/${bookId}`);
+    await page.getByRole("button", { name: "Request to Borrow" }).click();
+    await page.getByRole("button", { name: "Send Request" }).click();
+    await expect(page.getByText("Borrow request sent!")).toBeVisible();
+
+    const listRes = await request.get(
+      `${BACKEND_URL}/loan-requests?copy_id=${copyId}`,
+      { headers: { Authorization: `Bearer ${ownerToken}` } },
+    );
+    const requests: { id: number; status: string }[] = await listRes.json();
+    const pending = requests.find((r) => r.status === "pending");
+    if (!pending) throw new Error("expected a pending request to exist");
+
+    const acceptRes = await request.patch(
+      `${BACKEND_URL}/loan-requests/${pending.id}`,
+      {
+        headers: { Authorization: `Bearer ${ownerToken}` },
+        data: { status: "accepted" },
+      },
+    );
+    expect(acceptRes.ok()).toBeTruthy();
+
+    await page.goto("/my-requests");
+    await expect(page.getByText("accepted", { exact: true })).toBeVisible();
+    await page.getByText(bookTitle).last().click();
+    await expect(page.getByText("@e2e_owner")).toBeVisible();
+    await expect(
+      page.getByText("meet at the front desk on Saturdays"),
+    ).toBeVisible();
+  });
 });
