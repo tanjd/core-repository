@@ -135,7 +135,7 @@ func main() {
 	}
 
 	// Handlers
-	authH := handlers.NewAuthHandler(userRepo, adminRepo, copyRepo, regVerificationRepo, cfg.JWTSecret, encryptionSecret, emailSvc, smsSvc, registrationWorkflow, cfg.Env, cfg.RegisterRateLimitBurst)
+	authH := handlers.NewAuthHandler(userRepo, adminRepo, copyRepo, regVerificationRepo, cfg.JWTSecret, encryptionSecret, emailSvc, smsSvc, registrationWorkflow, cfg.Env, cfg.RegisterRateLimitBurst, cfg.LoginRateLimitAttempts)
 	metadataH := handlers.NewMetadataHandler(ctx, cfg.GoogleBooksAPIKey, encryptionSecret, userRepo)
 	bookH := handlers.NewBookHandler(bookRepo, userRepo, coversDir, wishlistWorkflow)
 	copyH := handlers.NewCopyHandler(copyRepo, userRepo, notifRepo, waitlistRepo, adminRepo, bookRepo, wishlistRepo, coversDir, wishlistWorkflow)

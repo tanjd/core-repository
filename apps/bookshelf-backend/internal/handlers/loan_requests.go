@@ -55,10 +55,13 @@ type getLoanRequestInput struct {
 
 // safeUser redacts contact info when the loan has not yet been accepted.
 type safeUser struct {
-	ID    uint   `json:"id"`
-	Name  string `json:"name"`
-	Email string `json:"email,omitempty"`
-	Phone string `json:"phone,omitempty"`
+	ID               uint   `json:"id"`
+	Name             string `json:"name"`
+	Email            string `json:"email,omitempty"`
+	Phone            string `json:"phone,omitempty"`
+	TelegramUsername string `json:"telegram_username,omitempty"`
+	WhatsAppUsername string `json:"whatsapp_username,omitempty"`
+	ContactNote      string `json:"contact_note,omitempty"`
 }
 
 type loanRequestCopyResponse struct {
@@ -208,17 +211,35 @@ func (h *LoanRequestHandler) RegisterRoutes(api huma.API) {
 
 // --- Handlers ---
 
+// revealedUser redacts a user's contact info to just ID/Name unless reveal
+// is true, in which case every contact field (email, phone, messaging
+// handles, and the free-text contact note) is included.
+func revealedUser(u models.User, reveal bool) safeUser {
+	s := safeUser{ID: u.ID, Name: u.Name}
+	if reveal {
+		s.Email = u.Email
+		s.Phone = u.Phone
+		s.TelegramUsername = u.TelegramUsername
+		s.WhatsAppUsername = u.WhatsAppUsername
+		s.ContactNote = u.ContactNote
+	}
+	return s
+}
+
+// buildContactPair returns the borrower/owner safeUser pair for a loan
+// request, redacting contact info unless the loan is accepted. This is the
+// single place that decides contact-reveal for every loan-request response
+// (toGetLoanRequestBody, getLoanRequest, listLoanRequests) so the three
+// endpoints can't drift out of sync on which fields get redacted.
+func buildContactPair(lr models.LoanRequest) (borrower, owner safeUser) {
+	reveal := lr.Status == "accepted"
+	return revealedUser(lr.Borrower, reveal), revealedUser(lr.Copy.Owner, reveal)
+}
+
 // toGetLoanRequestBody maps a LoanRequest to its API response body,
 // redacting borrower/owner contact info unless the loan is accepted.
 func toGetLoanRequestBody(lr models.LoanRequest) getLoanRequestBody {
-	borrowerResp := safeUser{ID: lr.Borrower.ID, Name: lr.Borrower.Name}
-	ownerResp := safeUser{ID: lr.Copy.Owner.ID, Name: lr.Copy.Owner.Name}
-	if lr.Status == "accepted" {
-		borrowerResp.Email = lr.Borrower.Email
-		borrowerResp.Phone = lr.Borrower.Phone
-		ownerResp.Email = lr.Copy.Owner.Email
-		ownerResp.Phone = lr.Copy.Owner.Phone
-	}
+	borrowerResp, ownerResp := buildContactPair(lr)
 	return getLoanRequestBody{
 		ID:                 lr.ID,
 		CopyID:             lr.CopyID,
@@ -337,38 +358,7 @@ func (h *LoanRequestHandler) listLoanRequests(ctx context.Context, input *listLo
 
 	bodies := make([]getLoanRequestBody, len(requests))
 	for i, lr := range requests {
-		borrowerResp := safeUser{ID: lr.Borrower.ID, Name: lr.Borrower.Name}
-		ownerResp := safeUser{ID: lr.Copy.Owner.ID, Name: lr.Copy.Owner.Name}
-		if lr.Status == "accepted" {
-			borrowerResp.Email = lr.Borrower.Email
-			borrowerResp.Phone = lr.Borrower.Phone
-			ownerResp.Email = lr.Copy.Owner.Email
-			ownerResp.Phone = lr.Copy.Owner.Phone
-		}
-		bodies[i] = getLoanRequestBody{
-			ID:                 lr.ID,
-			CopyID:             lr.CopyID,
-			BorrowerID:         lr.BorrowerID,
-			Message:            lr.Message,
-			Status:             lr.Status,
-			RequestedAt:        lr.RequestedAt,
-			RespondedAt:        lr.RespondedAt,
-			LoanedAt:           lr.LoanedAt,
-			ReturnedAt:         lr.ReturnedAt,
-			ReturnedBy:         lr.ReturnedBy,
-			ExpectedReturnDate: lr.ExpectedReturnDate,
-			Copy: loanRequestCopyResponse{
-				ID:        lr.Copy.ID,
-				BookID:    lr.Copy.BookID,
-				OwnerID:   lr.Copy.OwnerID,
-				Condition: lr.Copy.Condition,
-				Notes:     lr.Copy.Notes,
-				Status:    lr.Copy.Status,
-				Book:      lr.Copy.Book,
-				Owner:     ownerResp,
-			},
-			Borrower: borrowerResp,
-		}
+		bodies[i] = toGetLoanRequestBody(lr)
 	}
 	return &listLoanRequestsOutput{Body: bodies}, nil
 }
@@ -600,16 +590,10 @@ func (h *LoanRequestHandler) getLoanRequest(ctx context.Context, input *getLoanR
 		return nil, huma.Error403Forbidden("access denied")
 	}
 
-	showContact := lr.Status == "accepted" && (callerID == lr.BorrowerID || callerID == ownerID)
-
-	borrowerResp := safeUser{ID: lr.Borrower.ID, Name: lr.Borrower.Name}
-	ownerResp := safeUser{ID: lr.Copy.Owner.ID, Name: lr.Copy.Owner.Name}
-	if showContact {
-		borrowerResp.Email = lr.Borrower.Email
-		borrowerResp.Phone = lr.Borrower.Phone
-		ownerResp.Email = lr.Copy.Owner.Email
-		ownerResp.Phone = lr.Copy.Owner.Phone
-	}
+	// callerID is already guaranteed to be the borrower or the owner (the
+	// access-denied check above), so reveal is decided by status alone —
+	// same rule buildContactPair applies everywhere else.
+	borrowerResp, ownerResp := buildContactPair(*lr)
 
 	body := getLoanRequestBody{
 		ID:                 lr.ID,

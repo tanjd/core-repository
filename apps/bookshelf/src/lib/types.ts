@@ -14,6 +14,20 @@ export interface User {
   email_notifications_enabled: boolean;
   telegram_username?: string;
   whatsapp_username?: string;
+  contact_note?: string;
+}
+
+// PublicContact is the redacted view of a user shown to the other party in a
+// loan request — id/name always, contact fields only once the loan is
+// accepted (see bookshelf-backend's safeUser/buildContactPair).
+export interface PublicContact {
+  id: number;
+  name: string;
+  email?: string;
+  phone?: string;
+  telegram_username?: string;
+  whatsapp_username?: string;
+  contact_note?: string;
 }
 
 export interface AppSetting {
@@ -63,7 +77,7 @@ export interface Copy {
   return_date_required?: boolean;
   hide_owner?: boolean;
   book?: Book;
-  owner?: { id: number; name: string; email?: string; phone?: string };
+  owner?: PublicContact;
 }
 
 export interface LoanRequest {
@@ -79,7 +93,7 @@ export interface LoanRequest {
   returned_by?: number;
   expected_return_date?: string;
   copy?: Copy;
-  borrower?: { id: number; name: string; email?: string; phone?: string };
+  borrower?: PublicContact;
 }
 
 export interface Notification {

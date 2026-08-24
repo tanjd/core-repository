@@ -402,6 +402,13 @@ export default function MyRequestsPage() {
                                       name={loaner.name}
                                       email={loaner.email}
                                       phone={loaner.phone}
+                                      telegramUsername={
+                                        loaner.telegram_username
+                                      }
+                                      whatsappUsername={
+                                        loaner.whatsapp_username
+                                      }
+                                      contactNote={loaner.contact_note}
                                     />
                                   </div>
                                 )}

@@ -114,11 +114,28 @@ func (w *LoanWorkflow) OnAccepted(ctx context.Context, lr *models.LoanRequest) e
 		"<p>Hi %s,</p><p>Your request to borrow <em>%s</em> has been accepted by %s. "+
 			"Please get in touch to arrange collection.</p>",
 		html.EscapeString(borrower.Name), html.EscapeString(bookCopy.Book.Title), html.EscapeString(bookCopy.Owner.Name),
-	) + w.email.Button("/my-requests", "View your loans")
+	) + ownerContactExtrasHTML(bookCopy.Owner) + w.email.Button("/my-requests", "View your loans")
 	if borrower.EmailNotificationsEnabled {
 		w.email.SendEmailAsync(ctx, borrower.Email, subject, body)
 	}
 	return nil
+}
+
+// ownerContactExtrasHTML renders the owner's optional contact fields (beyond
+// email/phone, which are surfaced separately in-app) as extra paragraphs for
+// the acceptance email, omitting any that aren't set.
+func ownerContactExtrasHTML(owner models.User) string {
+	var extras string
+	if owner.TelegramUsername != "" {
+		extras += fmt.Sprintf("<p>Telegram: %s</p>", html.EscapeString(owner.TelegramUsername))
+	}
+	if owner.WhatsAppUsername != "" {
+		extras += fmt.Sprintf("<p>WhatsApp: %s</p>", html.EscapeString(owner.WhatsAppUsername))
+	}
+	if owner.ContactNote != "" {
+		extras += fmt.Sprintf("<p>Note: %s</p>", html.EscapeString(owner.ContactNote))
+	}
+	return extras
 }
 
 // OnRejected fires when the owner rejects a loan request.

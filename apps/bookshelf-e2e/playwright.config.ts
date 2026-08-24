@@ -69,6 +69,13 @@ export default defineConfig({
         // See loan-request-flow.spec.ts's header comment for how this
         // surfaced.
         REGISTER_RATE_LIMIT_BURST: "200",
+        // loginLimiter (internal/handlers/auth.go) caps UI logins per email
+        // at 5 within 15 minutes to resist brute-forcing one real account.
+        // This suite reuses a small, fixed set of seeded accounts across
+        // many spec files — loan-request-flow.spec.ts alone logs the same
+        // borrower in six times in a single run — so raise it well past
+        // anything this suite can legitimately hit in one run.
+        LOGIN_RATE_LIMIT_ATTEMPTS: "200",
         // Explicitly blank, not just omitted: godotenv only fills in vars
         // that aren't already set, so a dev's real apps/bookshelf-backend/.env
         // (if one exists, e.g. real SMTP credentials for local testing)

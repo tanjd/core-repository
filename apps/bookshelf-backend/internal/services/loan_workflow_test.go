@@ -83,6 +83,22 @@ func TestOnAccepted_RejectsCompetingRequestsAndMarksLoaned(t *testing.T) {
 	assert.Equal(t, 2, d.notifs.Count())
 }
 
+func TestOwnerContactExtrasHTML(t *testing.T) {
+	t.Run("empty when no optional contact fields are set", func(t *testing.T) {
+		assert.Empty(t, ownerContactExtrasHTML(models.User{}))
+	})
+
+	t.Run("includes only the fields that are set, HTML-escaped", func(t *testing.T) {
+		owner := models.User{TelegramUsername: "@ada", ContactNote: "meet <after> 6pm"}
+
+		extras := ownerContactExtrasHTML(owner)
+
+		assert.Contains(t, extras, "Telegram: @ada")
+		assert.Contains(t, extras, "Note: meet &lt;after&gt; 6pm")
+		assert.NotContains(t, extras, "WhatsApp:")
+	})
+}
+
 func TestOnRejected_FreesCopyOnlyWhenNoOtherPendingRequests(t *testing.T) {
 	t.Run("frees the copy when it was the only pending request", func(t *testing.T) {
 		d := newWorkflow()

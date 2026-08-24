@@ -36,6 +36,7 @@ type User struct {
 	EmailNotificationsEnabled bool   `gorm:"column:email_notifications_enabled;not null" json:"email_notifications_enabled"`
 	TelegramUsername          string `gorm:"column:telegram_username" json:"telegram_username,omitempty"`
 	WhatsAppUsername          string `gorm:"column:whatsapp_username" json:"whatsapp_username,omitempty"`
+	ContactNote               string `gorm:"column:contact_note" json:"contact_note,omitempty"`
 }
 
 // RegistrationVerification holds a short-lived OTP code proving control of an

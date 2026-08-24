@@ -28,7 +28,7 @@ func newAuthHandlerWithVerifications() (*AuthHandler, *repotest.UserRepository, 
 	copies := repotest.NewCopyRepository()
 	regVerifications := repotest.NewRegistrationVerificationRepository()
 	registration := services.NewRegistrationWorkflow(admin, repotest.NewNotificationRepository(), repotest.NewBookRepository(), noopEmail())
-	h := NewAuthHandler(users, admin, copies, regVerifications, testJWTSecret, "encryption-secret", noopEmail(), noopSMS(), registration, "dev", 20)
+	h := NewAuthHandler(users, admin, copies, regVerifications, testJWTSecret, "encryption-secret", noopEmail(), noopSMS(), registration, "dev", 20, 5)
 	return h, users, admin, regVerifications
 }
 
@@ -186,7 +186,7 @@ func TestRegisterViaEmailOTP(t *testing.T) {
 		regVerifications := repotest.NewRegistrationVerificationRepository()
 		notifs := repotest.NewNotificationRepository()
 		registration := services.NewRegistrationWorkflow(admin, notifs, repotest.NewBookRepository(), noopEmail())
-		h := NewAuthHandler(users, admin, copies, regVerifications, testJWTSecret, "encryption-secret", noopEmail(), noopSMS(), registration, "dev", 20)
+		h := NewAuthHandler(users, admin, copies, regVerifications, testJWTSecret, "encryption-secret", noopEmail(), noopSMS(), registration, "dev", 20, 5)
 		require.NoError(t, admin.UpsertSetting("require_registration_approval", "true"))
 		require.NoError(t, admin.SaveUser(&models.User{ID: 1, Name: "Site Admin", Email: "admin@example.com", Role: "admin"}))
 
@@ -905,9 +905,11 @@ func TestUpdateMeContactPrefs(t *testing.T) {
 		disabled := false
 		telegram := "@ada"
 		whatsapp := "+15550100"
+		note := "prefer evenings"
 		input.Body.EmailNotificationsEnabled = &disabled
 		input.Body.TelegramUsername = &telegram
 		input.Body.WhatsAppUsername = &whatsapp
+		input.Body.ContactNote = &note
 
 		out, err := h.updateMe(fakeAuthedCtx(t, user.ID, "user"), input)
 
@@ -915,12 +917,14 @@ func TestUpdateMeContactPrefs(t *testing.T) {
 		assert.False(t, out.Body.EmailNotificationsEnabled)
 		assert.Equal(t, "@ada", out.Body.TelegramUsername)
 		assert.Equal(t, "+15550100", out.Body.WhatsAppUsername)
+		assert.Equal(t, "prefer evenings", out.Body.ContactNote)
 
 		reloaded, findErr := users.FindByID(user.ID)
 		require.NoError(t, findErr)
 		assert.False(t, reloaded.EmailNotificationsEnabled)
 		assert.Equal(t, "@ada", reloaded.TelegramUsername)
 		assert.Equal(t, "+15550100", reloaded.WhatsAppUsername)
+		assert.Equal(t, "prefer evenings", reloaded.ContactNote)
 	})
 
 	t.Run("empty string clears a previously set username", func(t *testing.T) {
@@ -936,6 +940,21 @@ func TestUpdateMeContactPrefs(t *testing.T) {
 
 		require.NoError(t, err)
 		assert.Empty(t, out.Body.TelegramUsername)
+	})
+
+	t.Run("empty string clears a previously set contact note", func(t *testing.T) {
+		h, users, _ := newAuthHandler()
+		user := &models.User{Name: "Ada", Email: "ada4@example.com", Password: "x", ContactNote: "old note"}
+		require.NoError(t, users.Create(user))
+
+		input := &updateMeInput{}
+		empty := ""
+		input.Body.ContactNote = &empty
+
+		out, err := h.updateMe(fakeAuthedCtx(t, user.ID, "user"), input)
+
+		require.NoError(t, err)
+		assert.Empty(t, out.Body.ContactNote)
 	})
 
 	t.Run("leaves fields untouched when omitted", func(t *testing.T) {
@@ -1096,7 +1115,7 @@ func TestSendVerifyRegisterEmailOTP(t *testing.T) {
 		copies := repotest.NewCopyRepository()
 		regVerifications := repotest.NewRegistrationVerificationRepository()
 		registration := services.NewRegistrationWorkflow(admin, repotest.NewNotificationRepository(), repotest.NewBookRepository(), noopEmail())
-		h := NewAuthHandler(users, admin, copies, regVerifications, testJWTSecret, "encryption-secret", noopEmail(), noopSMS(), registration, "prd", 20)
+		h := NewAuthHandler(users, admin, copies, regVerifications, testJWTSecret, "encryption-secret", noopEmail(), noopSMS(), registration, "prd", 20, 5)
 
 		sendIn := &sendRegisterEmailOTPInput{}
 		sendIn.Body.Name = "Prod User"
