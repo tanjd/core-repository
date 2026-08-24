@@ -40,6 +40,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { BookCover } from "@/components/BookCover";
+import { cn } from "@/lib/utils";
 import {
   Dialog,
   DialogContent,
@@ -756,17 +757,30 @@ export default function MyBooksPage() {
                         </Badge>
                       </div>
 
-                      {loan && (
-                        <p className="text-xs text-muted-foreground">
-                          Loaned to{" "}
-                          <span className="font-medium text-foreground">
-                            {loan.borrowerName}
-                          </span>
-                          {loan.dueDate
-                            ? ` · due ${new Date(loan.dueDate).toLocaleDateString()}`
-                            : " · no return date agreed"}
-                        </p>
-                      )}
+                      {loan &&
+                        (() => {
+                          const overdue =
+                            !!loan.dueDate &&
+                            new Date(loan.dueDate) < new Date();
+                          return (
+                            <p
+                              className={cn(
+                                "text-xs",
+                                overdue
+                                  ? "text-destructive font-medium"
+                                  : "text-muted-foreground",
+                              )}
+                            >
+                              Loaned to{" "}
+                              <span className="font-medium text-foreground">
+                                {loan.borrowerName}
+                              </span>
+                              {loan.dueDate
+                                ? ` · ${overdue ? "overdue since" : "due"} ${new Date(loan.dueDate).toLocaleDateString()}`
+                                : " · no return date agreed"}
+                            </p>
+                          );
+                        })()}
 
                       {copy.notes && (
                         <p className="text-xs text-muted-foreground line-clamp-1">

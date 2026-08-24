@@ -5,6 +5,7 @@ import { Pencil } from "lucide-react";
 import { toast } from "sonner";
 import { api } from "@/lib/api";
 import type { LoanRequest } from "@/lib/types";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -12,6 +13,7 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
+import { cn } from "@/lib/utils";
 
 // expected_return_date comes back as a full RFC3339 timestamp; <input
 // type="date"> needs a bare YYYY-MM-DD.
@@ -53,13 +55,19 @@ export function ReturnDateCell({
     }
   }
 
+  const isOverdue =
+    request.status === "accepted" &&
+    !!request.expected_return_date &&
+    new Date(request.expected_return_date) < new Date();
+
   return (
     <div className="flex items-center gap-1">
-      <span>
+      <span className={cn(isOverdue && "text-destructive font-medium")}>
         {request.expected_return_date
           ? new Date(request.expected_return_date).toLocaleDateString()
           : "No return date agreed"}
       </span>
+      {isOverdue && <Badge variant="destructive">Overdue</Badge>}
       {request.status === "accepted" && (
         <Popover
           open={open}

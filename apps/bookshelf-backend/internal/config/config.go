@@ -29,6 +29,13 @@ type Config struct {
 	GoogleBooksAPIKey       string   `env:"GOOGLE_BOOKS_API_KEY" sensitive:"true"`
 	MetadataRefreshInterval string   `env:"METADATA_REFRESH_INTERVAL" envDefault:"24h"`
 	AppConfigPath           string   `env:"APP_CONFIG_PATH" envDefault:"./bookshelf.yaml"`
+	// RegisterRateLimitBurst overrides registerLimiter's burst size
+	// (internal/handlers/auth.go) — the default (20) is sized for real
+	// community usage. The e2e suite (apps/bookshelf-e2e/playwright.config.ts)
+	// raises this substantially: dozens of spec files register accounts
+	// concurrently against one shared server, well beyond anything a real
+	// community would do in the same window.
+	RegisterRateLimitBurst int `env:"REGISTER_RATE_LIMIT_BURST" envDefault:"20"`
 }
 
 // Load reads configuration from environment variables, applying envDefault

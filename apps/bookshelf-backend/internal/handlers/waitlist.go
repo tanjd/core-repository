@@ -105,8 +105,8 @@ func (h *WaitlistHandler) join(ctx context.Context, input *waitlistCopyInput) (*
 	if bookCopy.OwnerID == callerID {
 		return nil, huma.Error400BadRequest("you cannot join the waitlist for your own copy")
 	}
-	if bookCopy.Status != "loaned" {
-		return nil, huma.Error400BadRequest("can only join the waitlist for a loaned copy")
+	if bookCopy.Status != "loaned" && bookCopy.Status != "requested" {
+		return nil, huma.Error400BadRequest("can only join the waitlist for a loaned or requested copy")
 	}
 
 	if err := h.waitlists.Add(input.ID, callerID); err != nil {
