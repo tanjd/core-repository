@@ -1,3 +1,13 @@
+## 0.17.0 (2026-08-24)
+
+### 🚀 Features
+
+- **bookshelf-backend:** round-robin Google Books API keys across a pool ([#73](https://github.com/tanjd/core-repository/pull/73))
+
+### ❤️ Thank You
+
+- Jeddy Tan @tanjd
+
 ## 0.16.0 (2026-08-24)
 
 ### 🚀 Features
