@@ -1,3 +1,13 @@
+## 0.20.0 (2026-08-24)
+
+### 🚀 Features
+
+- **bookshelf,bookshelf-backend,bookshelf-e2e:** add contact note field and surface Telegram/WhatsApp in loan requests ([#72](https://github.com/tanjd/core-repository/pull/72))
+
+### ❤️ Thank You
+
+- Jeddy Tan @tanjd
+
 ## 0.19.1 (2026-08-24)
 
 ### 🩹 Fixes
