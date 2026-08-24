@@ -1,3 +1,13 @@
+## 0.15.1 (2026-08-24)
+
+### 🚀 Features
+
+- **bookshelf:** expose registration-prune interval in admin jobs UI ([#70](https://github.com/tanjd/core-repository/pull/70))
+
+### ❤️ Thank You
+
+- Jeddy Tan @tanjd
+
 ## 0.15.0 (2026-08-24)
 
 ### 🚀 Features
