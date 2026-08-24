@@ -13,20 +13,25 @@ import (
 // Fields tagged sensitive:"true" hold secrets and must never be logged in the
 // clear — see LogFields.
 type Config struct {
-	Port                    string   `env:"PORT" envDefault:"8000"`
-	DBPath                  string   `env:"DB_PATH" envDefault:"./data/bookshelf.db"`
-	JWTSecret               string   `env:"JWT_SECRET" envDefault:"dev-secret-change-me" sensitive:"true"`
-	EncryptionSecret        string   `env:"ENCRYPTION_SECRET" sensitive:"true"`
-	CORSOrigins             []string `env:"CORS_ORIGINS" envSeparator:"," envDefault:"http://localhost:3000"`
-	FrontendOrigin          string   `env:"FRONTEND_ORIGIN" envDefault:"http://localhost:3000"`
-	SMTPHost                string   `env:"SMTP_HOST"`
-	SMTPPort                string   `env:"SMTP_PORT" envDefault:"587"`
-	SMTPUsername            string   `env:"SMTP_USERNAME"`
-	SMTPPassword            string   `env:"SMTP_PASSWORD" sensitive:"true"`
-	EmailFrom               string   `env:"EMAIL_FROM" envDefault:"noreply@bookshelf.local"`
-	DevEmailOverride        string   `env:"DEV_EMAIL_OVERRIDE"`
-	Env                     string   `env:"ENV" envDefault:"dev"`
-	GoogleBooksAPIKey       string   `env:"GOOGLE_BOOKS_API_KEY" sensitive:"true"`
+	Port             string   `env:"PORT" envDefault:"8000"`
+	DBPath           string   `env:"DB_PATH" envDefault:"./data/bookshelf.db"`
+	JWTSecret        string   `env:"JWT_SECRET" envDefault:"dev-secret-change-me" sensitive:"true"`
+	EncryptionSecret string   `env:"ENCRYPTION_SECRET" envDefault:"dev-encryption-secret-change-me" sensitive:"true"`
+	CORSOrigins      []string `env:"CORS_ORIGINS" envSeparator:"," envDefault:"http://localhost:3000"`
+	FrontendOrigin   string   `env:"FRONTEND_ORIGIN" envDefault:"http://localhost:3000"`
+	SMTPHost         string   `env:"SMTP_HOST"`
+	SMTPPort         string   `env:"SMTP_PORT" envDefault:"587"`
+	SMTPUsername     string   `env:"SMTP_USERNAME"`
+	SMTPPassword     string   `env:"SMTP_PASSWORD" sensitive:"true"`
+	EmailFrom        string   `env:"EMAIL_FROM" envDefault:"noreply@bookshelf.local"`
+	DevEmailOverride string   `env:"DEV_EMAIL_OVERRIDE"`
+	Env              string   `env:"ENV" envDefault:"dev"`
+	// GoogleBooksAPIKeys is the shared pool of server-wide Google Books API
+	// keys, comma-separated. A single value works exactly as the old
+	// singular key did; adding more lets requests round-robin across them
+	// (services.GoogleBooksKeyPool) to spread load across each key's
+	// separate free-tier quota instead of hitting one key's rate limit.
+	GoogleBooksAPIKeys      []string `env:"GOOGLE_BOOKS_API_KEY" envSeparator:"," sensitive:"true"`
 	MetadataRefreshInterval string   `env:"METADATA_REFRESH_INTERVAL" envDefault:"24h"`
 	AppConfigPath           string   `env:"APP_CONFIG_PATH" envDefault:"./bookshelf.yaml"`
 	// RegisterRateLimitBurst overrides registerLimiter's burst size
@@ -53,7 +58,21 @@ func Load() (*Config, error) {
 	if err := env.Parse(cfg); err != nil {
 		return nil, fmt.Errorf("parse config: %w", err)
 	}
+	cfg.GoogleBooksAPIKeys = cleanKeys(cfg.GoogleBooksAPIKeys)
 	return cfg, nil
+}
+
+// cleanKeys trims whitespace around each comma-separated entry and drops
+// empty ones (e.g. a trailing comma, or "key1, key2" with a space after the
+// comma) so callers never have to defensively re-check.
+func cleanKeys(keys []string) []string {
+	cleaned := make([]string, 0, len(keys))
+	for _, k := range keys {
+		if k = strings.TrimSpace(k); k != "" {
+			cleaned = append(cleaned, k)
+		}
+	}
+	return cleaned
 }
 
 // LogFields flattens every Config field into a map keyed by its lowercased
@@ -78,9 +97,18 @@ func (c *Config) LogFields() map[string]any {
 	return fields
 }
 
-// redact reports whether a sensitive string field is set, without revealing
-// its value.
+// redact reports whether a sensitive field is set, without revealing its
+// value(s) — a sensitive slice (e.g. GoogleBooksAPIKeys) reports how many
+// entries it holds rather than "(unset)"/"***REDACTED***", since knowing the
+// pool size is useful for diagnosing rate-limit issues and reveals nothing
+// about the keys themselves.
 func redact(fv reflect.Value) string {
+	if fv.Kind() == reflect.Slice {
+		if fv.Len() == 0 {
+			return "(unset)"
+		}
+		return fmt.Sprintf("***REDACTED*** (%d keys)", fv.Len())
+	}
 	if fv.String() == "" {
 		return "(unset)"
 	}

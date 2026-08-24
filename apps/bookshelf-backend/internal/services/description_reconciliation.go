@@ -25,17 +25,17 @@ import (
 // its work in the catalog has no sibling to borrow from), by looking it up
 // externally, same idea and machinery as CoverBackfillService.
 type DescriptionReconciliationService struct {
-	books          repository.BookRepository
-	googleBooksKey string
-	client         *http.Client
+	books              repository.BookRepository
+	googleBooksKeyPool *GoogleBooksKeyPool
+	client             *http.Client
 }
 
 // NewDescriptionReconciliationService creates a DescriptionReconciliationService.
-func NewDescriptionReconciliationService(books repository.BookRepository, googleBooksKey string) *DescriptionReconciliationService {
+func NewDescriptionReconciliationService(books repository.BookRepository, googleBooksKeyPool *GoogleBooksKeyPool) *DescriptionReconciliationService {
 	return &DescriptionReconciliationService{
-		books:          books,
-		googleBooksKey: googleBooksKey,
-		client:         &http.Client{Timeout: 15 * time.Second},
+		books:              books,
+		googleBooksKeyPool: googleBooksKeyPool,
+		client:             &http.Client{Timeout: 15 * time.Second},
 	}
 }
 
@@ -98,7 +98,7 @@ func (s *DescriptionReconciliationService) fillFromExternalSources(ctx context.C
 		}
 		first = false
 
-		data, attempts := resolveExternalData(ctx, s.client, *book, s.googleBooksKey)
+		data, attempts := resolveExternalDataWithPool(ctx, s.client, *book, s.googleBooksKeyPool)
 		if data.description == "" {
 			lines = append(lines, fmt.Sprintf("✗ %s — %s", book.Title, attemptsSummary(attempts)))
 			continue

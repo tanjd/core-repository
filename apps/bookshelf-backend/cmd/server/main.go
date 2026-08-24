@@ -57,12 +57,8 @@ func main() {
 		Str("version", version).
 		Fields(cfg.LogFields()).
 		Msg("bookshelf starting")
-	if cfg.JWTSecret == "dev-secret-change-me" {
-		if cfg.Env != "dev" {
-			log.Fatal().Msg("JWT_SECRET must be set to a non-default value when ENV is not \"dev\" — anyone who reads this public repo knows the default and can forge admin tokens")
-		}
-		log.Warn().Msg("JWT_SECRET is set to the default value — change it before deploying to production")
-	}
+	requireNonDefaultSecret(cfg.Env, "JWT_SECRET", cfg.JWTSecret, "dev-secret-change-me", "forge admin tokens")
+	requireNonDefaultSecret(cfg.Env, "ENCRYPTION_SECRET", cfg.EncryptionSecret, "dev-encryption-secret-change-me", "decrypt stored secrets")
 
 	database, err := db.Open(cfg.DBPath)
 	if err != nil {
@@ -105,8 +101,9 @@ func main() {
 		log.Fatal().Err(err).Msg("failed to get underlying sql.DB")
 	}
 	backupSvc := services.NewBackupService(sqlDB, adminRepo, cfg.DBPath, coversDir, backupsDir)
-	descriptionReconciliationSvc := services.NewDescriptionReconciliationService(bookRepo, cfg.GoogleBooksAPIKey)
-	coverBackfillSvc := services.NewCoverBackfillService(bookRepo, coversDir, cfg.GoogleBooksAPIKey)
+	googleBooksKeyPool := services.NewGoogleBooksKeyPool(cfg.GoogleBooksAPIKeys)
+	descriptionReconciliationSvc := services.NewDescriptionReconciliationService(bookRepo, googleBooksKeyPool)
+	coverBackfillSvc := services.NewCoverBackfillService(bookRepo, coversDir, googleBooksKeyPool)
 
 	scheduler := services.NewScheduler(bookRepo, adminRepo, coversDir, cfg.MetadataRefreshInterval)
 	scheduler.RegisterJob("backup", "backup_interval", 24*time.Hour, backupSvc.CreateSnapshot)
@@ -127,21 +124,14 @@ func main() {
 	// background goroutines (e.g. the metadata cache eviction loop).
 	ctx, cancel := context.WithCancel(context.Background())
 
-	// Resolve encryption secret: use ENCRYPTION_SECRET if set, otherwise fall
-	// back to JWT_SECRET so existing deployments keep working unchanged.
-	encryptionSecret := cfg.EncryptionSecret
-	if encryptionSecret == "" {
-		encryptionSecret = cfg.JWTSecret
-	}
-
 	// Handlers
-	authH := handlers.NewAuthHandler(userRepo, adminRepo, copyRepo, regVerificationRepo, cfg.JWTSecret, encryptionSecret, emailSvc, smsSvc, registrationWorkflow, cfg.Env, cfg.RegisterRateLimitBurst, cfg.LoginRateLimitAttempts)
-	metadataH := handlers.NewMetadataHandler(ctx, cfg.GoogleBooksAPIKey, encryptionSecret, userRepo)
+	authH := handlers.NewAuthHandler(userRepo, adminRepo, copyRepo, regVerificationRepo, cfg.JWTSecret, cfg.EncryptionSecret, emailSvc, smsSvc, registrationWorkflow, cfg.Env, cfg.RegisterRateLimitBurst, cfg.LoginRateLimitAttempts)
+	metadataH := handlers.NewMetadataHandler(ctx, googleBooksKeyPool, cfg.EncryptionSecret, userRepo)
 	bookH := handlers.NewBookHandler(bookRepo, userRepo, coversDir, wishlistWorkflow)
 	copyH := handlers.NewCopyHandler(copyRepo, userRepo, notifRepo, waitlistRepo, adminRepo, bookRepo, wishlistRepo, coversDir, wishlistWorkflow)
 	loanH := handlers.NewLoanRequestHandler(copyRepo, loanRepo, adminRepo, userRepo, workflow)
 	notifH := handlers.NewNotificationHandler(notifRepo)
-	adminH := handlers.NewAdminHandler(adminRepo, copyRepo, loanRepo, cfg.GoogleBooksAPIKey, registrationWorkflow)
+	adminH := handlers.NewAdminHandler(adminRepo, copyRepo, loanRepo, googleBooksKeyPool, registrationWorkflow)
 	jobsH := handlers.NewJobsHandler(scheduler)
 	backupH := handlers.NewBackupHandler(backupSvc)
 	waitlistH := handlers.NewWaitlistHandler(copyRepo, waitlistRepo)
@@ -233,6 +223,20 @@ func main() {
 		log.Fatal().Err(err).Msg("server failed")
 	}
 	<-done
+}
+
+// requireNonDefaultSecret fatally exits outside dev if secret is still set to
+// its checked-in default — anyone who reads this public repo knows the
+// default value and can exploit it (describe what, via consequence, in the
+// log message).
+func requireNonDefaultSecret(env, name, secret, defaultValue, consequence string) {
+	if secret != defaultValue {
+		return
+	}
+	if env != "dev" {
+		log.Fatal().Msgf("%s must be set to a non-default value when ENV is not \"dev\" — anyone who reads this public repo knows the default and can %s", name, consequence)
+	}
+	log.Warn().Msgf("%s is set to the default value — change it before deploying to production", name)
 }
 
 // seedYAMLConfig seeds settings from bookshelf.yaml if it exists (YAML values override DB defaults).

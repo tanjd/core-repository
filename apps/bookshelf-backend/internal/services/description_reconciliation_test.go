@@ -23,7 +23,7 @@ func newReconciliationDeps() (*DescriptionReconciliationService, *repotest.BookR
 	books := repotest.NewBookRepository()
 	copies := repotest.NewCopyRepository()
 	books.SetCopies(copies)
-	svc := NewDescriptionReconciliationService(books, "")
+	svc := NewDescriptionReconciliationService(books, NewGoogleBooksKeyPool(nil))
 	stubClient, _ := newStubClient(map[string]string{})
 	svc.client = stubClient
 	return svc, books, copies
@@ -174,7 +174,7 @@ func TestDescriptionReconciliation_ExternalFallback_BackfillsWhenNoSiblingDonor(
 		"volumes/GB1":      `{"volumeInfo":{"description":"from google"}}`,
 	})
 	svc.client = client
-	svc.googleBooksKey = "test-key"
+	svc.googleBooksKeyPool = NewGoogleBooksKeyPool([]string{"test-key"})
 
 	target := addCatalogBook(t, books, copies, models.Book{Title: "Solo Work", Author: "Nobody Else", ISBN: "111", GoogleBooksID: "GB1"})
 
@@ -202,7 +202,7 @@ func TestDescriptionReconciliation_ExternalFallback_OpenLibraryCoverDoesNotBlock
 		}}]}`,
 	})
 	svc.client = client
-	svc.googleBooksKey = "test-key"
+	svc.googleBooksKeyPool = NewGoogleBooksKeyPool([]string{"test-key"})
 
 	target := addCatalogBook(t, books, copies, models.Book{Title: "Astonished by God", Author: "John Piper", ISBN: "9781941114551"})
 

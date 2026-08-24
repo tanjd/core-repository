@@ -6,9 +6,10 @@ import { workspaceRoot } from "@nx/devkit";
 // For CI, you may want to set BASE_URL to the deployed application.
 const baseURL = process.env["BASE_URL"] || "http://localhost:3000";
 
-// Test-only secret — never used outside this ephemeral, wiped-per-run e2e
-// database, so there's nothing to protect by keeping it out of source.
+// Test-only secrets — never used outside this ephemeral, wiped-per-run e2e
+// database, so there's nothing to protect by keeping them out of source.
 const E2E_JWT_SECRET = "e2e-test-secret-do-not-use-in-production";
+const E2E_ENCRYPTION_SECRET = "e2e-encryption-secret-do-not-use-in-production";
 
 /**
  * See https://playwright.dev/docs/test-configuration.
@@ -58,6 +59,7 @@ export default defineConfig({
         DB_PATH: "./data/e2e.db",
         ENV: "dev",
         JWT_SECRET: E2E_JWT_SECRET,
+        ENCRYPTION_SECRET: E2E_ENCRYPTION_SECRET,
         CORS_ORIGINS: "http://localhost:3000",
         FRONTEND_ORIGIN: "http://localhost:3000",
         // registerLimiter's default burst (20, internal/handlers/auth.go)

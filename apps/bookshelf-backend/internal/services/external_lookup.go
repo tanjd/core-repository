@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"strings"
 
 	"github.com/tanjd/core-repository/apps/bookshelf-backend/internal/models"
 )
@@ -239,6 +240,31 @@ func mergeExternalLookup(merged *externalBookData, attempts *[]lookupAttempt, so
 	default:
 		*attempts = append(*attempts, lookupAttempt{source, "no cover/description"})
 	}
+}
+
+// googleBooksWasRateLimited reports whether attempts recorded a 429 from
+// Google Books, so a caller using a GoogleBooksKeyPool knows to cool the key
+// it just used down rather than picking it again immediately.
+func googleBooksWasRateLimited(attempts []lookupAttempt) bool {
+	for _, a := range attempts {
+		if strings.HasPrefix(a.source, "google_books") && a.status == "http 429" {
+			return true
+		}
+	}
+	return false
+}
+
+// resolveExternalDataWithPool wraps resolveExternalData, drawing the Google
+// Books key to use from pool and cooling it down on a 429 so the caller's
+// next lookup round-robins onto a different key instead of retrying the one
+// that just got rate-limited.
+func resolveExternalDataWithPool(ctx context.Context, client *http.Client, book models.Book, pool *GoogleBooksKeyPool) (externalBookData, []lookupAttempt) {
+	key := pool.Key()
+	data, attempts := resolveExternalData(ctx, client, book, key)
+	if googleBooksWasRateLimited(attempts) {
+		pool.MarkRateLimited(key)
+	}
+	return data, attempts
 }
 
 // resolveExternalData tries each of book's applicable external sources in

@@ -30,19 +30,19 @@ const coverBackfillSpacing = 1500 * time.Millisecond
 // external URL but failed to cache locally, never discover one that's
 // missing entirely.
 type CoverBackfillService struct {
-	books          repository.BookRepository
-	coversDir      string
-	googleBooksKey string
-	client         *http.Client
+	books              repository.BookRepository
+	coversDir          string
+	googleBooksKeyPool *GoogleBooksKeyPool
+	client             *http.Client
 }
 
 // NewCoverBackfillService creates a CoverBackfillService.
-func NewCoverBackfillService(books repository.BookRepository, coversDir, googleBooksKey string) *CoverBackfillService {
+func NewCoverBackfillService(books repository.BookRepository, coversDir string, googleBooksKeyPool *GoogleBooksKeyPool) *CoverBackfillService {
 	return &CoverBackfillService{
-		books:          books,
-		coversDir:      coversDir,
-		googleBooksKey: googleBooksKey,
-		client:         &http.Client{Timeout: 15 * time.Second},
+		books:              books,
+		coversDir:          coversDir,
+		googleBooksKeyPool: googleBooksKeyPool,
+		client:             &http.Client{Timeout: 15 * time.Second},
 	}
 }
 
@@ -110,7 +110,7 @@ func coverBackfillCandidates(books []models.Book) []models.Book {
 // on both success (which source it came from) and failure (why not, e.g. a
 // quota-exceeded Google Books call rather than a genuine "no cover exists").
 func (s *CoverBackfillService) backfillOne(ctx context.Context, book *models.Book) (bool, string) {
-	data, attempts := resolveExternalData(ctx, s.client, *book, s.googleBooksKey)
+	data, attempts := resolveExternalDataWithPool(ctx, s.client, *book, s.googleBooksKeyPool)
 	if data.coverURL == "" {
 		return false, attemptsSummary(attempts)
 	}
