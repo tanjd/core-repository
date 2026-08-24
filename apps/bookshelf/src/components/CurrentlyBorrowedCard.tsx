@@ -1,6 +1,7 @@
 import type { LoanRequest } from "@/lib/types";
 import { Card, CardContent } from "@/components/ui/card";
 import { BookCover } from "@/components/BookCover";
+import { cn } from "@/lib/utils";
 
 // A compact glance at one currently-held loan (status "accepted" guaranteed
 // by the caller) — cover, title, author, and due date. Full detail (message,
@@ -8,6 +9,9 @@ import { BookCover } from "@/components/BookCover";
 // being duplicated here.
 export function CurrentlyBorrowedCard({ request }: { request: LoanRequest }) {
   const book = request.copy?.book;
+  const isOverdue =
+    !!request.expected_return_date &&
+    new Date(request.expected_return_date) < new Date();
 
   return (
     <Card className="overflow-hidden py-0 gap-0">
@@ -29,9 +33,16 @@ export function CurrentlyBorrowedCard({ request }: { request: LoanRequest }) {
               {book.author}
             </p>
           )}
-          <p className="text-xs text-muted-foreground mt-1">
+          <p
+            className={cn(
+              "text-xs mt-1",
+              isOverdue
+                ? "text-destructive font-medium"
+                : "text-muted-foreground",
+            )}
+          >
             {request.expected_return_date
-              ? `Due ${new Date(request.expected_return_date).toLocaleDateString()}`
+              ? `${isOverdue ? "Overdue since" : "Due"} ${new Date(request.expected_return_date).toLocaleDateString()}`
               : "No return date agreed"}
           </p>
           {request.copy?.owner?.name && (

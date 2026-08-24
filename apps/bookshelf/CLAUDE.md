@@ -13,6 +13,11 @@ See `apps/bookshelf-e2e/CLAUDE.md` for this app's e2e conventions — including 
 instruction to verify UI changes through that Playwright suite rather than an ad hoc
 headless-browser script.
 
+See `apps/bookshelf-backend/CLAUDE.md`'s "Product scope" section before proposing metadata-heavy
+features (richer book detail pages, ratings/reviews, "more like this") — the product's focus is
+identifying books available in the community and facilitating the exchange, not book discovery;
+link out to a site like Google Books instead of building that surface here.
+
 Its `Dockerfile` follows `apps/ledger-lens`'s sub-pattern rather than a plain `npm ci`/`npm run
 build`: this app's `package.json` is a bare version manifest like every other TS app here (no
 per-app dependencies; see the repo-root `CLAUDE.md`'s "Release versioning" section), so the image

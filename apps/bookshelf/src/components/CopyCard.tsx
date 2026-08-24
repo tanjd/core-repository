@@ -52,6 +52,9 @@ export function CopyCard({ copy, actions }: CopyCardProps) {
           <Badge variant={statusVariant[copy.status]}>
             {statusLabel[copy.status]}
           </Badge>
+          {copy.status === "available" && copy.auto_approve && (
+            <Badge variant="outline">Instant approval</Badge>
+          )}
           {copy.hide_owner ? (
             <span className="text-sm text-muted-foreground">
               Anonymous member
@@ -71,6 +74,12 @@ export function CopyCard({ copy, actions }: CopyCardProps) {
         </div>
         {copy.notes && (
           <p className="text-sm text-muted-foreground italic">{copy.notes}</p>
+        )}
+        {copy.status === "requested" && (
+          <p className="text-xs text-muted-foreground">
+            Someone&apos;s already asked to borrow this — join the waitlist to
+            be notified if it opens back up.
+          </p>
         )}
         {actions && <div className="flex flex-wrap gap-2 mt-1">{actions}</div>}
       </CardContent>

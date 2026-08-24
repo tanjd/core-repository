@@ -128,6 +128,7 @@ func (w *LoanWorkflow) OnRejected(ctx context.Context, lr *models.LoanRequest) e
 	pendingCount, _ := w.loanReqs.CountPendingForCopyExcluding(lr.CopyID, lr.ID)
 	if pendingCount == 0 {
 		w.copies.UpdateStatus(lr.CopyID, "available") //nolint:errcheck,gosec
+		w.notifyWaitlistAndClear(ctx, lr)
 	}
 
 	n := models.Notification{
@@ -145,10 +146,11 @@ func (w *LoanWorkflow) OnRejected(ctx context.Context, lr *models.LoanRequest) e
 // OnCancelled fires when the borrower cancels a pending request.
 // If no other pending requests exist for the copy, the copy is set back to
 // "available".
-func (w *LoanWorkflow) OnCancelled(_ context.Context, lr *models.LoanRequest) error {
+func (w *LoanWorkflow) OnCancelled(ctx context.Context, lr *models.LoanRequest) error {
 	pendingCount, _ := w.loanReqs.CountPendingForCopyExcluding(lr.CopyID, lr.ID)
 	if pendingCount == 0 {
 		w.copies.UpdateStatus(lr.CopyID, "available") //nolint:errcheck,gosec
+		w.notifyWaitlistAndClear(ctx, lr)
 	}
 
 	return nil
@@ -195,7 +197,9 @@ func (w *LoanWorkflow) OnReturned(ctx context.Context, lr *models.LoanRequest) e
 
 // notifyWaitlistAndClear notifies every user waitlisted for lr's copy that it
 // is now available, then clears the waitlist — the copy has just become
-// available, so it can't stay a promise for anyone still on the list.
+// available (a return, or the last pending/requested claim on it going away
+// via reject/cancel), so it can't stay a promise for anyone still on the
+// list.
 func (w *LoanWorkflow) notifyWaitlistAndClear(ctx context.Context, lr *models.LoanRequest) {
 	if w.waitlists == nil {
 		return
@@ -211,7 +215,7 @@ func (w *LoanWorkflow) notifyWaitlistAndClear(ctx context.Context, lr *models.Lo
 			LoanRequestID: &lr.ID,
 		}
 		if nErr := w.notifs.Create(&wn); nErr != nil {
-			zerolog.Ctx(ctx).Warn().Err(nErr).Msg("OnReturned: waitlist notification")
+			zerolog.Ctx(ctx).Warn().Err(nErr).Msg("notifyWaitlistAndClear: create notification")
 		}
 	}
 	w.waitlists.DeleteByCopyID(lr.CopyID) //nolint:errcheck,gosec

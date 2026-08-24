@@ -30,10 +30,28 @@ export async function registerTestUser(
   // Two calls, not three: send-email-otp holds the whole form server-side,
   // and verify-email-otp creates the account outright.
   const sendOtp = await startRegistration(request, { name, email, password });
-  const verifyOtp = await request.post(
+
+  // verify-email-otp shares registerLimiter (auth.go), an IP-wide 20-request
+  // burst refilling only 1/30s, across every spec in this run — with ~13
+  // spec files x 2 browser projects all registering at roughly the same
+  // suite-start instant, that burst is routinely exhausted by nothing more
+  // than ordinary parallel-worker timing, not a real problem with any one
+  // spec. A bounded retry with backoff long enough to matter against that
+  // refill rate absorbs the transient 429 instead of failing the whole spec
+  // on scheduling luck; a non-429 failure (or persistence past every retry)
+  // still surfaces immediately; the assert below runs every attempt's
+  // response through the same message either way.
+  let verifyOtp = await request.post(
     "http://localhost:8000/auth/register/verify-email-otp",
     { data: { email, code: sendOtp.debug_code } },
   );
+  for (let attempt = 0; verifyOtp.status() === 429 && attempt < 3; attempt++) {
+    await new Promise((resolve) => setTimeout(resolve, 10_000 * (attempt + 1)));
+    verifyOtp = await request.post(
+      "http://localhost:8000/auth/register/verify-email-otp",
+      { data: { email, code: sendOtp.debug_code } },
+    );
+  }
   // Body in the message, not just ok(): this endpoint is IP-rate-limited
   // (registerLimiter), and a bare `false` gives no hint that a run
   // registering many users tripped it rather than the flow being broken.

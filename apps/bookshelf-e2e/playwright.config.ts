@@ -60,6 +60,15 @@ export default defineConfig({
         JWT_SECRET: E2E_JWT_SECRET,
         CORS_ORIGINS: "http://localhost:3000",
         FRONTEND_ORIGIN: "http://localhost:3000",
+        // registerLimiter's default burst (20, internal/handlers/auth.go)
+        // is sized for real community usage, not this suite: every spec
+        // file registers its own account, all against one shared server,
+        // with several starting within the same second at suite launch —
+        // routinely enough to exhaust the default burst by ordinary
+        // parallel-worker timing alone, well before any real signup volume.
+        // See loan-request-flow.spec.ts's header comment for how this
+        // surfaced.
+        REGISTER_RATE_LIMIT_BURST: "200",
         // Explicitly blank, not just omitted: godotenv only fills in vars
         // that aren't already set, so a dev's real apps/bookshelf-backend/.env
         // (if one exists, e.g. real SMTP credentials for local testing)

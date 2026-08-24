@@ -10,6 +10,7 @@ import { ContactReveal } from "@/components/ContactReveal";
 import { ReturnDateCell } from "@/components/ReturnDateCell";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
   Dialog,
@@ -49,6 +50,12 @@ function hasExpandContent(request: LoanRequest): boolean {
   );
 }
 
+// expected_return_date comes back as a full RFC3339 timestamp; <input
+// type="date"> needs a bare YYYY-MM-DD.
+function toDateInputValue(iso?: string): string {
+  return iso ? iso.slice(0, 10) : "";
+}
+
 export default function CopyRequestsPage() {
   const params = useParams();
   const router = useRouter();
@@ -60,6 +67,13 @@ export default function CopyRequestsPage() {
   const [error, setError] = useState("");
   const [actioning, setActioning] = useState<number | null>(null);
   const [expanded, setExpanded] = useState<Set<number>>(new Set());
+
+  // Accept + return-date dialog
+  const [acceptDialog, setAcceptDialog] = useState<{
+    requestId: number;
+  } | null>(null);
+  const [acceptDate, setAcceptDate] = useState("");
+  const [acceptProposedDate, setAcceptProposedDate] = useState("");
 
   // Return + condition dialog
   const [returnDialog, setReturnDialog] = useState<{
@@ -139,6 +153,36 @@ export default function CopyRequestsPage() {
   function openReturnDialog(requestId: number, currentCondition: string) {
     setReturnCondition((currentCondition as Condition) || "good");
     setReturnDialog({ requestId, currentCondition });
+  }
+
+  function openAcceptDialog(request: LoanRequest) {
+    const proposed = toDateInputValue(request.expected_return_date);
+    setAcceptProposedDate(proposed);
+    setAcceptDate(proposed);
+    setAcceptDialog({ requestId: request.id });
+  }
+
+  async function handleAcceptConfirm() {
+    if (!acceptDialog) return;
+    const { requestId } = acceptDialog;
+    setActioning(requestId);
+    try {
+      let updated = await api.updateLoanRequest(requestId, {
+        status: "accepted",
+      });
+      if (acceptDate && acceptDate !== acceptProposedDate) {
+        updated = await api.updateExpectedReturnDate(requestId, acceptDate);
+      }
+      setRequests((prev) =>
+        prev.map((r) => (r.id === updated.id ? updated : r)),
+      );
+      toast.success("Request accepted!");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Action failed");
+    } finally {
+      setActioning(null);
+      setAcceptDialog(null);
+    }
   }
 
   async function handleUndoReturn() {
@@ -273,9 +317,7 @@ export default function CopyRequestsPage() {
                             <>
                               <Button
                                 size="sm"
-                                onClick={() =>
-                                  handleAction(request.id, "accepted")
-                                }
+                                onClick={() => openAcceptDialog(request)}
                                 disabled={actioning === request.id}
                               >
                                 {actioning === request.id ? "…" : "Accept"}
@@ -381,6 +423,39 @@ export default function CopyRequestsPage() {
           </Table>
         </div>
       )}
+
+      {/* Accept + return-date dialog */}
+      <Dialog
+        open={!!acceptDialog}
+        onOpenChange={(open) => !open && setAcceptDialog(null)}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Accept Request</DialogTitle>
+            <DialogDescription>
+              {acceptProposedDate
+                ? "The borrower proposed a return date below — change it if you'd rather agree on something else."
+                : "Optionally set an agreed return date before accepting."}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex flex-col gap-2">
+            <label htmlFor="accept-return-date" className="text-sm font-medium">
+              Return by (optional)
+            </label>
+            <Input
+              id="accept-return-date"
+              type="date"
+              value={acceptDate}
+              onChange={(e) => setAcceptDate(e.target.value)}
+            />
+          </div>
+          <DialogFooter showCloseButton>
+            <Button onClick={handleAcceptConfirm} disabled={actioning !== null}>
+              {actioning !== null ? "Accepting…" : "Accept Request"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Return condition dialog */}
       <Dialog

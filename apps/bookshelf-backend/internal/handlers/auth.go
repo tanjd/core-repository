@@ -254,6 +254,7 @@ func NewAuthHandler(
 	sms services.SMSService,
 	registration *services.RegistrationWorkflow,
 	env string,
+	registerRateLimitBurst int,
 ) *AuthHandler {
 	return &AuthHandler{
 		users:                     users,
@@ -282,7 +283,7 @@ func NewAuthHandler(
 		// no more protective — reaching this endpoint at all requires a code
 		// emailed to an inbox you control, itself capped at
 		// registrationOTPRateLimitAttempts per address.
-		registerLimiter: middleware.NewRateLimiter(rate.Every(30*time.Second), 20),
+		registerLimiter: middleware.NewRateLimiter(rate.Every(30*time.Second), registerRateLimitBurst),
 		// Throttles send-email-otp. emailOTPLimiter above already caps
 		// requests per *address*, which is the right shape for "stop
 		// hammering one inbox" but no defence at all against a caller that

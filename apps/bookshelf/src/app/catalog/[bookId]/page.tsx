@@ -73,14 +73,18 @@ export default function BookDetailPage() {
     }
     setRequesting(true);
     try {
-      await api.createLoanRequest({
+      const created = await api.createLoanRequest({
         copy_id: selectedCopy.id,
         message: requestMessage.trim() || undefined,
         expected_return_date: selectedCopy.return_date_required
           ? expectedReturnDate
           : undefined,
       });
-      toast.success("Borrow request sent!");
+      toast.success(
+        created.status === "accepted"
+          ? "Request approved — check My Requests for the owner's contact info"
+          : "Borrow request sent!",
+      );
       setSelectedCopy(null);
       setRequestMessage("");
       setExpectedReturnDate("");
@@ -195,8 +199,10 @@ export default function BookDetailPage() {
               const canRequest =
                 copy.status === "available" && currentUser && !isOwner;
 
-              const isLoaned = copy.status === "loaned";
-              const canWaitlist = isLoaned && currentUser && !isOwner;
+              const canWaitlist =
+                (copy.status === "loaned" || copy.status === "requested") &&
+                currentUser &&
+                !isOwner;
 
               return (
                 <CopyCard
@@ -236,8 +242,9 @@ export default function BookDetailPage() {
           <DialogHeader>
             <DialogTitle>Request to Borrow</DialogTitle>
             <DialogDescription>
-              Send a borrow request for &quot;{book.title}&quot;. You can
-              include an optional message.
+              {selectedCopy?.auto_approve
+                ? `This copy auto-approves — you'll get the owner's contact info right away. You can include an optional message.`
+                : `Send a borrow request for "${book.title}". You can include an optional message.`}
             </DialogDescription>
           </DialogHeader>
           <div className="flex flex-col gap-2">

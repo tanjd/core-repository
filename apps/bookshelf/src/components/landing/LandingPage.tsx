@@ -223,10 +223,10 @@ export function LandingPage() {
             <Button size="lg">Join the community</Button>
           </Link>
           <Link
-            href="/about"
+            href="/about#who-is-it-for"
             className="text-sm text-primary underline-offset-2 hover:underline"
           >
-            Read the FAQ
+            Not sure if it&apos;s for you? Read the FAQ
           </Link>
         </div>
       </div>
