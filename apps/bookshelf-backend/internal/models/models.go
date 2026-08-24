@@ -181,7 +181,7 @@ type WishlistRequest struct {
 //
 //	marked_loaned | marked_returned | return_undone | waitlist_available |
 //	copy_transferred_in | copy_transferred_out | wishlist_fulfilled |
-//	user_pending_approval
+//	user_pending_approval | user_approved
 type Notification struct {
 	ID                uint      `gorm:"primarykey" json:"id"`
 	RecipientID       uint      `gorm:"not null" json:"recipient_id"`

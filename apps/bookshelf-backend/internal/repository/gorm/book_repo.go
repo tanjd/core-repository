@@ -20,6 +20,12 @@ func NewBookRepository(db *gorm.DB) *BookRepository {
 	return &BookRepository{db: db}
 }
 
+func (r *BookRepository) CountAll() (int64, error) {
+	var count int64
+	err := r.db.Model(&models.Book{}).Count(&count).Error
+	return count, err
+}
+
 func (r *BookRepository) FindByGoogleBooksID(id string) (*models.Book, error) {
 	var book models.Book
 	if err := r.db.Where("google_books_id = ?", id).First(&book).Error; err != nil {

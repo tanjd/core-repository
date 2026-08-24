@@ -27,7 +27,7 @@ func newAuthHandlerWithVerifications() (*AuthHandler, *repotest.UserRepository, 
 	admin := repotest.NewAdminRepository()
 	copies := repotest.NewCopyRepository()
 	regVerifications := repotest.NewRegistrationVerificationRepository()
-	registration := services.NewRegistrationWorkflow(admin, repotest.NewNotificationRepository(), noopEmail())
+	registration := services.NewRegistrationWorkflow(admin, repotest.NewNotificationRepository(), repotest.NewBookRepository(), noopEmail())
 	h := NewAuthHandler(users, admin, copies, regVerifications, testJWTSecret, "encryption-secret", noopEmail(), noopSMS(), registration, "dev")
 	return h, users, admin, regVerifications
 }
@@ -185,7 +185,7 @@ func TestRegisterViaEmailOTP(t *testing.T) {
 		copies := repotest.NewCopyRepository()
 		regVerifications := repotest.NewRegistrationVerificationRepository()
 		notifs := repotest.NewNotificationRepository()
-		registration := services.NewRegistrationWorkflow(admin, notifs, noopEmail())
+		registration := services.NewRegistrationWorkflow(admin, notifs, repotest.NewBookRepository(), noopEmail())
 		h := NewAuthHandler(users, admin, copies, regVerifications, testJWTSecret, "encryption-secret", noopEmail(), noopSMS(), registration, "dev")
 		require.NoError(t, admin.UpsertSetting("require_registration_approval", "true"))
 		require.NoError(t, admin.SaveUser(&models.User{ID: 1, Name: "Site Admin", Email: "admin@example.com", Role: "admin"}))
@@ -1095,7 +1095,7 @@ func TestSendVerifyRegisterEmailOTP(t *testing.T) {
 		admin := repotest.NewAdminRepository()
 		copies := repotest.NewCopyRepository()
 		regVerifications := repotest.NewRegistrationVerificationRepository()
-		registration := services.NewRegistrationWorkflow(admin, repotest.NewNotificationRepository(), noopEmail())
+		registration := services.NewRegistrationWorkflow(admin, repotest.NewNotificationRepository(), repotest.NewBookRepository(), noopEmail())
 		h := NewAuthHandler(users, admin, copies, regVerifications, testJWTSecret, "encryption-secret", noopEmail(), noopSMS(), registration, "prd")
 
 		sendIn := &sendRegisterEmailOTPInput{}

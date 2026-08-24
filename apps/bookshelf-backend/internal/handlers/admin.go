@@ -13,6 +13,7 @@ import (
 	"github.com/tanjd/core-repository/apps/bookshelf-backend/internal/middleware"
 	"github.com/tanjd/core-repository/apps/bookshelf-backend/internal/models"
 	"github.com/tanjd/core-repository/apps/bookshelf-backend/internal/repository"
+	"github.com/tanjd/core-repository/apps/bookshelf-backend/internal/services"
 )
 
 type exportSettingsOutput struct {
@@ -27,11 +28,12 @@ type AdminHandler struct {
 	copies            repository.CopyRepository
 	loans             repository.LoanRequestRepository
 	googleBooksAPIKey string
+	registration      *services.RegistrationWorkflow
 }
 
 // NewAdminHandler creates a new AdminHandler.
-func NewAdminHandler(admin repository.AdminRepository, copies repository.CopyRepository, loans repository.LoanRequestRepository, googleBooksAPIKey string) *AdminHandler {
-	return &AdminHandler{admin: admin, copies: copies, loans: loans, googleBooksAPIKey: googleBooksAPIKey}
+func NewAdminHandler(admin repository.AdminRepository, copies repository.CopyRepository, loans repository.LoanRequestRepository, googleBooksAPIKey string, registration *services.RegistrationWorkflow) *AdminHandler {
+	return &AdminHandler{admin: admin, copies: copies, loans: loans, googleBooksAPIKey: googleBooksAPIKey, registration: registration}
 }
 
 // --- Input / Output types ---
@@ -231,27 +233,43 @@ func (h *AdminHandler) updateUser(ctx context.Context, input *updateAdminUserInp
 		return nil, huma.Error500InternalServerError("could not fetch user")
 	}
 
-	if input.Body.Role != nil {
-		if err := h.applyRoleUpdate(user, callerID, *input.Body.Role); err != nil {
-			return nil, err
+	if err := h.applyUserUpdates(ctx, user, callerID, input); err != nil {
+		return nil, err
+	}
+
+	return &adminUserOutput{Body: *user}, nil
+}
+
+// applyUserUpdates applies the role/suspended/pendingApproval fields of an
+// admin user-update request, persists the result, and fires the
+// OnApproved notification when the update clears PendingApproval.
+func (h *AdminHandler) applyUserUpdates(ctx context.Context, user *models.User, callerID uint, input *updateAdminUserInput) error {
+	body := input.Body
+	if body.Role != nil {
+		if err := h.applyRoleUpdate(user, callerID, *body.Role); err != nil {
+			return err
 		}
 	}
-	if input.Body.Suspended != nil {
-		if err := h.applySuspendedUpdate(user, callerID, *input.Body.Suspended); err != nil {
-			return nil, err
+	if body.Suspended != nil {
+		if err := h.applySuspendedUpdate(user, callerID, *body.Suspended); err != nil {
+			return err
 		}
 	}
-	if input.Body.PendingApproval != nil {
-		if err := h.applyPendingApprovalUpdate(user, callerID, *input.Body.PendingApproval); err != nil {
-			return nil, err
+	wasPending := user.PendingApproval
+	if body.PendingApproval != nil {
+		if err := h.applyPendingApprovalUpdate(user, callerID, *body.PendingApproval); err != nil {
+			return err
 		}
 	}
 
 	if err := h.admin.SaveUser(user); err != nil {
-		return nil, huma.Error500InternalServerError("could not update user")
+		return huma.Error500InternalServerError("could not update user")
 	}
 
-	return &adminUserOutput{Body: *user}, nil
+	if wasPending && !user.PendingApproval {
+		h.registration.OnApproved(ctx, user)
+	}
+	return nil
 }
 
 // applyRoleUpdate validates and applies a role change, enforcing that an admin

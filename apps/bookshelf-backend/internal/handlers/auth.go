@@ -860,6 +860,8 @@ func (h *AuthHandler) finalizeRegistration(ctx context.Context, pending models.P
 		return &registrationResult{Status: "pending_approval", User: user}, nil
 	}
 
+	h.registration.OnRegistered(ctx, &user)
+
 	token, err := h.issueToken(user.ID, user.Role)
 	if err != nil {
 		return nil, huma.Error500InternalServerError("could not issue token")

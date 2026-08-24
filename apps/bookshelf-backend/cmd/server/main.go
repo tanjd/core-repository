@@ -98,7 +98,7 @@ func main() {
 	smsSvc := services.NewMockSMSService()
 	workflow := services.NewLoanWorkflow(copyRepo, loanRepo, notifRepo, userRepo, waitlistRepo, emailSvc)
 	wishlistWorkflow := services.NewWishlistWorkflow(wishlistRepo, notifRepo, userRepo, emailSvc)
-	registrationWorkflow := services.NewRegistrationWorkflow(adminRepo, notifRepo, emailSvc)
+	registrationWorkflow := services.NewRegistrationWorkflow(adminRepo, notifRepo, bookRepo, emailSvc)
 
 	sqlDB, err := database.DB()
 	if err != nil {
@@ -143,7 +143,7 @@ func main() {
 	copyH := handlers.NewCopyHandler(copyRepo, userRepo, notifRepo, waitlistRepo, adminRepo, bookRepo, wishlistRepo, coversDir, wishlistWorkflow)
 	loanH := handlers.NewLoanRequestHandler(copyRepo, loanRepo, adminRepo, userRepo, workflow)
 	notifH := handlers.NewNotificationHandler(notifRepo)
-	adminH := handlers.NewAdminHandler(adminRepo, copyRepo, loanRepo, cfg.GoogleBooksAPIKey)
+	adminH := handlers.NewAdminHandler(adminRepo, copyRepo, loanRepo, cfg.GoogleBooksAPIKey, registrationWorkflow)
 	jobsH := handlers.NewJobsHandler(scheduler)
 	backupH := handlers.NewBackupHandler(backupSvc)
 	waitlistH := handlers.NewWaitlistHandler(copyRepo, waitlistRepo)
