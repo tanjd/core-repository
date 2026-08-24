@@ -3,6 +3,18 @@
 Guidance for `apps/bookshelf-backend` specifically — see the repo-root `CLAUDE.md` for
 cross-cutting conventions (Nx, deployment, release process).
 
+## Product scope
+
+The app's job is identifying which books the community already owns and facilitating the
+exchange (request/loan/return) around them — plus encouraging people to read more, e.g. via the
+wishlist board. It is **not** trying to be a book metadata/discovery product: don't invest in
+deeper metadata search, scraping, or enrichment (ratings, reviews, "more like this", richer
+descriptions) beyond what's needed to identify a book (title/author/cover + an external key —
+ISBN/OL key/Google Books ID) and dedupe it against the catalog or wishlist. If a member wants to
+know more about a book, link out to an existing site (e.g. Google Books) rather than building that
+surface here. Weigh new feature proposals against this scope — metadata-adjacent features are a
+signal to link out, not to build in.
+
 ## Migration history
 
 Squash-imported from the standalone `tanjd/bookshelf` repo's `backend/` directory (personal

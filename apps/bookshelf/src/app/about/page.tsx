@@ -18,6 +18,25 @@ const faqs = [
     a: "Bookshelf is a community book-lending app. Members share physical copies of books they own, and others can browse the catalogue and request to borrow them.",
   },
   {
+    id: "who-is-it-for",
+    q: "Who is Bookshelf for?",
+    a: (
+      <>
+        <p>
+          Bookshelf is open-source and free to self-host, so anyone can run
+          their own instance for a small trust group — a building, an office, a
+          church, a friend group, a book club.
+        </p>
+        <p>
+          Within a community, it&apos;s for anyone with books to share and
+          anyone who wants to read more — whether you&apos;ve got a shelf full
+          of books gathering dust or you&apos;re just looking for your next
+          read.
+        </p>
+      </>
+    ),
+  },
+  {
     id: "share-a-book",
     q: "How do I share a book?",
     a: (
