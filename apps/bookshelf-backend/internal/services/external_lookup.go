@@ -181,54 +181,87 @@ func lookupGoogleBooksByISBN(ctx context.Context, client *http.Client, isbn, api
 	return parsed.Items[0].VolumeInfo.toExternalBookData(), "", nil
 }
 
-// resolveExternalData tries book's external keys in the same trust order
-// findExistingBook uses (OLKey, then GoogleBooksID, then ISBN), returning the
-// first source that yields any usable data, plus a log of every source tried
-// along the way (used to report *why* nothing was found when the overall
-// result is empty — see CoverBackfillService.backfillOne). A source erroring
-// or coming back empty falls through to the next rather than aborting the
-// lookup. The ISBN branch tries Open Library first (free, no API key
+// externalLookupStep is one named source resolveExternalData can try, bound
+// to the specific book/client/key it's being resolved for.
+type externalLookupStep struct {
+	source string
+	run    func() (externalBookData, string, error)
+}
+
+// externalLookupSteps builds the ordered list of sources to try for book —
+// the same trust order findExistingBook uses (OLKey, then GoogleBooksID,
+// then ISBN). The ISBN branch tries Open Library first (free, no API key
 // needed) before Google Books by ISBN search, to minimize paid/key-gated
-// calls.
-func resolveExternalData(ctx context.Context, client *http.Client, book models.Book, googleBooksAPIKey string) (externalBookData, []lookupAttempt) {
-	var attempts []lookupAttempt
-
-	record := func(source string, data externalBookData, status string, err error) (externalBookData, bool) {
-		switch {
-		case err != nil:
-			attempts = append(attempts, lookupAttempt{source, "error: " + err.Error()})
-		case !data.empty():
-			attempts = append(attempts, lookupAttempt{source, "found"})
-			return data, true
-		case status != "":
-			attempts = append(attempts, lookupAttempt{source, status})
-		default:
-			attempts = append(attempts, lookupAttempt{source, "no cover/description"})
-		}
-		return externalBookData{}, false
-	}
-
+// calls. A step whose key is empty on book is omitted rather than run.
+func externalLookupSteps(ctx context.Context, client *http.Client, book models.Book, googleBooksAPIKey string) []externalLookupStep {
+	var steps []externalLookupStep
 	if book.OLKey != "" {
-		data, err := lookupOpenLibraryCover(ctx, client, "OLID:"+book.OLKey)
-		if data, ok := record("openlibrary(key)", data, "", err); ok {
-			return data, attempts
-		}
+		steps = append(steps, externalLookupStep{"openlibrary(key)", func() (externalBookData, string, error) {
+			data, err := lookupOpenLibraryCover(ctx, client, "OLID:"+book.OLKey)
+			return data, "", err
+		}})
 	}
 	if book.GoogleBooksID != "" {
-		data, status, err := lookupGoogleBooksData(ctx, client, book.GoogleBooksID, googleBooksAPIKey)
-		if data, ok := record("google_books(id)", data, status, err); ok {
-			return data, attempts
-		}
+		steps = append(steps, externalLookupStep{"google_books(id)", func() (externalBookData, string, error) {
+			return lookupGoogleBooksData(ctx, client, book.GoogleBooksID, googleBooksAPIKey)
+		}})
 	}
 	if book.ISBN != "" {
-		data, err := lookupOpenLibraryCover(ctx, client, "ISBN:"+book.ISBN)
-		if data, ok := record("openlibrary(isbn)", data, "", err); ok {
-			return data, attempts
+		steps = append(steps, externalLookupStep{"openlibrary(isbn)", func() (externalBookData, string, error) {
+			data, err := lookupOpenLibraryCover(ctx, client, "ISBN:"+book.ISBN)
+			return data, "", err
+		}})
+		steps = append(steps, externalLookupStep{"google_books(isbn)", func() (externalBookData, string, error) {
+			return lookupGoogleBooksByISBN(ctx, client, book.ISBN, googleBooksAPIKey)
+		}})
+	}
+	return steps
+}
+
+// mergeExternalLookup folds one step's result into merged (first non-empty
+// value per field wins) and appends what happened to attempts — used to
+// report *why* a field is still missing when the overall result is
+// incomplete (see CoverBackfillService.backfillOne).
+func mergeExternalLookup(merged *externalBookData, attempts *[]lookupAttempt, source string, data externalBookData, status string, err error) {
+	switch {
+	case err != nil:
+		*attempts = append(*attempts, lookupAttempt{source, "error: " + err.Error()})
+	case !data.empty():
+		*attempts = append(*attempts, lookupAttempt{source, "found"})
+		if merged.coverURL == "" {
+			merged.coverURL = data.coverURL
 		}
-		data, status, err := lookupGoogleBooksByISBN(ctx, client, book.ISBN, googleBooksAPIKey)
-		if data, ok := record("google_books(isbn)", data, status, err); ok {
-			return data, attempts
+		if merged.description == "" {
+			merged.description = data.description
+		}
+	case status != "":
+		*attempts = append(*attempts, lookupAttempt{source, status})
+	default:
+		*attempts = append(*attempts, lookupAttempt{source, "no cover/description"})
+	}
+}
+
+// resolveExternalData tries each of book's applicable external sources in
+// turn (see externalLookupSteps), merging in whichever of coverURL/
+// description each source can supply. A source erroring or coming back
+// empty falls through to the next rather than aborting the lookup, and
+// sources are tried until both fields are filled or every source is
+// exhausted — an earlier source contributing only a cover (e.g. Open
+// Library, which never carries a description — see lookupOpenLibraryCover)
+// must not short-circuit a later source that could still supply the
+// description; a prior "stop at the first source with any usable data"
+// version of this function meant a book with an Open Library cover would
+// never even be checked against Google Books for a description.
+func resolveExternalData(ctx context.Context, client *http.Client, book models.Book, googleBooksAPIKey string) (externalBookData, []lookupAttempt) {
+	var attempts []lookupAttempt
+	var merged externalBookData
+
+	for _, step := range externalLookupSteps(ctx, client, book, googleBooksAPIKey) {
+		data, status, err := step.run()
+		mergeExternalLookup(&merged, &attempts, step.source, data, status, err)
+		if merged.coverURL != "" && merged.description != "" {
+			break
 		}
 	}
-	return externalBookData{}, attempts
+	return merged, attempts
 }
