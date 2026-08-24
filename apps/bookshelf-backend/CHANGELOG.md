@@ -1,3 +1,13 @@
+## 0.14.3 (2026-08-24)
+
+### 🩹 Fixes
+
+- **bookshelf-backend:** stop cover-only hit from blocking description lookup ([#68](https://github.com/tanjd/core-repository/pull/68), [#66](https://github.com/tanjd/core-repository/issues/66))
+
+### ❤️ Thank You
+
+- Jeddy Tan @tanjd
+
 ## 0.14.2 (2026-08-22)
 
 ### 🩹 Fixes
