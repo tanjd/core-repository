@@ -1136,6 +1136,12 @@ func (r *BookRepository) Count() int {
 	return len(r.byID)
 }
 
+// CountAll returns the number of stored books as an int64, satisfying
+// repository.BookRepository.
+func (r *BookRepository) CountAll() (int64, error) {
+	return int64(r.Count()), nil
+}
+
 // ListPaginated returns an empty page — not exercised by any test using this fake yet.
 func (r *BookRepository) ListPaginated(_, _ string, _ bool, page, pageSize int) (*repository.PaginatedResult[models.Book], error) {
 	return &repository.PaginatedResult[models.Book]{Page: page, PageSize: pageSize}, nil

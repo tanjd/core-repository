@@ -96,7 +96,8 @@ export interface Notification {
     | "copy_transferred_in"
     | "copy_transferred_out"
     | "wishlist_fulfilled"
-    | "user_pending_approval";
+    | "user_pending_approval"
+    | "user_approved";
   loan_request_id?: number;
   wishlist_request_id?: number;
   pending_user_id?: number;

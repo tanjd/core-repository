@@ -69,6 +69,10 @@ type BookRepository interface {
 	// BookHandler.findExistingBook.
 	FindByISBN(isbn string) (*models.Book, error)
 	List(search, sort string, availableOnly bool) ([]models.Book, error)
+	// CountAll returns the total number of unique Book rows in the catalog
+	// (distinct titles/editions, not Copy count) — used to give registration
+	// emails a live "N books shared" figure.
+	CountAll() (int64, error)
 	ListPaginated(search, sort string, availableOnly bool, page, pageSize int) (*PaginatedResult[models.Book], error)
 	ListRecent(limit int) ([]models.Book, error)
 	GetByIDWithCopies(id uint) (*models.Book, error)

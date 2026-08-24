@@ -8,6 +8,7 @@ import (
 
 	"github.com/tanjd/core-repository/apps/bookshelf-backend/internal/models"
 	"github.com/tanjd/core-repository/apps/bookshelf-backend/internal/repotest"
+	"github.com/tanjd/core-repository/apps/bookshelf-backend/internal/services"
 )
 
 func newAdminHandler() (*AdminHandler, *repotest.AdminRepository) {
@@ -19,7 +20,9 @@ func newAdminHandlerWithCopiesAndLoans() (*AdminHandler, *repotest.AdminReposito
 	admin := repotest.NewAdminRepository()
 	copies := repotest.NewCopyRepository()
 	loans := repotest.NewLoanRequestRepository(copies, repotest.NewNotificationRepository(), repotest.NewUserRepository())
-	return NewAdminHandler(admin, copies, loans, ""), admin, copies, loans
+	email := services.NewEmailService("", "", "", "", "", "", "", "http://localhost:3000")
+	registration := services.NewRegistrationWorkflow(admin, repotest.NewNotificationRepository(), repotest.NewBookRepository(), email)
+	return NewAdminHandler(admin, copies, loans, "", registration), admin, copies, loans
 }
 
 func TestAdminHandler_RequiresAdmin(t *testing.T) {
@@ -169,6 +172,46 @@ func TestUpdateUser_PendingApprovalChanges(t *testing.T) {
 
 		require.NoError(t, err)
 		assert.False(t, out.Body.PendingApproval)
+	})
+}
+
+func TestUpdateUser_ApprovalNotifiesUser(t *testing.T) {
+	admin := repotest.NewAdminRepository()
+	copies := repotest.NewCopyRepository()
+	loans := repotest.NewLoanRequestRepository(copies, repotest.NewNotificationRepository(), repotest.NewUserRepository())
+	notifs := repotest.NewNotificationRepository()
+	email := services.NewEmailService("", "", "", "", "", "", "", "http://localhost:3000")
+	registration := services.NewRegistrationWorkflow(admin, notifs, repotest.NewBookRepository(), email)
+	h := NewAdminHandler(admin, copies, loans, "", registration)
+
+	require.NoError(t, admin.SaveUser(&models.User{ID: 1, Role: "admin"}))
+	require.NoError(t, admin.SaveUser(&models.User{ID: 2, Role: "user", PendingApproval: true}))
+
+	t.Run("approving a pending user creates an approval notification", func(t *testing.T) {
+		input := &updateAdminUserInput{ID: 2}
+		pending := false
+		input.Body.PendingApproval = &pending
+
+		_, err := h.updateUser(fakeAuthedCtx(t, 1, "admin"), input)
+		require.NoError(t, err)
+
+		items, err := notifs.FindByRecipient(2, false)
+		require.NoError(t, err)
+		require.Len(t, items, 1)
+		assert.Equal(t, "user_approved", items[0].Type)
+	})
+
+	t.Run("updating an already-approved user does not notify again", func(t *testing.T) {
+		input := &updateAdminUserInput{ID: 2}
+		role := "user"
+		input.Body.Role = &role
+
+		_, err := h.updateUser(fakeAuthedCtx(t, 1, "admin"), input)
+		require.NoError(t, err)
+
+		items, err := notifs.FindByRecipient(2, false)
+		require.NoError(t, err)
+		assert.Len(t, items, 1)
 	})
 }
 
