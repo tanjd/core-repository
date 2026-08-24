@@ -88,12 +88,6 @@ export function BookshelfRow({ limit = 12, ownedBookIds }: BookshelfRowProps) {
       {/* Section heading */}
       <div className="flex items-baseline justify-between mb-3">
         <h2 className="text-xl font-bold tracking-tight">Recently Added</h2>
-        <Link
-          href="/catalog"
-          className="text-sm text-muted-foreground hover:text-foreground transition-colors"
-        >
-          Browse all →
-        </Link>
       </div>
 
       {/* Shelf container */}

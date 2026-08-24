@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef } from "react";
 import Link from "next/link";
+import { useRouter, usePathname } from "next/navigation";
 import { Search, SlidersHorizontal, Heart, X, Loader2 } from "lucide-react";
 import { api } from "@/lib/api";
 import type { Book, PaginatedResult } from "@/lib/types";
@@ -32,6 +33,8 @@ const SORT_LABELS: Record<string, string> = {
 };
 
 export default function CatalogPage() {
+  const router = useRouter();
+  const pathname = usePathname();
   const ownedBookIds = useOwnedBookIds();
   const [result, setResult] = useState<PaginatedResult<Book> | null>(null);
   const [search, setSearch] = useState("");
@@ -73,12 +76,46 @@ export default function CatalogPage() {
     }
   }
 
-  // Initial load
+  // Reflects page/search/sort/availableOnly into the URL (via replace, not
+  // push, so pagination clicks/keystrokes don't flood browser history) so
+  // that clicking into a book and hitting Back restores the exact catalog
+  // state instead of remounting to page-1 defaults.
+  function updateUrl(q: string, s: string, avail: boolean, p: number) {
+    const params = new URLSearchParams();
+    if (q.trim()) params.set("q", q.trim());
+    if (s !== "title") params.set("sort", s);
+    if (avail) params.set("available", "true");
+    if (p > 1) params.set("page", String(p));
+    const qs = params.toString();
+    router.replace(qs ? `${pathname}?${qs}` : pathname, { scroll: false });
+  }
+
+  // Initial load — reads search/sort/available/page from the URL (rather
+  // than useSearchParams, which would force a Suspense boundary; same
+  // window.location convention used by the (auth) pages and SharePage's
+  // ?q= prefill) so a deep link or a restored Back-navigation URL is
+  // honored on first render.
   const loadedRef = useRef(false);
   useEffect(() => {
     if (loadedRef.current) return;
     loadedRef.current = true;
-    fetchBooks("", "title", false, 1, true);
+    const params = new URLSearchParams(window.location.search);
+    const initialSearch = params.get("q") ?? "";
+    const initialSort = params.get("sort") ?? "title";
+    const initialAvailable = params.get("available") === "true";
+    const parsedPage = Number(params.get("page"));
+    const initialPage =
+      Number.isFinite(parsedPage) && parsedPage > 0 ? parsedPage : 1;
+    // window.location isn't available during SSR, so hydrating filter state
+    // from the URL genuinely has to happen post-mount — same
+    // setState-in-effect exception as the (auth) pages' token prefill.
+    /* eslint-disable react-hooks/set-state-in-effect */
+    if (initialSearch) setSearch(initialSearch);
+    if (initialSort !== "title") setSort(initialSort);
+    if (initialAvailable) setAvailableOnly(true);
+    if (initialPage !== 1) setPage(initialPage);
+    /* eslint-enable react-hooks/set-state-in-effect */
+    fetchBooks(initialSearch, initialSort, initialAvailable, initialPage, true);
   }, []);
 
   // Debounced search/sort/filter — reset to page 1. Skips the mount pass
@@ -93,6 +130,7 @@ export default function CatalogPage() {
     debounceRef.current = setTimeout(() => {
       setPage(1);
       fetchBooks(search, sort, availableOnly, 1);
+      updateUrl(search, sort, availableOnly, 1);
     }, 300);
     return () => {
       if (debounceRef.current) clearTimeout(debounceRef.current);
@@ -128,6 +166,7 @@ export default function CatalogPage() {
   function handlePageChange(p: number) {
     setPage(p);
     fetchBooks(search, sort, availableOnly, p);
+    updateUrl(search, sort, availableOnly, p);
     window.scrollTo({ top: 0, behavior: "smooth" });
   }
 
