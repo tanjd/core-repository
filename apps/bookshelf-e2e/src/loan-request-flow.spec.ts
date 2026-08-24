@@ -389,8 +389,13 @@ test.describe("loan request flow", () => {
     expect(acceptRes.ok()).toBeTruthy();
 
     await page.goto("/my-requests");
-    await expect(page.getByText("accepted", { exact: true })).toBeVisible();
-    await page.getByText(bookTitle).last().click();
+    // Scoped to this test's own row: borrowerEmail is shared across every
+    // test in this file (see the header comment), so by this 8th test
+    // /my-requests already has other "accepted" rows from earlier tests —
+    // a bare page-wide getByText("accepted") is a strict-mode violation.
+    const row = page.getByRole("row", { name: bookTitle });
+    await expect(row.getByText("accepted", { exact: true })).toBeVisible();
+    await row.getByText(bookTitle).click();
     await expect(page.getByText("@e2e_owner")).toBeVisible();
     await expect(
       page.getByText("meet at the front desk on Saturdays"),

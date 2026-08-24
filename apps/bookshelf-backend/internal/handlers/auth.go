@@ -255,6 +255,7 @@ func NewAuthHandler(
 	registration *services.RegistrationWorkflow,
 	env string,
 	registerRateLimitBurst int,
+	loginRateLimitAttempts int,
 ) *AuthHandler {
 	return &AuthHandler{
 		users:                     users,

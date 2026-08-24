@@ -36,6 +36,14 @@ type Config struct {
 	// concurrently against one shared server, well beyond anything a real
 	// community would do in the same window.
 	RegisterRateLimitBurst int `env:"REGISTER_RATE_LIMIT_BURST" envDefault:"20"`
+	// LoginRateLimitAttempts overrides loginLimiter's per-email attempt cap
+	// (internal/handlers/auth.go) — the default (5 per 15min) is sized to
+	// resist password brute-forcing against one real account. The e2e suite
+	// reuses a small, fixed set of seeded accounts across many spec files
+	// (loan-request-flow.spec.ts alone logs the same borrower in six times
+	// in one run), so a single account can legitimately exceed 5 UI logins
+	// well before any brute-force pattern would.
+	LoginRateLimitAttempts int `env:"LOGIN_RATE_LIMIT_ATTEMPTS" envDefault:"5"`
 }
 
 // Load reads configuration from environment variables, applying envDefault
