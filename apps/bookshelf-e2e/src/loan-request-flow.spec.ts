@@ -128,9 +128,13 @@ test.describe("loan request flow", () => {
     await login(page, borrowerEmail, E2E_TEST_USER_PASSWORD);
     await page.goto(`/catalog/${bookId}`);
 
-    await expect(page.getByText("Instant approval")).toBeVisible();
+    await expect(page.getByText(/Instant approval/)).toBeVisible();
 
-    await page.getByRole("button", { name: "Request to Borrow" }).click();
+    // Auto-approve copies get a differentiated primary CTA ("Borrow
+    // instantly") rather than the generic "Request to Borrow" — the
+    // difference in behavior is surfaced on the button itself, not
+    // buried in a badge.
+    await page.getByRole("button", { name: "Borrow instantly" }).click();
     await expect(
       page.getByText(/auto-approves.*owner's contact info right away/i),
     ).toBeVisible();
@@ -400,5 +404,60 @@ test.describe("loan request flow", () => {
     await expect(
       page.getByText("meet at the front desk on Saturdays"),
     ).toBeVisible();
+  });
+
+  test("the book detail page prioritises an auto-approve copy as the hero action and breadcrumbs back to the catalog", async ({
+    page,
+    request,
+  }, testInfo) => {
+    test.skip(
+      testInfo.project.name === MOBILE_PROJECT,
+      "not viewport-dependent — see the header comment",
+    );
+    // Two copies for the same book: a plain "request" copy created
+    // first, then an auto-approve copy created second — this proves
+    // the hero action is picked by *ranking* (auto-approve wins),
+    // not insertion order.
+    const bookTitle = `E2E Hero CTA ${Date.now()}`;
+    const { bookId } = await createBookAndCopy(request, ownerToken, {
+      title: bookTitle,
+      autoApprove: false,
+    });
+    const copyRes = await request.post(`${BACKEND_URL}/copies`, {
+      headers: { Authorization: `Bearer ${ownerToken}` },
+      data: { book_id: bookId, condition: "good", auto_approve: true },
+    });
+    expect(copyRes.ok()).toBeTruthy();
+
+    await login(page, borrowerEmail, E2E_TEST_USER_PASSWORD);
+    await page.goto(`/catalog/${bookId}`);
+
+    // Hero CTA reflects the best copy — auto-approve — even though the
+    // request-only copy was created first.
+    await expect(
+      page.getByRole("button", { name: "Borrow instantly" }),
+    ).toBeVisible();
+    // A "Best pick" hint is anchored to the same copy so the user
+    // can see *which* copy they're about to act on.
+    await expect(page.getByText(/Best pick/)).toBeVisible();
+
+    // The request-only copy still gets its own CTA below, so a user
+    // who explicitly wants a specific copy isn't forced through the
+    // hero shortcut. Its label differentiates it from the auto-approve
+    // one — copy-level ("Request to Borrow") vs hero ("Borrow
+    // instantly") — so the two buttons don't collide in strict-mode
+    // role queries.
+    await expect(
+      page.getByRole("button", { name: "Request to Borrow" }),
+    ).toBeVisible();
+
+    // Breadcrumb back-nav uses a real <a href="/catalog"> rather than
+    // router.back(), so a fresh visitor from a QR scan / shared link
+    // (empty history stack) still gets home.
+    await page
+      .getByRole("navigation", { name: "Breadcrumb" })
+      .getByRole("link", { name: /back to catalog/i })
+      .click();
+    await expect(page).toHaveURL(/\/catalog(\?|$)/);
   });
 });

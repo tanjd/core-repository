@@ -78,6 +78,37 @@ describe("BookCover", () => {
     expect(container.querySelector("svg")).not.toBeNull();
   });
 
+  it("applies object-cover by default so grid tiles fill their fixed 2:3 slot", () => {
+    const { container } = render(
+      <BookCover
+        title="Dune"
+        coverUrl="https://example.com/dune.jpg"
+        sizes="100px"
+      />,
+    );
+
+    const img = container.querySelector("img");
+    expect(img?.className).toContain("object-cover");
+    expect(img?.className).not.toContain("object-contain");
+  });
+
+  it('applies object-contain when fit="contain" so the whole cover shows unclipped', () => {
+    // The book detail page uses this variant — real covers aren't all 2:3,
+    // and cropping the hero image made different books look inconsistent.
+    const { container } = render(
+      <BookCover
+        title="Dune"
+        coverUrl="https://example.com/dune.jpg"
+        sizes="100px"
+        fit="contain"
+      />,
+    );
+
+    const img = container.querySelector("img");
+    expect(img?.className).toContain("object-contain");
+    expect(img?.className).not.toContain("object-cover");
+  });
+
   it("produces the same generated cover for the same title across renders", () => {
     const first = render(<BookCover title="Dune" sizes="100px" />);
     const second = render(<BookCover title="Dune" sizes="100px" />);
