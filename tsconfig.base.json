@@ -10,7 +10,7 @@
       "dom"
     ],
     "module": "esnext",
-    "moduleResolution": "node",
+    "moduleResolution": "bundler",
     "paths": {
       "@tanjd/food-maps-data": [
         "./libs/food-maps-data/src/index.ts"
