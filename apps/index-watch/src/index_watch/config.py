@@ -57,7 +57,7 @@ class Config:
     health_check_port: int = 8080
 
     @classmethod
-    def from_env(cls) -> "Config":
+    def from_env(cls) -> Config:
         """Load config from environment variables."""
         token = select_bot_token()
 

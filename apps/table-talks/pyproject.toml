@@ -14,7 +14,7 @@ name = "table-talks"
 version = "1.5.0"
 description = "Telegram bot for table-talk conversation cards by theme"
 readme = "README.md"
-requires-python = ">=3.13"
+requires-python = ">=3.14"
 dependencies = [
     "python-telegram-bot>=21.0",
     "python-dotenv>=1.0.0",

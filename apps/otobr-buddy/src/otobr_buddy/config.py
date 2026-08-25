@@ -21,7 +21,7 @@ class Config:
     admin_chat_ids: list[str] = field(default_factory=list)
 
     @classmethod
-    def from_env(cls) -> "Config":
+    def from_env(cls) -> Config:
         """Load config from environment variables."""
         timezone = os.getenv("TIMEZONE", DEFAULT_TIMEZONE).strip() or DEFAULT_TIMEZONE
         db_path_str = os.getenv("DB_PATH", "data/otobr_buddy.db").strip()

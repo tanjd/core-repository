@@ -12,7 +12,7 @@ contributors. Long-term home for side projects, starting with Telegram bots.
   `.devcontainer/devcontainer.json`, no `packageManager` field in
   `package.json`)
 - **Languages & Frameworks**:
-  - Python 3.13 (uv + Ruff)
+  - Python 3.14 (uv + Ruff)
   - Go 1.26 (huma + chi + SQLite via `mattn/go-sqlite3`, cgo)
   - Next.js / React
 - **Development Environment**: DevContainers
@@ -156,9 +156,9 @@ pipeline, including the PAT-based anti-recursion workaround.
 
 ## 🛠 DevContainer Features
 
-- 🐍 Python 3.13 with uv
+- 🐍 Python 3.14 with uv
 - 🟦 Node.js 24 with pnpm
-- 🔷 Go 1.26 with golangci-lint 2.12.2
+- 🔷 Go 1.26 with golangci-lint 2.13.1
 - 🐳 Docker-in-Docker with buildx
 - 🔧 Pre-configured VS Code extensions (Ruff, Prettier, Go, even-better-toml, …)
 - 🐚 ZSH with helpful plugins, shell history, GitHub CLI
