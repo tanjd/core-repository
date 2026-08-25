@@ -80,6 +80,20 @@ func (r *BookRepository) buildListQuery(search, sort string, availableOnly bool)
 		tx = tx.Order("author ASC, title ASC")
 	case "newest":
 		tx = tx.Order("books.created_at DESC")
+	case "popular":
+		// Community reading activity — see docs/community-reading-activity-spec.md.
+		// Left-join the per-book completed-loan count so books with zero
+		// loans still appear (title-sorted among the zeroes via COALESCE).
+		// The subquery mirrors the status filter in
+		// admin_repo.go's MostBorrowedBooks aggregation.
+		tx = tx.Joins(`LEFT JOIN (
+			SELECT copies.book_id AS book_id, COUNT(*) AS borrow_count
+			FROM loan_requests
+			JOIN copies ON copies.id = loan_requests.copy_id
+			WHERE loan_requests.status IN ('accepted','returned')
+			GROUP BY copies.book_id
+		) AS book_borrows ON book_borrows.book_id = books.id`).
+			Order("COALESCE(book_borrows.borrow_count, 0) DESC, books.title ASC")
 	case "relevance":
 		// Only meaningful alongside a search term — a prefix match on
 		// title or author ranks above a mid-string substring match, so a
@@ -190,6 +204,61 @@ func (r *BookRepository) CountAvailableCopiesBatch(bookIDs []uint) (map[uint]int
 		Select("book_id, count(*) as count").
 		Where("book_id IN ? AND status = ?", bookIDs, "available").
 		Group("book_id").
+		Scan(&rows).Error
+	if err != nil {
+		return nil, err
+	}
+	out := make(map[uint]int64, len(rows))
+	for _, r := range rows {
+		out[r.BookID] = r.Count
+	}
+	return out, nil
+}
+
+// CountBorrowsBatch returns per-book completed-loan counts, joining
+// loan_requests through copies. See the interface doc for the "completed"
+// definition and the missing-key convention.
+func (r *BookRepository) CountBorrowsBatch(bookIDs []uint) (map[uint]int64, error) {
+	if len(bookIDs) == 0 {
+		return map[uint]int64{}, nil
+	}
+	type row struct {
+		BookID uint
+		Count  int64
+	}
+	var rows []row
+	err := r.db.Table("loan_requests").
+		Select("copies.book_id AS book_id, COUNT(*) AS count").
+		Joins("JOIN copies ON copies.id = loan_requests.copy_id").
+		Where("copies.book_id IN ? AND loan_requests.status IN ?", bookIDs, []string{"accepted", "returned"}).
+		Group("copies.book_id").
+		Scan(&rows).Error
+	if err != nil {
+		return nil, err
+	}
+	out := make(map[uint]int64, len(rows))
+	for _, r := range rows {
+		out[r.BookID] = r.Count
+	}
+	return out, nil
+}
+
+// CountWaitlistBatch returns per-book live waitlist depth, joining
+// waitlist_entries through copies.
+func (r *BookRepository) CountWaitlistBatch(bookIDs []uint) (map[uint]int64, error) {
+	if len(bookIDs) == 0 {
+		return map[uint]int64{}, nil
+	}
+	type row struct {
+		BookID uint
+		Count  int64
+	}
+	var rows []row
+	err := r.db.Table("waitlist_entries").
+		Select("copies.book_id AS book_id, COUNT(*) AS count").
+		Joins("JOIN copies ON copies.id = waitlist_entries.copy_id").
+		Where("copies.book_id IN ?", bookIDs).
+		Group("copies.book_id").
 		Scan(&rows).Error
 	if err != nil {
 		return nil, err

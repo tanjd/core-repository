@@ -29,6 +29,7 @@ const SORT_LABELS: Record<string, string> = {
   title: "Title A–Z",
   author: "Author A–Z",
   newest: "Newest First",
+  popular: "Most Borrowed",
   relevance: "Best Match",
 };
 

@@ -90,6 +90,17 @@ type BookRepository interface {
 	// status filter (unlike CountAvailableCopies) — used to detect when a
 	// book has just gone copy-less.
 	CountCopies(bookID uint) (int64, error)
+	// CountBorrowsBatch returns a map of bookID → completed-loan count for
+	// all requested book IDs in a single query. "Completed" means a
+	// LoanRequest whose status reached "accepted" or "returned" — pending,
+	// rejected, and cancelled requests don't count. Books with zero
+	// completed loans are absent from the map (callers treat missing as 0),
+	// same convention as CountAvailableCopiesBatch.
+	CountBorrowsBatch(bookIDs []uint) (map[uint]int64, error)
+	// CountWaitlistBatch returns a map of bookID → live waitlist depth
+	// across every copy of the book, in a single query. Zero-waitlist books
+	// are absent from the map, same convention as the batch counters above.
+	CountWaitlistBatch(bookIDs []uint) (map[uint]int64, error)
 }
 
 // CopyRepository handles persistence for Copy records.

@@ -29,10 +29,17 @@ func NewBookHandler(books repository.BookRepository, users repository.UserReposi
 	return &BookHandler{books: books, users: users, coversDir: coversDir, wishlistWorkflow: wishlistWorkflow}
 }
 
-// bookResponse wraps a Book and adds the computed available_copies count.
+// bookResponse wraps a Book and adds the computed availability +
+// community-reading-activity counts. BorrowCount is the number of
+// LoanRequests against any copy of this book that reached "accepted" or
+// "returned" (pending/rejected/cancelled don't count — same rule as
+// admin_repo.go's MostBorrowedBooks). WaitlistCount is the live waitlist
+// depth across every copy. See docs/community-reading-activity-spec.md.
 type bookResponse struct {
 	models.Book
 	AvailableCopies int64 `json:"available_copies"`
+	BorrowCount     int64 `json:"borrow_count"`
+	WaitlistCount   int64 `json:"waitlist_count"`
 }
 
 // --- Input / Output types ---
@@ -324,27 +331,47 @@ func findExistingBook(books repository.BookRepository, olKey, googleBooksID, isb
 	return nil, repository.ErrNotFound
 }
 
-// toBookResponse computes the available_copies count for a single book.
+// toBookResponse computes the available_copies + borrow + waitlist counts
+// for a single book, reusing the batch queries with a one-element slice.
 // Prefer toBooksResponse for list operations to avoid N+1 queries.
 func (h *BookHandler) toBookResponse(book models.Book) bookResponse {
-	count, _ := h.books.CountAvailableCopies(book.ID)
-	return bookResponse{Book: book, AvailableCopies: count}
+	resp, err := h.toBooksResponse([]models.Book{book})
+	if err != nil || len(resp) == 0 {
+		// Errors from the counters degrade to zeroes rather than failing
+		// the request — same forgiving contract the previous
+		// CountAvailableCopies call had (its error was silently discarded).
+		return bookResponse{Book: book}
+	}
+	return resp[0]
 }
 
-// toBooksResponse fetches available copy counts for all books in a single
-// batch query and returns the assembled responses.
+// toBooksResponse fetches available copy + borrow + waitlist counts for all
+// books in three batched queries and returns the assembled responses.
 func (h *BookHandler) toBooksResponse(books []models.Book) ([]bookResponse, error) {
 	ids := make([]uint, len(books))
 	for i, b := range books {
 		ids[i] = b.ID
 	}
-	counts, err := h.books.CountAvailableCopiesBatch(ids)
+	available, err := h.books.CountAvailableCopiesBatch(ids)
+	if err != nil {
+		return nil, err
+	}
+	borrows, err := h.books.CountBorrowsBatch(ids)
+	if err != nil {
+		return nil, err
+	}
+	waitlists, err := h.books.CountWaitlistBatch(ids)
 	if err != nil {
 		return nil, err
 	}
 	resp := make([]bookResponse, len(books))
 	for i, b := range books {
-		resp[i] = bookResponse{Book: b, AvailableCopies: counts[b.ID]}
+		resp[i] = bookResponse{
+			Book:            b,
+			AvailableCopies: available[b.ID],
+			BorrowCount:     borrows[b.ID],
+			WaitlistCount:   waitlists[b.ID],
+		}
 	}
 	return resp, nil
 }

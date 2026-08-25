@@ -255,6 +255,7 @@ func NewAuthHandler(
 	registration *services.RegistrationWorkflow,
 	env string,
 	registerRateLimitBurst int,
+	registerSendRateLimitBurst int,
 	loginRateLimitAttempts int,
 ) *AuthHandler {
 	return &AuthHandler{
@@ -294,11 +295,12 @@ func NewAuthHandler(
 		// this endpoint needs a second, address-independent cap on total
 		// spend — CPU and outbound mail alike.
 		//
-		// 30 immediately, refilling one every 20s (~180/hr steady-state).
-		// Same shared-bucket caveat as registerLimiter (see above); sized a
+		// 30 immediately by default (env REGISTER_SEND_RATE_LIMIT_BURST
+		// overrides), refilling one every 20s (~180/hr steady-state). Same
+		// shared-bucket caveat as registerLimiter (see above); sized a
 		// little looser than it because a signup can legitimately send more
 		// than once (resends) but only ever verifies once.
-		registerSendLimiter: middleware.NewRateLimiter(rate.Every(20*time.Second), 30),
+		registerSendLimiter: middleware.NewRateLimiter(rate.Every(20*time.Second), registerSendRateLimitBurst),
 		// 3 immediately, refilling one every 5min — OTP codes last 15min so
 		// legitimate resends are rare; keyed by user ID since this endpoint is
 		// already authenticated.

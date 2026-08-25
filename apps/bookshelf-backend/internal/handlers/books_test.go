@@ -6,6 +6,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/tanjd/core-repository/apps/bookshelf-backend/internal/models"
 	"github.com/tanjd/core-repository/apps/bookshelf-backend/internal/repotest"
 )
 
@@ -13,6 +14,39 @@ func newBookHandler() (*BookHandler, *repotest.BookRepository) {
 	books := repotest.NewBookRepository()
 	users := repotest.NewUserRepository()
 	return NewBookHandler(books, users, "", nil), books
+}
+
+// bookHandlerFixture wires up the full set of fake repositories needed by
+// the reading-activity code paths (books + copies + loan requests +
+// waitlist) so tests can assert on borrow/waitlist counts flowing through
+// toBookResponse / toBooksResponse. Constructed here rather than folded
+// into newBookHandler so the existing createBook tests, which need none of
+// these extras, stay untouched.
+type bookHandlerFixture struct {
+	handler  *BookHandler
+	books    *repotest.BookRepository
+	copies   *repotest.CopyRepository
+	loans    *repotest.LoanRequestRepository
+	waitlist *repotest.WaitlistRepository
+}
+
+func newBookHandlerWithReadingActivity() *bookHandlerFixture {
+	books := repotest.NewBookRepository()
+	copies := repotest.NewCopyRepository()
+	notifs := repotest.NewNotificationRepository()
+	users := repotest.NewUserRepository()
+	loans := repotest.NewLoanRequestRepository(copies, notifs, users)
+	waitlist := repotest.NewWaitlistRepository()
+	books.SetCopies(copies)
+	books.SetLoans(loans)
+	books.SetWaitlist(waitlist)
+	return &bookHandlerFixture{
+		handler:  NewBookHandler(books, users, "", nil),
+		books:    books,
+		copies:   copies,
+		loans:    loans,
+		waitlist: waitlist,
+	}
 }
 
 func createBookBody(title, olKey, googleBooksID, isbn string) *createBookInput {
@@ -134,4 +168,52 @@ func TestCreateBook_Unauthenticated(t *testing.T) {
 
 	_, err := h.createBook(fakeAuthedCtxNone(), createBookBody("T1", "OL1", "", ""))
 	assertStatus(t, err, 401)
+}
+
+func TestToBooksResponse_PopulatesBorrowAndWaitlistCounts(t *testing.T) {
+	f := newBookHandlerWithReadingActivity()
+
+	borrowed := models.Book{Title: "Borrowed", Author: "A"}
+	require.NoError(t, f.books.Create(&borrowed))
+	borrowedCopy := models.Copy{BookID: borrowed.ID, OwnerID: 1, Status: "loaned"}
+	require.NoError(t, f.copies.Create(&borrowedCopy))
+	require.NoError(t, f.loans.Create(&models.LoanRequest{CopyID: borrowedCopy.ID, BorrowerID: 2, Status: "accepted"}))
+	require.NoError(t, f.loans.Create(&models.LoanRequest{CopyID: borrowedCopy.ID, BorrowerID: 3, Status: "returned"}))
+	// Pending shouldn't count — see the "completed loan" definition in the spec.
+	require.NoError(t, f.loans.Create(&models.LoanRequest{CopyID: borrowedCopy.ID, BorrowerID: 4, Status: "pending"}))
+	require.NoError(t, f.waitlist.Add(borrowedCopy.ID, 5))
+
+	untouched := models.Book{Title: "Untouched", Author: "A"}
+	require.NoError(t, f.books.Create(&untouched))
+	untouchedCopy := models.Copy{BookID: untouched.ID, OwnerID: 1, Status: "available"}
+	require.NoError(t, f.copies.Create(&untouchedCopy))
+
+	resp, err := f.handler.toBooksResponse([]models.Book{borrowed, untouched})
+	require.NoError(t, err)
+	require.Len(t, resp, 2)
+
+	byTitle := map[string]bookResponse{}
+	for _, r := range resp {
+		byTitle[r.Title] = r
+	}
+	assert.EqualValues(t, 2, byTitle["Borrowed"].BorrowCount)
+	assert.EqualValues(t, 1, byTitle["Borrowed"].WaitlistCount)
+	assert.EqualValues(t, 0, byTitle["Untouched"].BorrowCount)
+	assert.EqualValues(t, 0, byTitle["Untouched"].WaitlistCount)
+}
+
+func TestToBookResponse_PopulatesBorrowAndWaitlistCounts(t *testing.T) {
+	f := newBookHandlerWithReadingActivity()
+
+	book := models.Book{Title: "Solo", Author: "A"}
+	require.NoError(t, f.books.Create(&book))
+	copyRec := models.Copy{BookID: book.ID, OwnerID: 1, Status: "loaned"}
+	require.NoError(t, f.copies.Create(&copyRec))
+	require.NoError(t, f.loans.Create(&models.LoanRequest{CopyID: copyRec.ID, BorrowerID: 2, Status: "returned"}))
+	require.NoError(t, f.waitlist.Add(copyRec.ID, 3))
+	require.NoError(t, f.waitlist.Add(copyRec.ID, 4))
+
+	resp := f.handler.toBookResponse(book)
+	assert.EqualValues(t, 1, resp.BorrowCount)
+	assert.EqualValues(t, 2, resp.WaitlistCount)
 }

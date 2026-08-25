@@ -41,6 +41,15 @@ type Config struct {
 	// concurrently against one shared server, well beyond anything a real
 	// community would do in the same window.
 	RegisterRateLimitBurst int `env:"REGISTER_RATE_LIMIT_BURST" envDefault:"20"`
+	// RegisterSendRateLimitBurst overrides registerSendLimiter's burst size
+	// (internal/handlers/auth.go) — the default (30) is sized for real
+	// community usage. The e2e suite raises this for the same reason as
+	// RegisterRateLimitBurst above: send-email-otp is the first thing every
+	// spec that registers its own account hits, and with ~13 spec files ×
+	// 2 browser projects registering at roughly the same suite-start
+	// instant the default burst was routinely exhausted, producing 429s
+	// against tests that had no retry loop of their own.
+	RegisterSendRateLimitBurst int `env:"REGISTER_SEND_RATE_LIMIT_BURST" envDefault:"30"`
 	// LoginRateLimitAttempts overrides loginLimiter's per-email attempt cap
 	// (internal/handlers/auth.go) — the default (5 per 15min) is sized to
 	// resist password brute-forcing against one real account. The e2e suite
