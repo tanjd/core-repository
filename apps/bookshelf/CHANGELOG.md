@@ -1,3 +1,13 @@
+## 0.21.0 (2026-08-25)
+
+### 🚀 Features
+
+- **bookshelf,bookshelf-backend,bookshelf-e2e:** surface community reading activity on books ([#75](https://github.com/tanjd/core-repository/pull/75))
+
+### ❤️ Thank You
+
+- Jeddy Tan @tanjd
+
 ## 0.20.0 (2026-08-24)
 
 ### 🚀 Features
