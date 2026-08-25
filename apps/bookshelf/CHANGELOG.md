@@ -1,3 +1,13 @@
+## 0.22.0 (2026-08-25)
+
+### 🚀 Features
+
+- **bookshelf:** redesign book detail page with ranked hero copy CTA ([#77](https://github.com/tanjd/core-repository/pull/77))
+
+### ❤️ Thank You
+
+- Jeddy Tan @tanjd
+
 ## 0.21.0 (2026-08-25)
 
 ### 🚀 Features
