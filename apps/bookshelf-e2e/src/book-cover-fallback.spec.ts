@@ -35,29 +35,49 @@ test("a book with no cover renders a generated cover fallback across the catalog
     data: { book_id: book.id },
   });
   expect(createCopyResponse.ok()).toBeTruthy();
+  const copy = await createCopyResponse.json();
 
-  const coverPlaceholder = page.getByRole("img", {
-    name: `Cover placeholder for ${title}, by ${author}`,
-  });
+  try {
+    const coverPlaceholder = page.getByRole("img", {
+      name: `Cover placeholder for ${title}, by ${author}`,
+    });
 
-  // "Recently Added" spine shelf (BookshelfRow/BookSpine), only shown when
-  // the catalog isn't being searched.
-  await page.goto("/catalog");
-  await expect(
-    page.getByRole("heading", { name: "Book Catalog" }),
-  ).toBeVisible();
-  await expect(coverPlaceholder.first()).toBeVisible();
+    // "Recently Added" spine shelf (BookshelfRow/BookSpine), only shown when
+    // the catalog isn't being searched.
+    await page.goto("/catalog");
+    await expect(
+      page.getByRole("heading", { name: "Book Catalog" }),
+    ).toBeVisible();
+    await expect(coverPlaceholder.first()).toBeVisible();
 
-  // Catalog grid (BookCard), isolated via search.
-  await page.getByPlaceholder("Search by title, author…").fill(title);
-  await expect(coverPlaceholder.first()).toBeVisible();
+    // Catalog grid (BookCard), isolated via search.
+    await page.getByPlaceholder("Search by title, author…").fill(title);
+    await expect(coverPlaceholder.first()).toBeVisible();
 
-  // Book detail page.
-  await page
-    .getByRole("link", { name: new RegExp(title) })
-    .first()
-    .click();
-  await expect(page).toHaveURL(/\/catalog\/\d+/);
-  await expect(page.getByRole("heading", { name: title })).toBeVisible();
-  await expect(coverPlaceholder).toBeVisible();
+    // Book detail page.
+    await page
+      .getByRole("link", { name: new RegExp(title) })
+      .first()
+      .click();
+    await expect(page).toHaveURL(/\/catalog\/\d+/);
+    await expect(page.getByRole("heading", { name: title })).toBeVisible();
+    await expect(coverPlaceholder).toBeVisible();
+  } finally {
+    // This spec logs in as the shared E2E_ADMIN_EMAIL account (see
+    // test-users.ts) rather than registering a one-off user, since it needs
+    // an existing catalog entry point with no setup ceremony. That account
+    // is reused across every local run of this suite — `reuseExistingServer:
+    // !process.env.CI` in playwright.config.ts means a local `nx e2e` run
+    // reuses the already-running backend and its SQLite DB instead of
+    // getting the fresh, wiped DB CI always gets — so a copy left behind
+    // here accumulates across every local re-run. Once the admin's copy
+    // count crosses `max_copies_per_user` (10, internal/db/db.go), this
+    // spec's own `POST /copies` starts failing with 422 — deterministically
+    // reproduced by running this spec with `--repeat-each=15`. Deleting the
+    // copy also cascades to delete this now-orphaned, keyless book
+    // (CopyHandler.maybeDeleteOrphanedBook), so nothing else needs cleanup.
+    await page.request.delete(`/api/copies/${copy.id}`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+  }
 });
