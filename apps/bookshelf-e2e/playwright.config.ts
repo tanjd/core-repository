@@ -71,6 +71,14 @@ export default defineConfig({
         // See loan-request-flow.spec.ts's header comment for how this
         // surfaced.
         REGISTER_RATE_LIMIT_BURST: "200",
+        // registerSendLimiter's default burst (30, internal/handlers/auth.go)
+        // sits in front of registerLimiter and gets tripped first: every
+        // spec that registers its own account calls send-email-otp before
+        // it ever reaches verify-email-otp, and with ~13 spec files × 2
+        // browser projects starting registrations near-simultaneously the
+        // default is routinely exhausted. Same rationale as
+        // REGISTER_RATE_LIMIT_BURST above.
+        REGISTER_SEND_RATE_LIMIT_BURST: "500",
         // loginLimiter (internal/handlers/auth.go) caps UI logins per email
         // at 5 within 15 minutes to resist brute-forcing one real account.
         // This suite reuses a small, fixed set of seeded accounts across

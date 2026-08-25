@@ -29,6 +29,7 @@ const SORT_LABELS: Record<string, string> = {
   title: "Title A–Z",
   author: "Author A–Z",
   newest: "Newest First",
+  popular: "Most Borrowed",
   relevance: "Best Match",
 };
 
@@ -135,6 +136,11 @@ export default function CatalogPage() {
     return () => {
       if (debounceRef.current) clearTimeout(debounceRef.current);
     };
+    // updateUrl and fetchBooks are stable in behavior: both take every
+    // input they need as an argument and close over nothing that changes
+    // across renders. Including them would only add re-renders without
+    // changing what the effect does.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [search, sort, availableOnly]);
 
   function handleSearchChange(value: string) {

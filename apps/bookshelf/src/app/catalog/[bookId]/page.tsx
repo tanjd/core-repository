@@ -22,6 +22,30 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog";
 
+// ReadingActivityRow renders the "Borrowed N times · M on waitlist" strip
+// below the availability badge. Each half is omitted when its count is 0
+// (and the whole row disappears when both are 0) so an untouched book stays
+// visually quiet — see docs/community-reading-activity-spec.md.
+function ReadingActivityRow({
+  borrowCount,
+  waitlistCount,
+}: {
+  borrowCount?: number;
+  waitlistCount?: number;
+}) {
+  const borrows = borrowCount ?? 0;
+  const waiters = waitlistCount ?? 0;
+  if (borrows === 0 && waiters === 0) return null;
+  const parts: string[] = [];
+  if (borrows > 0) {
+    parts.push(`Borrowed ${borrows} time${borrows === 1 ? "" : "s"}`);
+  }
+  if (waiters > 0) {
+    parts.push(`${waiters} on waitlist`);
+  }
+  return <p className="text-xs text-muted-foreground">{parts.join(" · ")}</p>;
+}
+
 export default function BookDetailPage() {
   const params = useParams();
   const router = useRouter();
@@ -169,6 +193,10 @@ export default function BookDetailPage() {
                 : "No copies available"}
             </Badge>
           )}
+          <ReadingActivityRow
+            borrowCount={book.borrow_count}
+            waitlistCount={book.waitlist_count}
+          />
           {book.description && (
             <div className="flex flex-col gap-1 mt-2">
               <p className="text-sm text-muted-foreground leading-relaxed max-w-prose">

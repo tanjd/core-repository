@@ -986,10 +986,12 @@ func (r *LoanRequestRepository) CountActiveLoansByBorrower(borrowerID uint) (int
 // available-copies counters return empty/zero, since nothing that consumes
 // this fake exercises them yet.
 type BookRepository struct {
-	mu     sync.Mutex
-	nextID uint
-	byID   map[uint]*models.Book
-	copies *CopyRepository
+	mu       sync.Mutex
+	nextID   uint
+	byID     map[uint]*models.Book
+	copies   *CopyRepository
+	loans    *LoanRequestRepository
+	waitlist *WaitlistRepository
 }
 
 // NewBookRepository creates an empty fake BookRepository.
@@ -1002,6 +1004,20 @@ func NewBookRepository() *BookRepository {
 // don't call this get a CountCopies that always returns 0.
 func (r *BookRepository) SetCopies(copies *CopyRepository) {
 	r.copies = copies
+}
+
+// SetLoans wires loans in so CountBorrowsBatch can answer from its data —
+// a test helper, mirroring SetCopies. Requires SetCopies to also have
+// been called, since the fake joins book_id → copy_id → loan_request in
+// Go, same shape as the real SQL join.
+func (r *BookRepository) SetLoans(loans *LoanRequestRepository) {
+	r.loans = loans
+}
+
+// SetWaitlist wires waitlist in so CountWaitlistBatch can answer from its
+// data — a test helper, mirroring SetCopies. Requires SetCopies too.
+func (r *BookRepository) SetWaitlist(waitlist *WaitlistRepository) {
+	r.waitlist = waitlist
 }
 
 // Create inserts book, assigning it a new ID.
@@ -1156,6 +1172,64 @@ func (r *BookRepository) CountAvailableCopies(_ uint) (int64, error) { return 0,
 // CountAvailableCopiesBatch returns an empty map — not exercised by any test using this fake yet.
 func (r *BookRepository) CountAvailableCopiesBatch(_ []uint) (map[uint]int64, error) {
 	return map[uint]int64{}, nil
+}
+
+// CountBorrowsBatch counts completed loans (status accepted/returned) per
+// book, joining book_id → copy_id → loan_request via SetCopies/SetLoans.
+// Returns an empty map if either backing repo is unset (tests exercising the
+// list-shape without loans get 0 counts, same convention as
+// CountAvailableCopiesBatch's missing-copies behavior). Books with zero
+// completed loans are absent from the map, matching the GORM impl.
+func (r *BookRepository) CountBorrowsBatch(bookIDs []uint) (map[uint]int64, error) {
+	if len(bookIDs) == 0 || r.copies == nil || r.loans == nil {
+		return map[uint]int64{}, nil
+	}
+	wanted := map[uint]bool{}
+	for _, id := range bookIDs {
+		wanted[id] = true
+	}
+	out := map[uint]int64{}
+	r.loans.mu.Lock()
+	defer r.loans.mu.Unlock()
+	r.copies.mu.Lock()
+	defer r.copies.mu.Unlock()
+	for _, lr := range r.loans.byID {
+		if lr.Status != "accepted" && lr.Status != "returned" {
+			continue
+		}
+		copyRec, ok := r.copies.byID[lr.CopyID]
+		if !ok || !wanted[copyRec.BookID] {
+			continue
+		}
+		out[copyRec.BookID]++
+	}
+	return out, nil
+}
+
+// CountWaitlistBatch counts live waitlist entries per book, joining
+// book_id → copy_id → waitlist_entry via SetCopies/SetWaitlist. Same
+// missing-backing-repo and missing-key conventions as CountBorrowsBatch.
+func (r *BookRepository) CountWaitlistBatch(bookIDs []uint) (map[uint]int64, error) {
+	if len(bookIDs) == 0 || r.copies == nil || r.waitlist == nil {
+		return map[uint]int64{}, nil
+	}
+	wanted := map[uint]bool{}
+	for _, id := range bookIDs {
+		wanted[id] = true
+	}
+	out := map[uint]int64{}
+	r.waitlist.mu.Lock()
+	defer r.waitlist.mu.Unlock()
+	r.copies.mu.Lock()
+	defer r.copies.mu.Unlock()
+	for _, e := range r.waitlist.entries {
+		copyRec, ok := r.copies.byID[e.CopyID]
+		if !ok || !wanted[copyRec.BookID] {
+			continue
+		}
+		out[copyRec.BookID]++
+	}
+	return out, nil
 }
 
 // Delete removes book from the store.

@@ -104,6 +104,132 @@ func TestBookRepository_Delete(t *testing.T) {
 	assert.ErrorIs(t, err, repository.ErrNotFound)
 }
 
+// seedBookWithAvailableCopy creates a Book with one available Copy owned by
+// owner, and returns the created book plus the copy's ID — used by the
+// community-reading-activity tests below.
+func seedBookWithAvailableCopy(t *testing.T, books *BookRepository, copies *CopyRepository, owner models.User, title string) (models.Book, uint) {
+	t.Helper()
+	book := models.Book{Title: title, Author: "A"}
+	require.NoError(t, books.Create(&book))
+	copyRec := models.Copy{BookID: book.ID, OwnerID: owner.ID, Condition: "good", Status: "available"}
+	require.NoError(t, copies.Create(&copyRec))
+	return book, copyRec.ID
+}
+
+func TestBookRepository_CountBorrowsBatch(t *testing.T) {
+	db := openTestDB(t)
+	books := NewBookRepository(db)
+	copies := NewCopyRepository(db)
+
+	owner := models.User{Name: "Owner", Email: "owner@example.com"}
+	require.NoError(t, db.Create(&owner).Error)
+	borrower := models.User{Name: "Borrower", Email: "borrower@example.com"}
+	require.NoError(t, db.Create(&borrower).Error)
+
+	// A book with no completed loans should not appear in the map at all.
+	zero, _ := seedBookWithAvailableCopy(t, books, copies, owner, "Zero Loans")
+
+	// A book with a mix of statuses — only accepted/returned count, so the
+	// pending + rejected + cancelled requests here must be ignored.
+	one, oneCopy := seedBookWithAvailableCopy(t, books, copies, owner, "One Loan")
+	require.NoError(t, db.Create(&models.LoanRequest{CopyID: oneCopy, BorrowerID: borrower.ID, Status: "accepted"}).Error)
+	require.NoError(t, db.Create(&models.LoanRequest{CopyID: oneCopy, BorrowerID: borrower.ID, Status: "pending"}).Error)
+	require.NoError(t, db.Create(&models.LoanRequest{CopyID: oneCopy, BorrowerID: borrower.ID, Status: "rejected"}).Error)
+	require.NoError(t, db.Create(&models.LoanRequest{CopyID: oneCopy, BorrowerID: borrower.ID, Status: "cancelled"}).Error)
+
+	// A book with copies from two owners — the count spans both copies.
+	two, twoCopyA := seedBookWithAvailableCopy(t, books, copies, owner, "Two Loans")
+	twoCopyB := models.Copy{BookID: two.ID, OwnerID: owner.ID, Condition: "good", Status: "available"}
+	require.NoError(t, copies.Create(&twoCopyB))
+	require.NoError(t, db.Create(&models.LoanRequest{CopyID: twoCopyA, BorrowerID: borrower.ID, Status: "returned"}).Error)
+	require.NoError(t, db.Create(&models.LoanRequest{CopyID: twoCopyB.ID, BorrowerID: borrower.ID, Status: "accepted"}).Error)
+
+	counts, err := books.CountBorrowsBatch([]uint{zero.ID, one.ID, two.ID})
+	require.NoError(t, err)
+
+	// zero is intentionally absent — callers must treat a missing key as 0,
+	// same convention as CountAvailableCopiesBatch.
+	assert.NotContains(t, counts, zero.ID)
+	assert.EqualValues(t, 1, counts[one.ID])
+	assert.EqualValues(t, 2, counts[two.ID])
+}
+
+func TestBookRepository_CountBorrowsBatch_EmptyInput(t *testing.T) {
+	db := openTestDB(t)
+	books := NewBookRepository(db)
+
+	counts, err := books.CountBorrowsBatch(nil)
+	require.NoError(t, err)
+	assert.Empty(t, counts)
+}
+
+func TestBookRepository_CountWaitlistBatch(t *testing.T) {
+	db := openTestDB(t)
+	books := NewBookRepository(db)
+	copies := NewCopyRepository(db)
+	waitlist := NewWaitlistRepository(db)
+
+	owner := models.User{Name: "Owner", Email: "owner@example.com"}
+	require.NoError(t, db.Create(&owner).Error)
+	u1 := models.User{Name: "U1", Email: "u1@example.com"}
+	require.NoError(t, db.Create(&u1).Error)
+	u2 := models.User{Name: "U2", Email: "u2@example.com"}
+	require.NoError(t, db.Create(&u2).Error)
+
+	zero, _ := seedBookWithAvailableCopy(t, books, copies, owner, "Zero Waiters")
+
+	one, oneCopy := seedBookWithAvailableCopy(t, books, copies, owner, "One Waiter")
+	require.NoError(t, waitlist.Add(oneCopy, u1.ID))
+
+	// A book whose two copies each carry a waiter — the count spans both.
+	two, twoCopyA := seedBookWithAvailableCopy(t, books, copies, owner, "Two Waiters")
+	twoCopyB := models.Copy{BookID: two.ID, OwnerID: owner.ID, Condition: "good", Status: "available"}
+	require.NoError(t, copies.Create(&twoCopyB))
+	require.NoError(t, waitlist.Add(twoCopyA, u1.ID))
+	require.NoError(t, waitlist.Add(twoCopyB.ID, u2.ID))
+
+	counts, err := books.CountWaitlistBatch([]uint{zero.ID, one.ID, two.ID})
+	require.NoError(t, err)
+
+	assert.NotContains(t, counts, zero.ID)
+	assert.EqualValues(t, 1, counts[one.ID])
+	assert.EqualValues(t, 2, counts[two.ID])
+}
+
+func TestBookRepository_ListPaginated_PopularSort(t *testing.T) {
+	db := openTestDB(t)
+	books := NewBookRepository(db)
+	copies := NewCopyRepository(db)
+
+	owner := models.User{Name: "Owner", Email: "owner@example.com"}
+	require.NoError(t, db.Create(&owner).Error)
+	borrower := models.User{Name: "Borrower", Email: "borrower@example.com"}
+	require.NoError(t, db.Create(&borrower).Error)
+
+	// Ordering by title alone would put "Alpha" first — sort=popular should
+	// override that with borrow count. Distinct-borrower isn't required for
+	// the count; we're just measuring completed loan volume.
+	alpha, alphaCopy := seedBookWithAvailableCopy(t, books, copies, owner, "Alpha (never borrowed)")
+	beta, betaCopy := seedBookWithAvailableCopy(t, books, copies, owner, "Beta (borrowed twice)")
+	gamma, gammaCopy := seedBookWithAvailableCopy(t, books, copies, owner, "Gamma (borrowed once)")
+
+	require.NoError(t, db.Create(&models.LoanRequest{CopyID: betaCopy, BorrowerID: borrower.ID, Status: "accepted"}).Error)
+	require.NoError(t, db.Create(&models.LoanRequest{CopyID: betaCopy, BorrowerID: borrower.ID, Status: "returned"}).Error)
+	require.NoError(t, db.Create(&models.LoanRequest{CopyID: gammaCopy, BorrowerID: borrower.ID, Status: "accepted"}).Error)
+	// A pending request must not tip the ranking.
+	require.NoError(t, db.Create(&models.LoanRequest{CopyID: alphaCopy, BorrowerID: borrower.ID, Status: "pending"}).Error)
+
+	result, err := books.ListPaginated("", "popular", false, 1, 20)
+	require.NoError(t, err)
+
+	titles := make([]string, len(result.Items))
+	for i, b := range result.Items {
+		titles[i] = b.Title
+	}
+	// Beta (2) > Gamma (1) > Alpha (0, title tiebreaker among zeroes).
+	assert.Equal(t, []string{beta.Title, gamma.Title, alpha.Title}, titles)
+}
+
 func TestBookRepository_CountCopies(t *testing.T) {
 	db := openTestDB(t)
 	books := NewBookRepository(db)

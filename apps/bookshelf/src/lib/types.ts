@@ -63,6 +63,13 @@ export interface Book {
   created_at?: string;
   copies?: Copy[];
   available_copies?: number;
+  // borrow_count: completed loans (LoanRequest status accepted/returned)
+  // against any copy of this book. waitlist_count: live waitlist depth
+  // across every copy. Both are populated by the backend on GET /books
+  // and GET /books/{id} — see
+  // apps/bookshelf/docs/community-reading-activity-spec.md.
+  borrow_count?: number;
+  waitlist_count?: number;
   description_enriched?: boolean;
 }
 
