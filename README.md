@@ -80,7 +80,8 @@ Prefer the `make` targets below over raw `pnpm nx` invocations — run
 `make help` for the full, current list.
 
 ```bash
-make setup      # pnpm install --frozen-lockfile, goimports, rtk init (Claude/Cursor)
+make setup      # full local dev: pnpm install --frozen-lockfile + Playwright chromium + goimports + rtk init (Claude/Cursor)
+make setup-ci   # what the devcontainer's post-create runs under CI (deps + Playwright only; skips goimports/rtk, which are useless in CI)
 make verify     # nx run-many -t build lint test (full local check)
 make affected   # nx affected -t lint test (what CI actually runs)
 make nx-reset   # pnpm nx reset, when a cached result looks stale

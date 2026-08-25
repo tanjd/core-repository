@@ -1,6 +1,6 @@
 MAKEFLAGS += --no-print-directory
 
-.PHONY: help setup verify affected new-bot docker-build golangci-verify nx-reset upgrade-nx
+.PHONY: help setup setup-ci install-deps install-dev-tools install-goimports install-rtk verify affected new-bot docker-build golangci-verify nx-reset upgrade-nx
 
 .DEFAULT_GOAL := help
 
@@ -9,15 +9,26 @@ help: ## Show this help message
 
 ##@ Development
 
-setup: ## Install deps (frozen lockfile), goimports, rtk (Claude/Cursor token-saving hooks), and Playwright's chromium
+setup: install-deps install-dev-tools ## Full local dev setup (deps + Playwright + goimports + rtk)
+
+setup-ci: install-deps ## CI setup: just deps + Playwright, skipping the dev-only Husky/Claude/Cursor tooling that has no business running in CI
+
+install-deps: ## Install workspace deps and Playwright's chromium (needed by CI and local dev alike)
 	pnpm install --frozen-lockfile
+	pnpm exec playwright install --with-deps chromium
+
+install-dev-tools: install-goimports install-rtk ## Install local-only dev tools (goimports for Husky, rtk for Claude/Cursor)
+
+install-goimports: ## Install goimports (used by Husky lint-staged on staged .go files)
 	go install golang.org/x/tools/cmd/goimports@latest
-	curl -fsSL https://raw.githubusercontent.com/rtk-ai/rtk/master/install.sh | RTK_VERSION=v0.44.1 sh
+
+install-rtk: ## Install rtk + init Claude/Cursor token-saving hooks
+	curl -fsSL --retry 5 --retry-all-errors --retry-delay 5 \
+		https://raw.githubusercontent.com/rtk-ai/rtk/master/install.sh | RTK_VERSION=v0.44.1 sh
 	mkdir -p $(HOME)/.claude
 	rtk init -g --auto-patch
 	mkdir -p $(HOME)/.cursor
 	rtk init -g --agent cursor --auto-patch
-	pnpm exec playwright install --with-deps chromium
 
 verify: ## Build, lint, and test every project (full local CI equivalent)
 	pnpm nx run-many -t build lint test

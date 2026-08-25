@@ -22,13 +22,6 @@ testing setup `apps/bookshelf-backend/docker-compose.example.yml` still document
 
 ## Later — once there's real usage to react to
 
-- ~~**Surface announcements through the redesigned notification system**~~ — the
-  Instagram/Facebook-style `NotificationPanel` dropdown now has a labeled "Announcement"
-  section above the regular notification list (`useActiveAnnouncements` hook, fetched once
-  per mount — not polled — surfacing only the single newest active announcement, dismissed
-  client-side via `localStorage`, same as the deferred banner design; the bell/tab-bar badge
-  count is unread notifications + 0-or-1 for the announcement). **A version changelog notice
-  was intentionally left out of this pass** — see the new bullet below.
 - **Version changelog notice** — a new app version becomes a notification-like entry in the
   same `NotificationPanel`; clicking it reveals the changelog, which should also be reachable
   from the existing `v{NEXT_PUBLIC_VERSION}` string already rendered in the footer
