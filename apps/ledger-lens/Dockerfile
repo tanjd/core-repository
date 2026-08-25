@@ -9,12 +9,12 @@ FROM node:24-slim AS deps
 WORKDIR /app
 
 # Pin pnpm to the same version the devcontainer/CI use (.devcontainer/devcontainer.json's
-# features["ghcr.io/devcontainers/features/node:1"].pnpmVersion) — corepack
+# features["ghcr.io/devcontainers/features/node:2.1.0"].pnpmVersion) — corepack
 # defaults to latest otherwise, which can enforce newer supply-chain policies
 # (e.g. minimum package release age) the lockfile wasn't resolved against.
 # Hardcoded rather than read from devcontainer.json because .dockerignore
 # excludes .devcontainer/ entirely; keep this in sync if that version bumps.
-RUN corepack enable && corepack prepare pnpm@10.34.5 --activate
+RUN corepack enable && corepack prepare pnpm@11.23.0 --activate
 
 COPY --link package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 COPY --link apps/ledger-lens/package.json ./apps/ledger-lens/
@@ -28,7 +28,7 @@ FROM node:24-slim AS builder
 
 WORKDIR /app
 
-RUN corepack enable && corepack prepare pnpm@10.34.5 --activate
+RUN corepack enable && corepack prepare pnpm@11.23.0 --activate
 
 # Nx computes the whole workspace's project graph before building any single
 # project, which includes @nx-go/nx-go's dependency analysis for

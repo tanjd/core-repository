@@ -10,7 +10,7 @@ name = "telegram-bot-shared"
 version = "0.1.0"
 description = "Shared health-check server, bot-token selection, and logging setup for this repo's Telegram bots"
 readme = "README.md"
-requires-python = ">=3.13"
+requires-python = ">=3.14"
 dependencies = []
 
 [dependency-groups]

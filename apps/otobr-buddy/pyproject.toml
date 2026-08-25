@@ -14,7 +14,7 @@ name = "otobr-buddy"
 version = "1.0.0"
 description = "Telegram bot for one-to-one Bible reading tracking"
 readme = "README.md"
-requires-python = ">=3.13"
+requires-python = ">=3.14"
 dependencies = [
     "python-telegram-bot[job-queue]>=21.0",
     "python-dotenv>=1.0.0",

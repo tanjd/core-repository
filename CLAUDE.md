@@ -51,9 +51,12 @@ pnpm is pinned via `.devcontainer/devcontainer.json`'s `pnpmVersion` (no
 source of truth for both local dev and CI, since `ci.yml` builds it via
 `devcontainers/ci@v0.3`). pnpm 10+ blocks dependency install/postinstall
 scripts by default (a security default); packages that need one must be
-allow-listed in `package.json` → `pnpm.onlyBuiltDependencies` (currently
-just `nx`, whose postinstall does its local setup) or the script silently
-no-ops and `pnpm install` prints an "Ignored build scripts" warning.
+allow-listed in `pnpm-workspace.yaml` → `allowBuilds` (currently just
+`nx: true`, whose postinstall does its local setup — everything else is
+`false`) or the script silently no-ops and `pnpm install` prints an "Ignored
+build scripts" warning. pnpm 11 moved this (and `overrides`) out of
+`package.json`'s `pnpm` field entirely — that field no longer exists;
+`pnpm-workspace.yaml` is now the only place for non-registry pnpm config.
 
 Lower-level, for anything not covered above:
 
@@ -180,6 +183,10 @@ scratch script, not to block work on one existing everywhere.
 - **Python tooling**: uv + ruff conventions for `apps/index-watch`, `apps/table-talks`, and
   `apps/ledger-lens-backend` live in `.claude/rules/python.md` (loads automatically when
   touching those files).
+- **Devcontainer toolchain upgrades**: bumping a devcontainer feature version (pnpm, Python, Go,
+  golangci-lint, etc.) ripples into CI workflows, per-app Dockerfiles, `pyproject.toml`/`uv.lock`
+  files, `ruff.toml`, and docs — see the `upgrade-devcontainer-toolchain` skill for the full list
+  of touch points and the propagation steps.
 
 ## Known gaps / deferred work
 
