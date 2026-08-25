@@ -6,6 +6,9 @@
   "containerEnv": {
     "NX_DAEMON": "true"
   },
+  "remoteEnv": {
+    "CI": "${localEnv:CI}"
+  },
   "features": {
     "ghcr.io/devcontainers-extra/features/zsh-plugins:0": {
       "plugins": "npm git zsh-autosuggestions zsh-syntax-highlighting sudo",
@@ -45,7 +48,7 @@
       "version": "2.98.0"
     }
   },
-  "postCreateCommand": "make setup",
+  "postCreateCommand": "bash .devcontainer/post-create.sh",
   "customizations": {
     "vscode": {
       "extensions": [

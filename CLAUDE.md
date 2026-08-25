@@ -70,8 +70,18 @@ Husky (`core.hooksPath=.husky/_`) is just the trigger Git calls on
 
 - `lint-staged`: ESLint `--fix` + oxfmt on staged JS/TS, oxfmt alone on
   staged JSON/MD/YAML/CSS/HTML, `gofmt -w` + `goimports -w` on staged Go
-  (`goimports` is installed by `make setup`, not part of the Go toolchain by
-  default). Staged files only.
+  (`goimports` is installed by `make setup` — the **full local** target;
+  CI's devcontainer build runs `make setup-ci` via `.devcontainer/post-create.sh`
+  instead, which skips `goimports` and `rtk` since Husky never runs in CI and
+  golangci-lint has its own bundled `goimports` check. The routing lives in
+  `post-create.sh` (checks `$CI`), not in the Makefile. Note that
+  `devcontainers/ci@v0.3`'s `inheritEnv` defaults to **`false`**, so the runner's
+  `CI=true` doesn't auto-propagate into the container — we bridge it explicitly
+  with `"remoteEnv": { "CI": "${localEnv:CI}" }` in `devcontainer.json`. The Aug
+  2026 CI outage was a GitHub release-assets 5xx on the `rtk` tarball, which had
+  no business running in CI in the first place; force the full path in CI for
+  debugging with `FORCE_DEV_TOOLS=1`). Staged files
+  only.
 - The Python `pre-commit` framework, for the generic `pre-commit-hooks`
   checks (trailing whitespace, EOF newline, YAML/JSON sanity, merge-conflict
   markers, etc.), run against `git diff --cached` (staged), not the working
