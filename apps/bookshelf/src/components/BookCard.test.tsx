@@ -2,12 +2,18 @@ import { render, screen } from "@testing-library/react";
 import { BookCard } from "./BookCard";
 import type { Book } from "@/lib/types";
 
+// Substituting a plain <img> for next/image is the whole point of the
+// mock — jsdom has no image optimizer to run, and asserting on
+// container.querySelector("img") is how these tests distinguish the
+// real cover from the SVG fallback. next/image's lint rule doesn't
+// apply here.
 jest.mock("next/image", () => ({
   __esModule: true,
   default: (props: Record<string, unknown>) => {
     const imgProps = { ...props };
     delete imgProps.fill;
 
+    // eslint-disable-next-line @next/next/no-img-element
     return <img {...imgProps} alt={props.alt as string} />;
   },
 }));

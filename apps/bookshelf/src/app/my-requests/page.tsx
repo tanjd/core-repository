@@ -96,6 +96,7 @@ export default function MyRequestsPage() {
     // tab is intentionally omitted: this effect only handles the initial
     // load, and reading its value at mount time (always "current") is all
     // that's needed — the effect below re-fetches on every later tab change.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [router]);
 
   useEffect(() => {
