@@ -12,10 +12,10 @@ const baseCopy: Copy = {
 };
 
 describe("CopyCard", () => {
-  it("renders condition and status badges", () => {
+  it("renders condition and status", () => {
     render(<CopyCard copy={baseCopy} />);
 
-    expect(screen.getByText("Good")).toBeInTheDocument();
+    expect(screen.getByText("Good condition")).toBeInTheDocument();
     expect(screen.getByText("Available")).toBeInTheDocument();
   });
 
@@ -63,5 +63,15 @@ describe("CopyCard", () => {
   ] as const)("labels status %s as %s", (status, label) => {
     render(<CopyCard copy={{ ...baseCopy, status }} />);
     expect(screen.getByText(label)).toBeInTheDocument();
+  });
+
+  it("marks auto-approve available copies with an inline hint", () => {
+    render(<CopyCard copy={{ ...baseCopy, auto_approve: true }} />);
+    expect(screen.getByText(/Instant approval/)).toBeInTheDocument();
+  });
+
+  it("shows a 'Best pick' hint when highlighted and available", () => {
+    render(<CopyCard copy={baseCopy} highlighted />);
+    expect(screen.getByText(/Best pick/)).toBeInTheDocument();
   });
 });

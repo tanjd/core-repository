@@ -161,6 +161,12 @@ interface BookCoverProps {
   sizes: string;
   className?: string;
   priority?: boolean;
+  // "cover" (default) crops the image to fill a fixed-aspect container —
+  // right for uniform grid/spine tiles. "contain" letterboxes the image
+  // inside the container so its full art is visible unclipped — used on
+  // the book detail hero, where real covers vary in aspect ratio and
+  // cropping made different books look inconsistent side-by-side.
+  fit?: "cover" | "contain";
 }
 
 // Drop-in replacement for the `cover_url ? <Image/> : <fallback/>` ternary
@@ -178,6 +184,7 @@ export function BookCover({
   sizes,
   className,
   priority,
+  fit = "cover",
 }: BookCoverProps) {
   const [failed, setFailed] = useState(false);
 
@@ -189,7 +196,10 @@ export function BookCover({
         fill
         sizes={sizes}
         priority={priority}
-        className={cn("object-cover", className)}
+        className={cn(
+          fit === "contain" ? "object-contain" : "object-cover",
+          className,
+        )}
         onError={() => setFailed(true)}
       />
     );
