@@ -1,3 +1,17 @@
+## 0.24.0 (2026-08-26)
+
+### 🚀 Features
+
+- **bookshelf:** require expected return date on every loan ([#80](https://github.com/tanjd/core-repository/pull/80))
+
+### Database migrations
+
+Includes migration **000014** — automatic on startup; no manual SQL required.
+
+### ❤️ Thank You
+
+- Jeddy Tan @tanjd
+
 ## 0.23.0 (2026-08-26)
 
 ### 🚀 Features
