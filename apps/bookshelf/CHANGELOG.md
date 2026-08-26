@@ -1,3 +1,13 @@
+## 0.22.1 (2026-08-26)
+
+### 🩹 Fixes
+
+- **bookshelf:** preserve catalog page/filters across book navigation ([#78](https://github.com/tanjd/core-repository/pull/78))
+
+### ❤️ Thank You
+
+- Jeddy Tan @tanjd
+
 ## 0.22.0 (2026-08-25)
 
 ### 🚀 Features
