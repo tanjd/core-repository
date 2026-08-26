@@ -221,26 +221,8 @@ scratch script, not to block work on one existing everywhere.
   `@nx/dependency-checks` having no oxlint equivalent (the former is already a
   no-op per the "Module boundary tags" gap above, so dropping it is low-risk;
   the latter, used in `libs/food-maps-data`, would just be dropped too).
-- `apps/jeddy-tan`'s Cloudflare Pages project still points at the old
-  standalone `tanjd/jeddy-tan` repo — needs a one-time manual dashboard
-  reconfiguration after this migration is merged to `main` (do this **last**,
-  only once `apps/jeddy-tan` actually exists on `main` — flipping the source
-  repo any earlier breaks the next auto-build and takes the live site down).
-  In the `jeddy-tan` Pages project's Settings → Builds & deployments (this is
-  classic Pages, not the newer Workers Builds product):
-  - Re-point the connected Git repo to `tanjd/core-repository`, production
-    branch `main`.
-  - Framework preset: `None` (a preset like "Vite" prefills a bare `dist`
-    path assuming a non-monorepo layout — wrong here).
-  - Root directory: leave blank/repo root, **not** `apps/jeddy-tan` —
-    dependencies are hoisted to the workspace root, same reasoning as
-    `ledger-lens`'s Dockerfile (see `apps/ledger-lens/CLAUDE.md`).
-  - Build command: `pnpm install --frozen-lockfile && pnpm exec nx build jeddy-tan`
-  - Build output directory: `dist/apps/jeddy-tan`
-  - Build watch paths (separate section, same page): include
-    `apps/jeddy-tan/**`, `package.json`, `pnpm-lock.yaml`, `nx.json`, so
-    unrelated app changes don't trigger a redeploy.
-  - Verify with a manual retry-deployment before trusting it to auto-build.
+- `apps/jeddy-tan`'s pending Cloudflare Pages reconfiguration — see
+  `apps/jeddy-tan/CLAUDE.md`.
 
 <!-- nx configuration start-->
 <!-- Leave the start & end comments to automatically receive updates. -->

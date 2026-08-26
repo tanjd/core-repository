@@ -1,8 +1,19 @@
 import { defineConfig, globalIgnores } from "eslint/config";
+import tsParser from "@typescript-eslint/parser";
 import nextCoreWebVitals from "eslint-config-next/core-web-vitals";
 
 const config = defineConfig([
   ...nextCoreWebVitals,
+  {
+    settings: { react: { version: "19.1.1" } },
+  },
+  {
+    files: ["**/*.{js,mjs,cjs,jsx}"],
+    languageOptions: {
+      parser: tsParser,
+      parserOptions: { ecmaFeatures: { jsx: true } },
+    },
+  },
   {
     files: ["**/*.ts", "**/*.tsx", "**/*.js", "**/*.jsx"],
     rules: {},
