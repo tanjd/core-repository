@@ -6,6 +6,7 @@ import { useRouter, usePathname } from "next/navigation";
 import { BookOpen, ChevronDown, LogOut } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { NotificationBell } from "@/components/NotificationBell";
+import { useUpgradeNotice } from "@/hooks/useUpgradeNotice";
 import { BottomTabBar } from "@/components/layout/BottomTabBar";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { primaryNavItems, profileNavItem } from "@/components/layout/navItems";
@@ -68,6 +69,8 @@ export function NavBar() {
   const pathname = usePathname();
   const [isAuth, setIsAuth] = useState(false);
   const [isAdmin, setIsAdmin] = useState(false);
+  const { visible: upgradeVisible } = useUpgradeNotice();
+  const showNotificationBell = isAuth || upgradeVisible;
   const prevAuthRef = useRef<{ isAuth: boolean; isAdmin: boolean } | null>(
     null,
   );
@@ -133,7 +136,7 @@ export function NavBar() {
                       {item.label}
                     </Link>
                   ))}
-                  <NotificationBell />
+                  {showNotificationBell && <NotificationBell />}
                   <ProfileMenu
                     profileItem={profileItem}
                     onLogout={handleLogout}
@@ -152,6 +155,7 @@ export function NavBar() {
                 </>
               ) : (
                 <>
+                  {showNotificationBell && <NotificationBell />}
                   <Link
                     href="/login"
                     className={navLinkClass(pathname === "/login")}
@@ -173,7 +177,7 @@ export function NavBar() {
             <div className="md:hidden flex items-center gap-1">
               {isAuth ? (
                 <>
-                  <NotificationBell />
+                  {showNotificationBell && <NotificationBell />}
                   <ThemeToggle />
                   <ProfileMenu
                     profileItem={profileItem}
@@ -190,6 +194,7 @@ export function NavBar() {
                 </>
               ) : (
                 <>
+                  {showNotificationBell && <NotificationBell />}
                   <Link
                     href="/login"
                     className={navLinkClass(pathname === "/login")}

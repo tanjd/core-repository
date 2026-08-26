@@ -3,12 +3,19 @@
 import { Bell } from "lucide-react";
 import { useUnreadNotifications } from "@/hooks/useUnreadNotifications";
 import { useActiveAnnouncements } from "@/hooks/useActiveAnnouncements";
+import { useUpgradeNotice } from "@/hooks/useUpgradeNotice";
 import { NotificationPanel } from "@/components/NotificationPanel";
 
 export function NotificationBell() {
   const { unreadCount, refetch } = useUnreadNotifications();
   const { announcement, dismiss } = useActiveAnnouncements();
-  const badgeCount = unreadCount + (announcement ? 1 : 0);
+  const {
+    visible: upgradeVisible,
+    version,
+    dismiss: dismissUpgrade,
+  } = useUpgradeNotice();
+  const badgeCount =
+    unreadCount + (upgradeVisible ? 1 : 0) + (announcement ? 1 : 0);
 
   return (
     <NotificationPanel
@@ -16,6 +23,9 @@ export function NotificationBell() {
       align="end"
       hasUnread={unreadCount > 0}
       onNotificationsRead={refetch}
+      upgradeNotice={
+        upgradeVisible ? { version, onDismiss: dismissUpgrade } : null
+      }
       announcement={announcement}
       onDismissAnnouncement={dismiss}
       trigger={

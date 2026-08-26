@@ -1,6 +1,6 @@
 # Copy to docker-compose.yml (gitignored — see root .gitignore) wherever
 # you're running the stack (e.g. your NAS), put a .env file next to it
-# (see .env.example), then:
+# (see .env.compose.example — full guide in apps/bookshelf/README.md), then:
 #
 #   docker compose pull && docker compose up -d
 #
@@ -18,8 +18,8 @@ services:
       ENV: ${ENV:-dev}
       PORT: "8000"
       DB_PATH: /app/data/bookshelf.db
-      JWT_SECRET: ${JWT_SECRET:?set a long random string in .env — see .env.example}
-      ENCRYPTION_SECRET: ${ENCRYPTION_SECRET:?set a long random string in .env — see .env.example}
+      JWT_SECRET: ${JWT_SECRET:?set a long random string in .env — see .env.compose.example}
+      ENCRYPTION_SECRET: ${ENCRYPTION_SECRET:?set a long random string in .env — see .env.compose.example}
       CORS_ORIGINS: ${FRONTEND_ORIGIN:-http://localhost:3000}
       FRONTEND_ORIGIN: ${FRONTEND_ORIGIN:-http://localhost:3000}
       SMTP_HOST: ${SMTP_HOST:-}

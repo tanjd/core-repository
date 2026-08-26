@@ -13,6 +13,9 @@
         "production": {}
       },
       "defaultConfiguration": "production",
+      "dependsOn": [
+        "generate-changelog"
+      ],
       "executor": "@nx/next:build",
       "options": {
         "outputPath": "dist/apps/bookshelf",
@@ -30,7 +33,16 @@
     },
     "docker-build": {},
     "docker-push": {},
+    "generate-changelog": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "pnpm exec tsx apps/bookshelf/scripts/generate-changelog.ts"
+      }
+    },
     "lint": {
+      "dependsOn": [
+        "generate-changelog"
+      ],
       "executor": "@nx/eslint:lint",
       "outputs": [
         "{options.outputFile}"
@@ -55,6 +67,11 @@
         "port": 3000,
         "webpack": true
       }
+    },
+    "test": {
+      "dependsOn": [
+        "generate-changelog"
+      ]
     }
   }
 }

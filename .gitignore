@@ -132,6 +132,9 @@ docker-compose.yml
 # bookshelf: server-side-only env vars (e.g. BACKEND_URL) for local dev
 apps/bookshelf/.env.local
 
+# bookshelf: build-time generated changelog embed
+apps/bookshelf/src/lib/changelog.generated.ts
+
 # bookshelf-backend: cached book cover images written to disk at runtime
 apps/bookshelf-backend/data/covers/
 

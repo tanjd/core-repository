@@ -3,7 +3,14 @@
 import { useState, type ReactNode } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Bell, CheckCheck, Loader2, Megaphone, X } from "lucide-react";
+import {
+  Bell,
+  CheckCheck,
+  Loader2,
+  Megaphone,
+  Sparkles,
+  X,
+} from "lucide-react";
 import { toast } from "sonner";
 import { api } from "@/lib/api";
 import type { Announcement, Notification } from "@/lib/types";
@@ -29,6 +36,7 @@ export function NotificationPanel({
   trigger,
   hasUnread,
   onNotificationsRead,
+  upgradeNotice = null,
   announcement = null,
   onDismissAnnouncement,
   side = "bottom",
@@ -37,6 +45,7 @@ export function NotificationPanel({
   trigger: ReactNode;
   hasUnread: boolean;
   onNotificationsRead?: () => void;
+  upgradeNotice?: { version: string; onDismiss: () => void } | null;
   announcement?: Announcement | null;
   onDismissAnnouncement?: (id: number) => void;
   side?: "top" | "bottom";
@@ -51,6 +60,12 @@ export function NotificationPanel({
   async function handleOpenChange(next: boolean) {
     setOpen(next);
     if (next && items === null) {
+      const token = localStorage.getItem("bookshelf_token");
+      if (!token) {
+        setItems([]);
+        return;
+      }
+
       setLoading(true);
       try {
         const data = await api.getNotifications({ page_size: PREVIEW_SIZE });
@@ -102,6 +117,41 @@ export function NotificationPanel({
         align={align}
         className="w-[calc(100vw-2rem)] max-w-sm p-0 sm:w-96"
       >
+        {upgradeNotice && (
+          <div className="border-b">
+            <div className="flex items-center gap-1.5 px-4 pt-3 pb-1.5">
+              <Sparkles className="size-3.5 text-muted-foreground" />
+              <span className="text-xs font-semibold text-muted-foreground">
+                Update
+              </span>
+            </div>
+            <div className="flex items-start gap-2 px-4 pb-3">
+              <div className="min-w-0 flex-1">
+                <p className="text-sm font-medium">
+                  What&apos;s new in v{upgradeNotice.version}
+                </p>
+                <Link
+                  href="/changelog"
+                  onClick={() => {
+                    upgradeNotice.onDismiss();
+                    setOpen(false);
+                  }}
+                  className="mt-1 inline-block text-xs text-primary hover:underline underline-offset-2"
+                >
+                  See release notes
+                </Link>
+              </div>
+              <button
+                onClick={upgradeNotice.onDismiss}
+                className="shrink-0 rounded p-1 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+                aria-label="Dismiss update notice"
+              >
+                <X className="size-3.5" />
+              </button>
+            </div>
+          </div>
+        )}
+
         {announcement && (
           <div className="border-b">
             <div className="flex items-center gap-1.5 px-4 pt-3 pb-1.5">
