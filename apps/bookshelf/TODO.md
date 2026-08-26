@@ -22,13 +22,6 @@ testing setup `apps/bookshelf-backend/docker-compose.example.yml` still document
 
 ## Later — once there's real usage to react to
 
-- **Version changelog notice** — a new app version becomes a notification-like entry in the
-  same `NotificationPanel`; clicking it reveals the changelog, which should also be reachable
-  from the existing `v{NEXT_PUBLIC_VERSION}` string already rendered in the footer
-  (`src/app/layout.tsx`). Needs its own scoping pass: where changelog content comes from
-  (hand-written per release? derived from commit/PR history?) and how "new version since the
-  user's last visit" gets detected (compare `NEXT_PUBLIC_VERSION` against a value cached in
-  `localStorage`, mirroring the announcement-dismissal pattern, is the leading idea).
 - **Telegram bot: link account + receive notifications** — cheap relative to a from-scratch
   integration since `libs/telegram-bot-shared` and the bot generator already exist. Link via
   a deep-link token, forward `Notification` rows to Telegram alongside/instead of email.

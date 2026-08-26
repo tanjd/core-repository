@@ -1,0 +1,18 @@
+{
+  "$schema": "../../node_modules/nx/schemas/project-schema.json",
+  "name": "bookshelf-changelog",
+  "projectType": "library",
+  "sourceRoot": "tools/bookshelf-changelog",
+  "tags": [],
+  "targets": {
+    "test": {
+      "executor": "@nx/jest:jest",
+      "options": {
+        "jestConfig": "tools/bookshelf-changelog/jest.config.ts"
+      },
+      "outputs": [
+        "{workspaceRoot}/coverage/tools/bookshelf-changelog"
+      ]
+    }
+  }
+}

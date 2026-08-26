@@ -15,7 +15,7 @@ export default [
     },
   },
   {
-    settings: { react: { version: "detect" } },
+    settings: { react: { version: "19.1.1" } },
   },
   {
     files: ["**/*.js", "**/*.jsx"],

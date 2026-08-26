@@ -85,6 +85,35 @@ func runMigrations(sqlDB *sql.DB) error {
 	return nil
 }
 
+// MigrationVersion returns the current golang-migrate schema version for an
+// already-open database. Returns 0 when no migration has been applied yet.
+func MigrationVersion(sqlDB *sql.DB) (uint, error) {
+	src, err := iofs.New(migrationsFS, "migrations")
+	if err != nil {
+		return 0, err
+	}
+
+	driver, err := sqlite3.WithInstance(sqlDB, &sqlite3.Config{})
+	if err != nil {
+		return 0, err
+	}
+
+	m, err := migrate.NewWithInstance("iofs", src, "sqlite3", driver)
+	if err != nil {
+		return 0, err
+	}
+
+	version, _, err := m.Version()
+	if errors.Is(err, migrate.ErrNilVersion) {
+		return 0, nil
+	}
+	if err != nil {
+		return 0, err
+	}
+
+	return version, nil
+}
+
 // Seed inserts default app settings on first boot (idempotent).
 func Seed(database *gorm.DB) {
 	defaults := []models.AppSetting{

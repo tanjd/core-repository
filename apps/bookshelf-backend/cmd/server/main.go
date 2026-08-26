@@ -3,6 +3,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"os"
@@ -100,6 +101,10 @@ func main() {
 	if err != nil {
 		log.Fatal().Err(err).Msg("failed to get underlying sql.DB")
 	}
+	schemaVersion, err := db.MigrationVersion(sqlDB)
+	if err != nil {
+		log.Fatal().Err(err).Msg("failed to read schema migration version")
+	}
 	backupSvc := services.NewBackupService(sqlDB, adminRepo, cfg.DBPath, coversDir, backupsDir)
 	googleBooksKeyPool := services.NewGoogleBooksKeyPool(cfg.GoogleBooksAPIKeys)
 	descriptionReconciliationSvc := services.NewDescriptionReconciliationService(bookRepo, googleBooksKeyPool)
@@ -160,7 +165,11 @@ func main() {
 	mux.HandleFunc("GET /health", func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
-		_, _ = w.Write([]byte(`{"status":"ok","version":"` + version + `"}`))
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"status":         "ok",
+			"version":        version,
+			"schema_version": schemaVersion,
+		})
 	})
 
 	// Huma API — auto-generates OpenAPI spec at /openapi.yaml + /openapi.json

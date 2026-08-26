@@ -86,7 +86,8 @@
     "changelog": {
       "automaticFromRef": true,
       "projectChangelogs": {
-        "createRelease": "github"
+        "createRelease": "github",
+        "renderer": "{workspaceRoot}/tools/bookshelf-changelog/renderer.js"
       }
     },
     "git": {

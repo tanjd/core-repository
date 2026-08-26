@@ -11,6 +11,10 @@ allowBuilds:
   nx: true
   unrs-resolver: false
 
+minimumReleaseAgeExclude:
+  - "@next/eslint-plugin-next@16.3.3"
+  - eslint-config-next@16.3.3
+
 overrides:
   adm-zip: 0.6.0
   esbuild: 0.25.0

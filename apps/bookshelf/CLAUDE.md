@@ -3,6 +3,10 @@
 Guidance for `apps/bookshelf` specifically — see the repo-root `CLAUDE.md` for cross-cutting
 conventions (Nx, deployment, release process).
 
+**Documentation:** `README.md` in this directory is the user-facing product guide (self-hosting,
+env vars, upgrades). This file is contributor/agent guidance — implementation conventions and
+gotchas only; don't duplicate README content here.
+
 Next.js + Tailwind CSS + shadcn/ui frontend for `apps/bookshelf-backend`, squash-imported from the
 standalone `tanjd/bookshelf` repo's `frontend/` directory, no preserved history — same convention
 as every other app migration in this repo. All calls go through `src/app/api/[...path]/route.ts`,
@@ -104,7 +108,26 @@ split and the tab-bar slot budget above before assuming there's room for one mor
 
 ## Environment
 
-`BACKEND_URL` (server-side only, read by the API proxy route) belongs in `apps/bookshelf/.env.local`
-for local dev — gitignored via a `apps/bookshelf/.env.local` entry in the root `.gitignore` (no
-existing app used `.env.local` before this migration, so the entry is scoped to this app rather
-than a workspace-wide glob).
+`BACKEND_URL` (server-side only, read by the API proxy route) belongs in
+`apps/bookshelf/.env.local` for local dev — copy from `.env.example`
+(`cp .env.example .env.local`). `.env.local` is gitignored via a scoped entry in the root
+`.gitignore` (no existing app used `.env.local` before this migration, so the entry is scoped to
+this app rather than a workspace-wide glob). Docker/self-host env vars live in
+`apps/bookshelf-backend/.env.compose.example` — see `README.md`.
+
+## Changelog and upgrade notices
+
+Release notes for self-hosters and members live at `/changelog`, driven by
+`apps/bookshelf/CHANGELOG.md`. At build time, `scripts/generate-changelog.ts` parses that file
+into gitignored `src/lib/changelog.generated.ts` (Nx target `generate-changelog`; `build`/`test`/
+`lint` depend on it). `useUpgradeNotice` compares `NEXT_PUBLIC_VERSION` against
+`localStorage.bookshelf_last_seen_app_version` to surface a dismissible banner in the notification
+panel.
+
+The app changelog is written by `nx release` on green CI merges to `main`, not by hand. When a
+release includes new backend SQL migrations, a `### Database migrations` subsection is injected
+automatically — see `apps/bookshelf-backend/CLAUDE.md` § Release notes and migrations and
+`tools/bookshelf-changelog/`. `/changelog` also fetches live `schema_version` from `/api/health`
+(proxies backend `/health`) as a footnote for logged-in users.
+
+Spec: `docs/upgrade-changelog-spec.md`.

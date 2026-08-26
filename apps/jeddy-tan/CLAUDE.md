@@ -4,15 +4,6 @@ This file provides guidance to Claude Code when working with code in `apps/jeddy
 repo-root `CLAUDE.md` for cross-cutting conventions (Nx, monorepo structure, deployment) — this
 file stays scoped to jeddy-tan specifics.
 
-## Commands
-
-```bash
-pnpm nx serve jeddy-tan     # Start dev server
-pnpm nx build jeddy-tan     # Production build (outputs to dist/apps/jeddy-tan)
-pnpm nx test jeddy-tan      # Run tests (Vitest)
-pnpm nx lint jeddy-tan      # Check lint errors
-```
-
 Pre-commit hooks (the shared repo-root Husky + lint-staged setup) run ESLint and `oxfmt` on
 staged files automatically — there's no jeddy-tan-local formatting/hook config.
 
@@ -154,5 +145,26 @@ obvious place to apply it next time that page's content is written for real.
   It's the first `@nx/vite` app here too; every other frontend app uses Next.js via `@nx/next`.
 - The Create React App → Vite migration mentioned in older notes for this app is complete; this
   `vite.config.js` is the result.
-- Deployed via Cloudflare Pages (outside this repo's GitHub Actions) — see the root `CLAUDE.md`
-  for the monorepo build configuration Cloudflare Pages needs.
+- Deployed via Cloudflare Pages (outside this repo's GitHub Actions) — see "Cloudflare Pages
+  reconfiguration" below for the monorepo build configuration Cloudflare Pages needs.
+
+## Cloudflare Pages reconfiguration (one-time, pending)
+
+The `jeddy-tan` Cloudflare Pages project still points at the old standalone `tanjd/jeddy-tan`
+repo — needs a one-time manual dashboard reconfiguration after this migration is merged to
+`main` (do this **last**, only once `apps/jeddy-tan` actually exists on `main` — flipping the
+source repo any earlier breaks the next auto-build and takes the live site down). In the
+`jeddy-tan` Pages project's Settings → Builds & deployments (this is classic Pages, not the newer
+Workers Builds product):
+
+- Re-point the connected Git repo to `tanjd/core-repository`, production branch `main`.
+- Framework preset: `None` (a preset like "Vite" prefills a bare `dist` path assuming a
+  non-monorepo layout — wrong here).
+- Root directory: leave blank/repo root, **not** `apps/jeddy-tan` — dependencies are hoisted to
+  the workspace root, same reasoning as `ledger-lens`'s Dockerfile (see
+  `apps/ledger-lens/CLAUDE.md`).
+- Build command: `pnpm install --frozen-lockfile && pnpm exec nx build jeddy-tan`
+- Build output directory: `dist/apps/jeddy-tan`
+- Build watch paths (separate section, same page): include `apps/jeddy-tan/**`, `package.json`,
+  `pnpm-lock.yaml`, `nx.json`, so unrelated app changes don't trigger a redeploy.
+- Verify with a manual retry-deployment before trusting it to auto-build.

@@ -33,5 +33,5 @@
     "../../dist/apps/bookshelf/.next/types/**/*.ts",
     "../../dist/apps/bookshelf/.next/dev/types/**/*.ts"
   ],
-  "exclude": ["node_modules"]
+  "exclude": ["node_modules", "scripts"]
 }

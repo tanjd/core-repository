@@ -3,6 +3,11 @@
 Guidance for `apps/bookshelf-backend` specifically — see the repo-root `CLAUDE.md` for
 cross-cutting conventions (Nx, deployment, release process).
 
+**Documentation:** `apps/bookshelf/README.md` is the user-facing product guide (self-hosting,
+env vars, upgrades). This file is contributor/agent guidance — implementation conventions and
+gotchas only; don't duplicate README content here. Detailed backup/restore steps below are linked
+from README because they are ops procedures agents may need to reference or extend.
+
 ## Product scope
 
 The app's job is identifying which books the community already owns and facilitating the
@@ -63,6 +68,14 @@ apps/bookshelf-backend/Dockerfile .`) and switched from the source repo's `golan
   repo's own version history (that history wasn't preserved either, per the migration decision
   above) — current version is whatever `apps/bookshelf-backend/CHANGELOG.md`'s latest entry says,
   not necessarily `0.x`.
+
+## Environment
+
+- **Local dev:** `.env.example` → copy to `.env` in this directory.
+- **Docker self-host:** `.env.compose.example` → copy to `.env` next to `docker-compose.yml`
+  (from `docker-compose.example.yml`). Full install guide in `apps/bookshelf/README.md`.
+- **Production (tanjd.com):** `compose/docker-compose.bookshelf.yml` — Traefik + Cloudflare,
+  bind-mount at `/mnt/apps/bookshelf`, not the generic example compose.
 
 ## Go tooling
 
@@ -200,3 +213,25 @@ cp -r /data/. /backup/`.
   disk-space impact is negligible in practice. If this needs closing later, a scheduled sweep
   job (list every `Book.CoverURL`, diff against `data/covers/`'s contents, delete
   unreferenced files) following the existing `RegisterJob` pattern is the natural fix.
+
+## Release notes and migrations
+
+`nx release` (`.github/workflows/release.yml` on green CI merges to `main`) writes
+`CHANGELOG.md` entries from Conventional Commits. Bookshelf uses a custom changelog renderer
+(`tools/bookshelf-changelog/renderer.js`, wired in root `nx.json` →
+`release.changelog.projectChangelogs.renderer`) that extends Nx's `DefaultChangelogRenderer`.
+
+When a release includes new `internal/db/migrations/*.up.sql` files (detected via
+`git diff --diff-filter=A` since the last `bookshelf-backend@*` tag), the renderer injects a
+`### Database migrations` subsection into **both** `apps/bookshelf/CHANGELOG.md` and
+`apps/bookshelf-backend/CHANGELOG.md` before the Thank You block — default copy:
+"automatic on startup; no manual SQL required." Pure helpers and tests live under
+`tools/bookshelf-changelog/` (`pnpm nx test bookshelf-changelog`).
+
+No manual CHANGELOG edit is needed for routine migrations. Amend the release entry only when the
+default boilerplate is wrong (long-running migration, backup-first, irreversible change) — see
+`apps/bookshelf/README.md` § Upgrading and `apps/bookshelf/docs/upgrade-changelog-spec.md` for
+wording guidelines.
+
+Migrations run automatically on backend startup (`internal/db/db.go`). `GET /health` exposes
+`schema_version` (golang-migrate version) for ops checks on the in-app `/changelog` page.
