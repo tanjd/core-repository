@@ -23,6 +23,7 @@ import {
   announcementTypeVariant,
 } from "@/lib/announcements";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import {
   Popover,
   PopoverContent,
@@ -45,7 +46,11 @@ export function NotificationPanel({
   trigger: ReactNode;
   hasUnread: boolean;
   onNotificationsRead?: () => void;
-  upgradeNotice?: { version: string; onDismiss: () => void } | null;
+  upgradeNotice?: {
+    version: string;
+    teaser?: string | null;
+    onDismiss: () => void;
+  } | null;
   announcement?: Announcement | null;
   onDismissAnnouncement?: (id: number) => void;
   side?: "top" | "bottom";
@@ -130,16 +135,22 @@ export function NotificationPanel({
                 <p className="text-sm font-medium">
                   What&apos;s new in v{upgradeNotice.version}
                 </p>
-                <Link
-                  href="/changelog"
-                  onClick={() => {
-                    upgradeNotice.onDismiss();
-                    setOpen(false);
-                  }}
-                  className="mt-1 inline-block text-xs text-primary hover:underline underline-offset-2"
-                >
-                  See release notes
-                </Link>
+                {upgradeNotice.teaser ? (
+                  <p className="mt-1 text-xs text-muted-foreground line-clamp-2">
+                    {upgradeNotice.teaser}
+                  </p>
+                ) : null}
+                <Button asChild size="sm" className="mt-2 h-7 px-2.5 text-xs">
+                  <Link
+                    href="/changelog"
+                    onClick={() => {
+                      upgradeNotice.onDismiss();
+                      setOpen(false);
+                    }}
+                  >
+                    View release notes
+                  </Link>
+                </Button>
               </div>
               <button
                 onClick={upgradeNotice.onDismiss}

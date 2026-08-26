@@ -5,6 +5,8 @@ import { useUnreadNotifications } from "@/hooks/useUnreadNotifications";
 import { useActiveAnnouncements } from "@/hooks/useActiveAnnouncements";
 import { useUpgradeNotice } from "@/hooks/useUpgradeNotice";
 import { NotificationPanel } from "@/components/NotificationPanel";
+import { CHANGELOG_ENTRIES } from "@/lib/changelog.generated";
+import { getLatestChangelogTeaser } from "@/lib/changelog";
 
 export function NotificationBell() {
   const { unreadCount, refetch } = useUnreadNotifications();
@@ -16,6 +18,7 @@ export function NotificationBell() {
   } = useUpgradeNotice();
   const badgeCount =
     unreadCount + (upgradeVisible ? 1 : 0) + (announcement ? 1 : 0);
+  const upgradeTeaser = getLatestChangelogTeaser(CHANGELOG_ENTRIES);
 
   return (
     <NotificationPanel
@@ -24,7 +27,9 @@ export function NotificationBell() {
       hasUnread={unreadCount > 0}
       onNotificationsRead={refetch}
       upgradeNotice={
-        upgradeVisible ? { version, onDismiss: dismissUpgrade } : null
+        upgradeVisible
+          ? { version, teaser: upgradeTeaser, onDismiss: dismissUpgrade }
+          : null
       }
       announcement={announcement}
       onDismissAnnouncement={dismiss}
