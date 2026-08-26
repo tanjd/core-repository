@@ -30,11 +30,13 @@ import {
 } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
 
-// Default loan window nudged to two weeks. Backend enforces no upper
-// bound; this is UX guidance so the borrower doesn't have to guess and
-// the owner has an anchor to counter from — see the accept-request
-// counter-date flow in loan-request-flow.spec.ts.
-const DEFAULT_LOAN_DAYS = 14;
+// Default loan window — see apps/bookshelf/docs/return-date-default-spec.md
+// for why 30, not a library-style 14. Backend enforces no upper bound; this
+// is UX guidance so the borrower doesn't have to guess and the owner has an
+// anchor to counter from — see the accept-request counter-date flow in
+// loan-request-flow.spec.ts. Tunable code, not a database column — adjust
+// this constant (and the backend's matching config) if 30 turns out wrong.
+const DEFAULT_LOAN_DAYS = 30;
 
 // ReadingActivityRow renders the "Borrowed N times · M on waitlist" strip
 // below the availability badge. Each half is omitted when its count is 0
@@ -255,22 +257,18 @@ export default function BookDetailPage() {
   function openRequest(copy: Copy) {
     setSelectedCopy(copy);
     setRequestMessage("");
-    // Default to +14 days from today so the borrower has a sensible
+    // Default to +30 days from today so the borrower has a sensible
     // anchor and the owner has a concrete number to counter — the
     // owner-side counter flow is covered by loan-request-flow.spec.ts.
-    if (copy.return_date_required) {
-      const d = new Date();
-      d.setDate(d.getDate() + DEFAULT_LOAN_DAYS);
-      setExpectedReturnDate(formatDateInput(d));
-    } else {
-      setExpectedReturnDate("");
-    }
+    const d = new Date();
+    d.setDate(d.getDate() + DEFAULT_LOAN_DAYS);
+    setExpectedReturnDate(formatDateInput(d));
   }
 
   async function handleRequest() {
     if (!selectedCopy) return;
-    if (selectedCopy.return_date_required && !expectedReturnDate) {
-      toast.error("Return date is required by the sharer");
+    if (!expectedReturnDate) {
+      toast.error("Return date is required");
       return;
     }
     setRequesting(true);
@@ -278,9 +276,7 @@ export default function BookDetailPage() {
       const created = await api.createLoanRequest({
         copy_id: selectedCopy.id,
         message: requestMessage.trim() || undefined,
-        expected_return_date: selectedCopy.return_date_required
-          ? expectedReturnDate
-          : undefined,
+        expected_return_date: expectedReturnDate,
       });
       toast.success(
         created.status === "accepted"
@@ -655,26 +651,34 @@ export default function BookDetailPage() {
               ))}
             </div>
           </div>
-          {selectedCopy?.return_date_required && (
-            <div className="flex flex-col gap-2">
-              <label htmlFor="return-date" className="text-sm font-medium">
-                Expected return date <span className="text-destructive">*</span>
-              </label>
-              <Input
-                id="return-date"
-                type="date"
-                required
-                aria-required="true"
-                min={formatDateInput(new Date())}
-                value={expectedReturnDate}
-                onChange={(e) => setExpectedReturnDate(e.target.value)}
-              />
-              <p className="text-xs text-muted-foreground">
-                Defaults to two weeks from today. The owner can counter this
-                when they accept.
-              </p>
-            </div>
+          {selectedCopy?.notes && (
+            <blockquote className="border-l-2 border-muted-foreground/30 pl-3 text-sm italic text-muted-foreground">
+              {selectedCopy.notes}
+              {selectedCopy.owner?.name && (
+                <footer className="mt-1 text-xs not-italic">
+                  — shared by {selectedCopy.owner.name}
+                </footer>
+              )}
+            </blockquote>
           )}
+          <div className="flex flex-col gap-2">
+            <label htmlFor="return-date" className="text-sm font-medium">
+              Expected return date <span className="text-destructive">*</span>
+            </label>
+            <Input
+              id="return-date"
+              type="date"
+              required
+              aria-required="true"
+              min={formatDateInput(new Date())}
+              value={expectedReturnDate}
+              onChange={(e) => setExpectedReturnDate(e.target.value)}
+            />
+            <p className="text-xs text-muted-foreground">
+              You can propose a different date. The owner can counter this when
+              they accept.
+            </p>
+          </div>
           <DialogFooter showCloseButton>
             <Button onClick={handleRequest} disabled={requesting}>
               {requesting ? "Sending…" : "Send Request"}

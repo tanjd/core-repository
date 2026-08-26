@@ -129,12 +129,12 @@ func (r *LoanRequestRepository) ListByBorrowerIDPaginated(borrowerID uint, statu
 }
 
 // ListActiveByBorrowerID returns borrowerID's accepted (currently-held) loan
-// requests, due-soonest first, with NULL expected_return_date sorted last.
+// requests, due-soonest first.
 func (r *LoanRequestRepository) ListActiveByBorrowerID(borrowerID uint) ([]models.LoanRequest, error) {
 	var requests []models.LoanRequest
 	err := r.db.Preload("Copy.Book").Preload("Copy.Owner").Preload("Borrower").
 		Where("borrower_id = ? AND status = ?", borrowerID, "accepted").
-		Order("expected_return_date IS NULL, expected_return_date ASC, requested_at ASC").
+		Order("expected_return_date ASC, requested_at ASC").
 		Find(&requests).Error
 	return requests, err
 }

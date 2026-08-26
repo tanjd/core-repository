@@ -64,9 +64,19 @@ async function completeLoan(
   borrowerToken: string,
   copyId: number,
 ) {
+  // expected_return_date is required on every request now (see
+  // return-date-default-spec.md) — this flow doesn't care about the value,
+  // just that a valid one is present.
+  const expectedReturnDate = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000)
+    .toISOString()
+    .slice(0, 10);
   const reqRes = await request.post(`${BACKEND_URL}/loan-requests`, {
     headers: { Authorization: `Bearer ${borrowerToken}` },
-    data: { copy_id: copyId, message: "e2e" },
+    data: {
+      copy_id: copyId,
+      message: "e2e",
+      expected_return_date: expectedReturnDate,
+    },
   });
   expect(
     reqRes.ok(),

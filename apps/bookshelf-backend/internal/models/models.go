@@ -112,17 +112,16 @@ type Book struct {
 // Copy is a physical instance of a Book owned by a church member.
 // Status values: available | requested | loaned | unavailable
 type Copy struct {
-	ID                 uint   `gorm:"primarykey" json:"id"`
-	BookID             uint   `gorm:"not null" json:"book_id"`
-	OwnerID            uint   `gorm:"not null" json:"owner_id"`
-	Condition          string `json:"condition"` // good | fair | worn
-	Notes              string `json:"notes"`
-	Status             string `gorm:"default:'available'" json:"status"`
-	AutoApprove        bool   `gorm:"default:false" json:"auto_approve"`
-	ReturnDateRequired bool   `gorm:"default:false" json:"return_date_required"`
-	HideOwner          bool   `gorm:"default:false" json:"hide_owner"`
-	Book               Book   `json:"book,omitempty"`
-	Owner              User   `json:"owner,omitempty"`
+	ID          uint   `gorm:"primarykey" json:"id"`
+	BookID      uint   `gorm:"not null" json:"book_id"`
+	OwnerID     uint   `gorm:"not null" json:"owner_id"`
+	Condition   string `json:"condition"` // good | fair | worn
+	Notes       string `json:"notes"`
+	Status      string `gorm:"default:'available'" json:"status"`
+	AutoApprove bool   `gorm:"default:false" json:"auto_approve"`
+	HideOwner   bool   `gorm:"default:false" json:"hide_owner"`
+	Book        Book   `json:"book,omitempty"`
+	Owner       User   `json:"owner,omitempty"`
 }
 
 // LoanRequest tracks a borrower's request to borrow a specific Copy.
@@ -138,9 +137,15 @@ type LoanRequest struct {
 	LoanedAt           *time.Time `json:"loaned_at"`
 	ReturnedAt         *time.Time `json:"returned_at"`
 	ReturnedBy         *uint      `gorm:"column:returned_by" json:"returned_by,omitempty"`
-	ExpectedReturnDate *time.Time `json:"expected_return_date,omitempty"`
-	Copy               Copy       `json:"copy,omitempty"`
-	Borrower           User       `json:"borrower,omitempty"`
+	ExpectedReturnDate time.Time  `gorm:"not null" json:"expected_return_date"`
+	// ExpectedReturnDateChangedBy/At are nil until either party amends the
+	// return date after the loan is accepted (see the
+	// updateExpectedReturnDate handler) — the original accept-time value is
+	// never touched. Last-write-wins, no history kept.
+	ExpectedReturnDateChangedBy *uint      `json:"expected_return_date_changed_by,omitempty"`
+	ExpectedReturnDateChangedAt *time.Time `json:"expected_return_date_changed_at,omitempty"`
+	Copy                        Copy       `json:"copy,omitempty"`
+	Borrower                    User       `json:"borrower,omitempty"`
 }
 
 // WaitlistEntry tracks users waiting for a loaned copy to become available.
@@ -182,7 +187,7 @@ type WishlistRequest struct {
 //
 //	marked_loaned | marked_returned | return_undone | waitlist_available |
 //	copy_transferred_in | copy_transferred_out | wishlist_fulfilled |
-//	user_pending_approval | user_approved
+//	user_pending_approval | user_approved | expected_return_date_changed
 type Notification struct {
 	ID                uint      `gorm:"primarykey" json:"id"`
 	RecipientID       uint      `gorm:"not null" json:"recipient_id"`

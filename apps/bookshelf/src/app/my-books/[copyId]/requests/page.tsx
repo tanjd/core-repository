@@ -440,18 +440,18 @@ export default function CopyRequestsPage() {
           <DialogHeader>
             <DialogTitle>Accept Request</DialogTitle>
             <DialogDescription>
-              {acceptProposedDate
-                ? "The borrower proposed a return date below — change it if you'd rather agree on something else."
-                : "Optionally set an agreed return date before accepting."}
+              The borrower proposed the return date below — change it if
+              you&apos;d rather agree on something else.
             </DialogDescription>
           </DialogHeader>
           <div className="flex flex-col gap-2">
             <label htmlFor="accept-return-date" className="text-sm font-medium">
-              Return by (optional)
+              Return by
             </label>
             <Input
               id="accept-return-date"
               type="date"
+              min={toDateInputValue(new Date().toISOString())}
               value={acceptDate}
               onChange={(e) => setAcceptDate(e.target.value)}
             />

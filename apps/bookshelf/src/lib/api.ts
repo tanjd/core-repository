@@ -466,7 +466,6 @@ export const api = {
     condition: string;
     notes?: string;
     auto_approve?: boolean;
-    return_date_required?: boolean;
     hide_owner?: boolean;
   }) =>
     request<Copy>("/copies", { method: "POST", body: JSON.stringify(data) }),
@@ -477,7 +476,6 @@ export const api = {
       notes?: string;
       status?: string;
       auto_approve?: boolean;
-      return_date_required?: boolean;
       hide_owner?: boolean;
     },
   ) =>
@@ -537,7 +535,7 @@ export const api = {
   createLoanRequest: (data: {
     copy_id: number;
     message?: string;
-    expected_return_date?: string;
+    expected_return_date: string;
   }) =>
     request<LoanRequest>("/loan-requests", {
       method: "POST",

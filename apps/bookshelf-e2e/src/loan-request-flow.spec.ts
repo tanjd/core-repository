@@ -6,14 +6,18 @@ import { E2E_TEST_USER_PASSWORD } from "./test-users";
 // apps/bookshelf/docs/loan-request-ux-fixes-spec.md, end-to-end against the
 // real backend — this is the first coverage this suite has for the
 // borrow/loan/return flow (apps/bookshelf-e2e/CLAUDE.md's "Coverage" section
-// previously called this out as untested).
+// previously called this out as untested). Also covers
+// apps/bookshelf/docs/return-date-default-spec.md: every loan now always
+// carries a return date (no more per-copy return_date_required toggle), and
+// either party can amend it after acceptance via the "Edit return date"
+// affordance (ReturnDateCell.tsx).
 //
 // All setup/verification calls hit the backend directly on :8000 (same
 // pattern as auth-helpers.ts's registerTestUser), bypassing the frontend's
 // /api proxy — these routes carry no "/api" prefix on the backend itself.
 //
 // Only two accounts (owner, borrower) are registered, once in beforeAll,
-// and reused across all four tests below — including for the "a second
+// and reused across every test below — including for the "a second
 // member" scenario, which opens a second browser context logged in as the
 // *same* borrower account rather than registering a third identity. That
 // still exercises the thing under test (does a session that isn't the one
@@ -48,7 +52,6 @@ async function createBookAndCopy(
   opts: {
     title: string;
     autoApprove?: boolean;
-    returnDateRequired?: boolean;
   },
 ): Promise<{ bookId: number; copyId: number }> {
   const bookRes = await request.post(`${BACKEND_URL}/books`, {
@@ -67,7 +70,6 @@ async function createBookAndCopy(
       book_id: book.id,
       condition: "good",
       auto_approve: opts.autoApprove ?? false,
-      return_date_required: opts.returnDateRequired ?? false,
     },
   });
   expect(
@@ -260,17 +262,23 @@ test.describe("loan request flow", () => {
     );
     expect(acceptRes.ok()).toBeTruthy();
 
-    const yesterday = new Date(Date.now() - 24 * 60 * 60 * 1000)
-      .toISOString()
-      .slice(0, 10);
+    // return-date-default-spec.md's guardrail rejects a date before today, so
+    // this can no longer backdate to yesterday to force "overdue" — today's
+    // date still qualifies, since expected_return_date parses to midnight UTC
+    // and the overdue check compares against the current (later-in-the-day)
+    // timestamp.
+    const today = new Date().toISOString().slice(0, 10);
     const dateRes = await request.patch(
       `${BACKEND_URL}/loan-requests/${pending.id}/expected-return-date`,
       {
         headers: { Authorization: `Bearer ${ownerToken}` },
-        data: { expected_return_date: yesterday },
+        data: { expected_return_date: today },
       },
     );
-    expect(dateRes.ok()).toBeTruthy();
+    expect(
+      dateRes.ok(),
+      `set return date failed: ${await dateRes.text()}`,
+    ).toBeTruthy();
 
     await page.goto("/my-requests");
     await expect(page.getByText("Overdue", { exact: true })).toBeVisible();
@@ -298,7 +306,6 @@ test.describe("loan request flow", () => {
     );
     const { bookId, copyId } = await createBookAndCopy(request, ownerToken, {
       title: `E2E Counter Date ${Date.now()}`,
-      returnDateRequired: true,
     });
 
     const proposedDate = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000)
@@ -459,5 +466,240 @@ test.describe("loan request flow", () => {
       .getByRole("link", { name: /back to catalog/i })
       .click();
     await expect(page).toHaveURL(/\/catalog(\?|$)/);
+  });
+
+  test("a borrow request left at its default proposes a return date 30 days out", async ({
+    page,
+    request,
+  }, testInfo) => {
+    test.skip(
+      testInfo.project.name === MOBILE_PROJECT,
+      "not viewport-dependent — see the header comment",
+    );
+    const { bookId, copyId } = await createBookAndCopy(request, ownerToken, {
+      title: `E2E Default Return Date ${Date.now()}`,
+    });
+
+    await login(page, borrowerEmail, E2E_TEST_USER_PASSWORD);
+    await page.goto(`/catalog/${bookId}`);
+    await page.getByRole("button", { name: "Request to Borrow" }).click();
+    // The return-date field is always shown now and prefilled to +30 days —
+    // leave it untouched to prove the default actually reaches the backend.
+    await page.getByRole("button", { name: "Send Request" }).click();
+    await expect(page.getByText("Borrow request sent!")).toBeVisible();
+
+    const listRes = await request.get(
+      `${BACKEND_URL}/loan-requests?copy_id=${copyId}`,
+      { headers: { Authorization: `Bearer ${ownerToken}` } },
+    );
+    const requests: { status: string; expected_return_date: string }[] =
+      await listRes.json();
+    const pending = requests.find((r) => r.status === "pending");
+    if (!pending) throw new Error("expected a pending request to exist");
+
+    const expectedDate = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000)
+      .toISOString()
+      .slice(0, 10);
+    expect(pending.expected_return_date.slice(0, 10)).toBe(expectedDate);
+  });
+
+  test("the copy-setup form no longer offers a return-date-required toggle", async ({
+    page,
+  }, testInfo) => {
+    test.skip(
+      testInfo.project.name === MOBILE_PROJECT,
+      "not viewport-dependent — see the header comment",
+    );
+    await login(page, ownerEmail, E2E_TEST_USER_PASSWORD);
+    await page.goto("/share");
+    await page.getByText(/Can't find your book\? Enter manually/i).click();
+    await expect(
+      page.getByRole("heading", { name: "Enter book manually" }),
+    ).toBeVisible();
+
+    // The other two CopySettings toggles are still there, confirming this
+    // assertion is looking at the right panel rather than an empty page.
+    await expect(page.getByText("Auto-approve requests")).toBeVisible();
+    await expect(page.getByText("Stay anonymous")).toBeVisible();
+    await expect(page.getByText("Require return date")).toHaveCount(0);
+  });
+
+  test("the borrower can change the return date after acceptance, and the owner is notified", async ({
+    page,
+    request,
+    browser,
+  }, testInfo) => {
+    test.skip(
+      testInfo.project.name === MOBILE_PROJECT,
+      "not viewport-dependent — see the header comment",
+    );
+    const bookTitle = `E2E Borrower Amends Date ${Date.now()}`;
+    const { bookId, copyId } = await createBookAndCopy(request, ownerToken, {
+      title: bookTitle,
+    });
+
+    await login(page, borrowerEmail, E2E_TEST_USER_PASSWORD);
+    await page.goto(`/catalog/${bookId}`);
+    await page.getByRole("button", { name: "Request to Borrow" }).click();
+    await page.getByRole("button", { name: "Send Request" }).click();
+    await expect(page.getByText("Borrow request sent!")).toBeVisible();
+
+    const listRes = await request.get(
+      `${BACKEND_URL}/loan-requests?copy_id=${copyId}`,
+      { headers: { Authorization: `Bearer ${ownerToken}` } },
+    );
+    const requests: { id: number; status: string }[] = await listRes.json();
+    const pending = requests.find((r) => r.status === "pending");
+    if (!pending) throw new Error("expected a pending request to exist");
+
+    const acceptRes = await request.patch(
+      `${BACKEND_URL}/loan-requests/${pending.id}`,
+      {
+        headers: { Authorization: `Bearer ${ownerToken}` },
+        data: { status: "accepted" },
+      },
+    );
+    expect(acceptRes.ok()).toBeTruthy();
+
+    const newDate = new Date(Date.now() + 45 * 24 * 60 * 60 * 1000)
+      .toISOString()
+      .slice(0, 10);
+
+    await page.goto("/my-requests");
+    const row = page.getByRole("row", { name: bookTitle });
+    await row.getByRole("button", { name: "Edit return date" }).click();
+    await page.locator("#edit-return-date").fill(newDate);
+    await page.getByRole("button", { name: "Save" }).click();
+    await expect(
+      page.getByText(/Return date updated — .+ has been notified/),
+    ).toBeVisible();
+    await expect(row.getByText(/Amended by .+/)).toBeVisible();
+
+    const contextOwner = await browser.newContext();
+    const ownerPage = await contextOwner.newPage();
+    await login(ownerPage, ownerEmail, E2E_TEST_USER_PASSWORD);
+    await ownerPage.goto("/notifications");
+    await expect(ownerPage.getByText("Return date changed")).toBeVisible();
+
+    await ownerPage.goto(`/my-books/${copyId}/requests`);
+    await expect(ownerPage.getByText(/Amended by .+/)).toBeVisible();
+
+    await contextOwner.close();
+  });
+
+  test("the owner can change the return date after acceptance, and the borrower is notified", async ({
+    page,
+    request,
+    browser,
+  }, testInfo) => {
+    test.skip(
+      testInfo.project.name === MOBILE_PROJECT,
+      "not viewport-dependent — see the header comment",
+    );
+    const bookTitle = `E2E Owner Amends Date ${Date.now()}`;
+    const { bookId, copyId } = await createBookAndCopy(request, ownerToken, {
+      title: bookTitle,
+    });
+
+    await login(page, borrowerEmail, E2E_TEST_USER_PASSWORD);
+    await page.goto(`/catalog/${bookId}`);
+    await page.getByRole("button", { name: "Request to Borrow" }).click();
+    await page.getByRole("button", { name: "Send Request" }).click();
+    await expect(page.getByText("Borrow request sent!")).toBeVisible();
+
+    const listRes = await request.get(
+      `${BACKEND_URL}/loan-requests?copy_id=${copyId}`,
+      { headers: { Authorization: `Bearer ${ownerToken}` } },
+    );
+    const requests: { id: number; status: string }[] = await listRes.json();
+    const pending = requests.find((r) => r.status === "pending");
+    if (!pending) throw new Error("expected a pending request to exist");
+
+    const acceptRes = await request.patch(
+      `${BACKEND_URL}/loan-requests/${pending.id}`,
+      {
+        headers: { Authorization: `Bearer ${ownerToken}` },
+        data: { status: "accepted" },
+      },
+    );
+    expect(acceptRes.ok()).toBeTruthy();
+
+    const newDate = new Date(Date.now() + 60 * 24 * 60 * 60 * 1000)
+      .toISOString()
+      .slice(0, 10);
+
+    const contextOwner = await browser.newContext();
+    const ownerPage = await contextOwner.newPage();
+    await login(ownerPage, ownerEmail, E2E_TEST_USER_PASSWORD);
+    await ownerPage.goto(`/my-books/${copyId}/requests`);
+
+    const ownerRow = ownerPage.getByRole("row", { name: /Borrower/ });
+    await ownerRow.getByRole("button", { name: "Edit return date" }).click();
+    await ownerPage.locator("#edit-return-date").fill(newDate);
+    await ownerPage.getByRole("button", { name: "Save" }).click();
+    await expect(
+      ownerPage.getByText(/Return date updated — .+ has been notified/),
+    ).toBeVisible();
+    await expect(ownerRow.getByText(/Amended by .+/)).toBeVisible();
+
+    await page.goto("/notifications");
+    await expect(page.getByText("Return date changed")).toBeVisible();
+
+    await page.goto("/my-requests");
+    const row = page.getByRole("row", { name: bookTitle });
+    await expect(row.getByText(/Amended by .+/)).toBeVisible();
+
+    await contextOwner.close();
+  });
+
+  test("changing the return date is rejected once a loan reaches a terminal status", async ({
+    request,
+  }, testInfo) => {
+    test.skip(
+      testInfo.project.name === MOBILE_PROJECT,
+      "not viewport-dependent — see the header comment",
+    );
+    const { copyId } = await createBookAndCopy(request, ownerToken, {
+      title: `E2E Terminal Date Guard ${Date.now()}`,
+    });
+
+    const borrowerLogin = await apiLogin(
+      request,
+      borrowerEmail,
+      E2E_TEST_USER_PASSWORD,
+    );
+    const tomorrow = new Date(Date.now() + 24 * 60 * 60 * 1000)
+      .toISOString()
+      .slice(0, 10);
+    const createRes = await request.post(`${BACKEND_URL}/loan-requests`, {
+      headers: { Authorization: `Bearer ${borrowerLogin.token}` },
+      data: { copy_id: copyId, expected_return_date: tomorrow },
+    });
+    expect(
+      createRes.ok(),
+      `create request failed: ${await createRes.text()}`,
+    ).toBeTruthy();
+    const created = await createRes.json();
+
+    const cancelRes = await request.patch(
+      `${BACKEND_URL}/loan-requests/${created.id}`,
+      {
+        headers: { Authorization: `Bearer ${borrowerLogin.token}` },
+        data: { status: "cancelled" },
+      },
+    );
+    expect(cancelRes.ok()).toBeTruthy();
+
+    const newDate = new Date(Date.now() + 60 * 24 * 60 * 60 * 1000)
+      .toISOString()
+      .slice(0, 10);
+    const dateRes = await request.patch(
+      `${BACKEND_URL}/loan-requests/${created.id}/expected-return-date`,
+      {
+        headers: { Authorization: `Bearer ${ownerToken}` },
+        data: { expected_return_date: newDate },
+      },
+    );
+    expect(dateRes.status()).toBe(400);
   });
 });

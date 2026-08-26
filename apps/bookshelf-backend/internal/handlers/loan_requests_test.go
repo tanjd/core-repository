@@ -51,13 +51,23 @@ func seedOwnerAndBorrower(t *testing.T, d *loanTestDeps) (owner, borrower *model
 	return owner, borrower, bookCopy
 }
 
+// newCreateLoanRequestInput builds a createLoanRequestInput for copyID with a
+// default valid expected return date — every request needs one now, so tests
+// that don't care about its exact value still need one that parses and isn't
+// in the past.
+func newCreateLoanRequestInput(copyID uint) *createLoanRequestInput {
+	in := &createLoanRequestInput{}
+	in.Body.CopyID = copyID
+	in.Body.ExpectedReturnDate = "2099-01-01"
+	return in
+}
+
 func TestCreateLoanRequest(t *testing.T) {
 	t.Run("borrower can request an available copy", func(t *testing.T) {
 		d := newLoanRequestHandler()
 		_, borrower, bookCopy := seedOwnerAndBorrower(t, d)
 
-		input := &createLoanRequestInput{}
-		input.Body.CopyID = bookCopy.ID
+		input := newCreateLoanRequestInput(bookCopy.ID)
 
 		out, err := d.handler.createLoanRequest(fakeAuthedCtx(t, borrower.ID, "user"), input)
 
@@ -74,8 +84,7 @@ func TestCreateLoanRequest(t *testing.T) {
 		d := newLoanRequestHandler()
 		owner, _, bookCopy := seedOwnerAndBorrower(t, d)
 
-		input := &createLoanRequestInput{}
-		input.Body.CopyID = bookCopy.ID
+		input := newCreateLoanRequestInput(bookCopy.ID)
 
 		_, err := d.handler.createLoanRequest(fakeAuthedCtx(t, owner.ID, "user"), input)
 
@@ -88,8 +97,7 @@ func TestCreateLoanRequest(t *testing.T) {
 		_, borrower, bookCopy := seedOwnerAndBorrower(t, d)
 		require.NoError(t, d.copies.UpdateStatus(bookCopy.ID, "requested"))
 
-		input := &createLoanRequestInput{}
-		input.Body.CopyID = bookCopy.ID
+		input := newCreateLoanRequestInput(bookCopy.ID)
 
 		_, err := d.handler.createLoanRequest(fakeAuthedCtx(t, borrower.ID, "user"), input)
 
@@ -106,8 +114,7 @@ func TestCreateLoanRequest(t *testing.T) {
 		bookCopy := &models.Copy{OwnerID: owner.ID, Owner: *owner, Book: models.Book{Title: "Auto"}, Status: "available", AutoApprove: true}
 		require.NoError(t, d.copies.Create(bookCopy))
 
-		input := &createLoanRequestInput{}
-		input.Body.CopyID = bookCopy.ID
+		input := newCreateLoanRequestInput(bookCopy.ID)
 
 		out, err := d.handler.createLoanRequest(fakeAuthedCtx(t, borrower.ID, "user"), input)
 
@@ -116,17 +123,26 @@ func TestCreateLoanRequest(t *testing.T) {
 		assert.NotNil(t, out.Body.RespondedAt)
 	})
 
-	t.Run("return date required but not supplied is rejected", func(t *testing.T) {
+	t.Run("missing return date is rejected", func(t *testing.T) {
 		d := newLoanRequestHandler()
-		owner := &models.User{Name: "Owner", Email: "owner@example.com"}
-		require.NoError(t, d.users.Create(owner))
-		borrower := &models.User{Name: "Borrower", Email: "borrower@example.com"}
-		require.NoError(t, d.users.Create(borrower))
-		bookCopy := &models.Copy{OwnerID: owner.ID, Owner: *owner, Book: models.Book{Title: "Dated"}, Status: "available", ReturnDateRequired: true}
-		require.NoError(t, d.copies.Create(bookCopy))
+		_, borrower, bookCopy := seedOwnerAndBorrower(t, d)
 
 		input := &createLoanRequestInput{}
 		input.Body.CopyID = bookCopy.ID
+
+		_, err := d.handler.createLoanRequest(fakeAuthedCtx(t, borrower.ID, "user"), input)
+
+		require.Error(t, err)
+		assertStatus(t, err, 400)
+	})
+
+	t.Run("return date in the past is rejected", func(t *testing.T) {
+		d := newLoanRequestHandler()
+		_, borrower, bookCopy := seedOwnerAndBorrower(t, d)
+
+		input := &createLoanRequestInput{}
+		input.Body.CopyID = bookCopy.ID
+		input.Body.ExpectedReturnDate = "2000-01-01"
 
 		_, err := d.handler.createLoanRequest(fakeAuthedCtx(t, borrower.ID, "user"), input)
 
@@ -139,8 +155,7 @@ func TestCreateLoanRequest(t *testing.T) {
 		require.NoError(t, d.admin.UpsertSetting("max_active_loans", "1"))
 		_, borrower, bookCopy1 := seedOwnerAndBorrower(t, d)
 
-		input1 := &createLoanRequestInput{}
-		input1.Body.CopyID = bookCopy1.ID
+		input1 := newCreateLoanRequestInput(bookCopy1.ID)
 		_, err := d.handler.createLoanRequest(fakeAuthedCtx(t, borrower.ID, "user"), input1)
 		require.NoError(t, err)
 
@@ -149,8 +164,7 @@ func TestCreateLoanRequest(t *testing.T) {
 		bookCopy2 := &models.Copy{OwnerID: owner2.ID, Owner: *owner2, Book: models.Book{Title: "Second"}, Status: "available"}
 		require.NoError(t, d.copies.Create(bookCopy2))
 
-		input2 := &createLoanRequestInput{}
-		input2.Body.CopyID = bookCopy2.ID
+		input2 := newCreateLoanRequestInput(bookCopy2.ID)
 		_, err = d.handler.createLoanRequest(fakeAuthedCtx(t, borrower.ID, "user"), input2)
 
 		require.Error(t, err)
@@ -163,8 +177,7 @@ func TestCreateLoanRequest(t *testing.T) {
 		_, borrower, bookCopy := seedOwnerAndBorrower(t, d)
 		assert.False(t, borrower.Verified)
 
-		input := &createLoanRequestInput{}
-		input.Body.CopyID = bookCopy.ID
+		input := newCreateLoanRequestInput(bookCopy.ID)
 		_, err := d.handler.createLoanRequest(fakeAuthedCtx(t, borrower.ID, "user"), input)
 
 		require.Error(t, err)
@@ -176,8 +189,7 @@ func TestCreateLoanRequest(t *testing.T) {
 		require.NoError(t, d.admin.UpsertSetting("verification_min_books_shared", "1"))
 		_, borrower, bookCopy := seedOwnerAndBorrower(t, d)
 
-		input := &createLoanRequestInput{}
-		input.Body.CopyID = bookCopy.ID
+		input := newCreateLoanRequestInput(bookCopy.ID)
 		_, err := d.handler.createLoanRequest(fakeAuthedCtx(t, borrower.ID, "user"), input)
 
 		require.Error(t, err)
@@ -191,8 +203,7 @@ func TestUpdateLoanRequest_AcceptRejectsCompetingRequests(t *testing.T) {
 	borrower2 := &models.User{Name: "Borrower2", Email: "borrower2@example.com"}
 	require.NoError(t, d.users.Create(borrower2))
 
-	in1 := &createLoanRequestInput{}
-	in1.Body.CopyID = bookCopy.ID
+	in1 := newCreateLoanRequestInput(bookCopy.ID)
 	out1, err := d.handler.createLoanRequest(fakeAuthedCtx(t, borrower1.ID, "user"), in1)
 	require.NoError(t, err)
 
@@ -223,8 +234,7 @@ func TestUpdateLoanRequest_OnlyOwnerCanAcceptOrReject(t *testing.T) {
 	d := newLoanRequestHandler()
 	_, borrower, bookCopy := seedOwnerAndBorrower(t, d)
 
-	input := &createLoanRequestInput{}
-	input.Body.CopyID = bookCopy.ID
+	input := newCreateLoanRequestInput(bookCopy.ID)
 	out, err := d.handler.createLoanRequest(fakeAuthedCtx(t, borrower.ID, "user"), input)
 	require.NoError(t, err)
 
@@ -241,8 +251,7 @@ func TestUpdateLoanRequest_CancelByBorrowerFreesTheCopy(t *testing.T) {
 	d := newLoanRequestHandler()
 	_, borrower, bookCopy := seedOwnerAndBorrower(t, d)
 
-	input := &createLoanRequestInput{}
-	input.Body.CopyID = bookCopy.ID
+	input := newCreateLoanRequestInput(bookCopy.ID)
 	out, err := d.handler.createLoanRequest(fakeAuthedCtx(t, borrower.ID, "user"), input)
 	require.NoError(t, err)
 
@@ -263,8 +272,7 @@ func TestUpdateLoanRequest_ReturnUpdatesConditionAndFreesCopy(t *testing.T) {
 	d := newLoanRequestHandler()
 	owner, borrower, bookCopy := seedOwnerAndBorrower(t, d)
 
-	createInput := &createLoanRequestInput{}
-	createInput.Body.CopyID = bookCopy.ID
+	createInput := newCreateLoanRequestInput(bookCopy.ID)
 	created, err := d.handler.createLoanRequest(fakeAuthedCtx(t, borrower.ID, "user"), createInput)
 	require.NoError(t, err)
 
@@ -293,8 +301,7 @@ func TestUpdateLoanRequest_BorrowerCanMarkReturned(t *testing.T) {
 	d := newLoanRequestHandler()
 	owner, borrower, bookCopy := seedOwnerAndBorrower(t, d)
 
-	createInput := &createLoanRequestInput{}
-	createInput.Body.CopyID = bookCopy.ID
+	createInput := newCreateLoanRequestInput(bookCopy.ID)
 	created, err := d.handler.createLoanRequest(fakeAuthedCtx(t, borrower.ID, "user"), createInput)
 	require.NoError(t, err)
 
@@ -323,8 +330,7 @@ func TestUpdateLoanRequest_ReturnByStrangerIsForbidden(t *testing.T) {
 	stranger := &models.User{Name: "Stranger", Email: "stranger@example.com"}
 	require.NoError(t, d.users.Create(stranger))
 
-	createInput := &createLoanRequestInput{}
-	createInput.Body.CopyID = bookCopy.ID
+	createInput := newCreateLoanRequestInput(bookCopy.ID)
 	created, err := d.handler.createLoanRequest(fakeAuthedCtx(t, borrower.ID, "user"), createInput)
 	require.NoError(t, err)
 
@@ -345,8 +351,7 @@ func TestUpdateLoanRequest_UndoReturn_OwnerOnly(t *testing.T) {
 	d := newLoanRequestHandler()
 	owner, borrower, bookCopy := seedOwnerAndBorrower(t, d)
 
-	createInput := &createLoanRequestInput{}
-	createInput.Body.CopyID = bookCopy.ID
+	createInput := newCreateLoanRequestInput(bookCopy.ID)
 	created, err := d.handler.createLoanRequest(fakeAuthedCtx(t, borrower.ID, "user"), createInput)
 	require.NoError(t, err)
 
@@ -388,8 +393,7 @@ func TestUpdateLoanRequest_UndoReturn_BlockedIfCopyReloaned(t *testing.T) {
 	borrower2 := &models.User{Name: "Borrower2", Email: "borrower2@example.com"}
 	require.NoError(t, d.users.Create(borrower2))
 
-	createInput := &createLoanRequestInput{}
-	createInput.Body.CopyID = bookCopy.ID
+	createInput := newCreateLoanRequestInput(bookCopy.ID)
 	created, err := d.handler.createLoanRequest(fakeAuthedCtx(t, borrower.ID, "user"), createInput)
 	require.NoError(t, err)
 
@@ -404,8 +408,7 @@ func TestUpdateLoanRequest_UndoReturn_BlockedIfCopyReloaned(t *testing.T) {
 	require.NoError(t, err)
 
 	// A different borrower requests and gets accepted for the now-available copy.
-	create2 := &createLoanRequestInput{}
-	create2.Body.CopyID = bookCopy.ID
+	create2 := newCreateLoanRequestInput(bookCopy.ID)
 	created2, err := d.handler.createLoanRequest(fakeAuthedCtx(t, borrower2.ID, "user"), create2)
 	require.NoError(t, err)
 	accept2 := &updateLoanRequestInput{ID: created2.Body.ID}
@@ -431,8 +434,7 @@ func TestUpdateExpectedReturnDate_EitherPartyWhileAccepted(t *testing.T) {
 	stranger := &models.User{Name: "Stranger", Email: "stranger@example.com"}
 	require.NoError(t, d.users.Create(stranger))
 
-	createInput := &createLoanRequestInput{}
-	createInput.Body.CopyID = bookCopy.ID
+	createInput := newCreateLoanRequestInput(bookCopy.ID)
 	created, err := d.handler.createLoanRequest(fakeAuthedCtx(t, borrower.ID, "user"), createInput)
 	require.NoError(t, err)
 
@@ -470,7 +472,6 @@ func TestUpdateExpectedReturnDate_EitherPartyWhileAccepted(t *testing.T) {
 		dateInput.Body.ExpectedReturnDate = "2026-09-01"
 		result, err := d.handler.updateExpectedReturnDate(fakeAuthedCtx(t, borrower.ID, "user"), dateInput)
 		require.NoError(t, err)
-		require.NotNil(t, result.Body.ExpectedReturnDate)
 		assert.Equal(t, "2026-09-01", result.Body.ExpectedReturnDate.Format("2006-01-02"))
 	})
 
@@ -479,7 +480,6 @@ func TestUpdateExpectedReturnDate_EitherPartyWhileAccepted(t *testing.T) {
 		dateInput.Body.ExpectedReturnDate = "2026-10-15"
 		result, err := d.handler.updateExpectedReturnDate(fakeAuthedCtx(t, owner.ID, "user"), dateInput)
 		require.NoError(t, err)
-		require.NotNil(t, result.Body.ExpectedReturnDate)
 		assert.Equal(t, "2026-10-15", result.Body.ExpectedReturnDate.Format("2006-01-02"))
 	})
 }
@@ -488,8 +488,7 @@ func TestUpdateLoanRequest_InvalidTransition(t *testing.T) {
 	d := newLoanRequestHandler()
 	owner, borrower, bookCopy := seedOwnerAndBorrower(t, d)
 
-	createInput := &createLoanRequestInput{}
-	createInput.Body.CopyID = bookCopy.ID
+	createInput := newCreateLoanRequestInput(bookCopy.ID)
 	created, err := d.handler.createLoanRequest(fakeAuthedCtx(t, borrower.ID, "user"), createInput)
 	require.NoError(t, err)
 
@@ -512,8 +511,7 @@ func TestGetLoanRequest_ContactInfoOnlyRevealedWhenAccepted(t *testing.T) {
 	bookCopy.Owner = *owner
 	require.NoError(t, d.copies.Save(bookCopy))
 
-	createInput := &createLoanRequestInput{}
-	createInput.Body.CopyID = bookCopy.ID
+	createInput := newCreateLoanRequestInput(bookCopy.ID)
 	created, err := d.handler.createLoanRequest(fakeAuthedCtx(t, borrower.ID, "user"), createInput)
 	require.NoError(t, err)
 
@@ -544,8 +542,7 @@ func TestGetLoanRequest_AccessDeniedToUninvolvedUser(t *testing.T) {
 	stranger := &models.User{Name: "Stranger", Email: "stranger@example.com"}
 	require.NoError(t, d.users.Create(stranger))
 
-	createInput := &createLoanRequestInput{}
-	createInput.Body.CopyID = bookCopy.ID
+	createInput := newCreateLoanRequestInput(bookCopy.ID)
 	created, err := d.handler.createLoanRequest(fakeAuthedCtx(t, borrower.ID, "user"), createInput)
 	require.NoError(t, err)
 
@@ -560,8 +557,7 @@ func TestListLoanRequests_OnlyOwnerCanList(t *testing.T) {
 	d := newLoanRequestHandler()
 	owner, borrower, bookCopy := seedOwnerAndBorrower(t, d)
 
-	createInput := &createLoanRequestInput{}
-	createInput.Body.CopyID = bookCopy.ID
+	createInput := newCreateLoanRequestInput(bookCopy.ID)
 	_, err := d.handler.createLoanRequest(fakeAuthedCtx(t, borrower.ID, "user"), createInput)
 	require.NoError(t, err)
 
@@ -590,8 +586,7 @@ func TestListLoanRequests_ContactInfoOnlyRevealedWhenAccepted(t *testing.T) {
 	bookCopy.Owner = *owner
 	require.NoError(t, d.copies.Save(bookCopy))
 
-	createInput := &createLoanRequestInput{}
-	createInput.Body.CopyID = bookCopy.ID
+	createInput := newCreateLoanRequestInput(bookCopy.ID)
 	created, err := d.handler.createLoanRequest(fakeAuthedCtx(t, borrower.ID, "user"), createInput)
 	require.NoError(t, err)
 
@@ -630,8 +625,7 @@ func TestListMine_ViewFilter(t *testing.T) {
 	copy2, copy3, copy4, copy5 := makeCopy(), makeCopy(), makeCopy(), makeCopy()
 
 	create := func(c *models.Copy) uint {
-		in := &createLoanRequestInput{}
-		in.Body.CopyID = c.ID
+		in := newCreateLoanRequestInput(c.ID)
 		out, err := d.handler.createLoanRequest(fakeAuthedCtx(t, borrower.ID, "user"), in)
 		require.NoError(t, err)
 		return out.Body.ID
@@ -698,8 +692,7 @@ func TestListMineActive(t *testing.T) {
 	pendingCopy := &models.Copy{OwnerID: owner.ID, Owner: *owner, Book: models.Book{Title: "Pending Book"}, Status: "available"}
 	require.NoError(t, d.copies.Create(pendingCopy))
 
-	createInput := &createLoanRequestInput{}
-	createInput.Body.CopyID = bookCopy.ID
+	createInput := newCreateLoanRequestInput(bookCopy.ID)
 	created, err := d.handler.createLoanRequest(fakeAuthedCtx(t, borrower.ID, "user"), createInput)
 	require.NoError(t, err)
 
@@ -708,8 +701,7 @@ func TestListMineActive(t *testing.T) {
 	_, err = d.handler.updateLoanRequest(fakeAuthedCtx(t, owner.ID, "user"), acceptInput)
 	require.NoError(t, err)
 
-	pendingInput := &createLoanRequestInput{}
-	pendingInput.Body.CopyID = pendingCopy.ID
+	pendingInput := newCreateLoanRequestInput(pendingCopy.ID)
 	_, err = d.handler.createLoanRequest(fakeAuthedCtx(t, borrower.ID, "user"), pendingInput)
 	require.NoError(t, err)
 

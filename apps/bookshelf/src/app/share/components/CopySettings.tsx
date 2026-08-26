@@ -2,17 +2,13 @@ import { Switch } from "@/components/ui/switch";
 
 export function CopySettings({
   autoApprove,
-  returnDateRequired,
   hideOwner,
   onAutoApproveChange,
-  onReturnDateRequiredChange,
   onHideOwnerChange,
 }: {
   autoApprove: boolean;
-  returnDateRequired: boolean;
   hideOwner: boolean;
   onAutoApproveChange: (v: boolean) => void;
-  onReturnDateRequiredChange: (v: boolean) => void;
   onHideOwnerChange: (v: boolean) => void;
 }) {
   return (
@@ -25,14 +21,6 @@ export function CopySettings({
             "Loan requests are accepted automatically without your review",
           checked: autoApprove,
           onChange: onAutoApproveChange,
-        },
-        {
-          id: "return-date",
-          label: "Require return date",
-          description:
-            "Borrowers must specify when they plan to return the book",
-          checked: returnDateRequired,
-          onChange: onReturnDateRequiredChange,
         },
         {
           id: "hide-owner",

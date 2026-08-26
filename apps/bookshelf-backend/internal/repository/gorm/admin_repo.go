@@ -130,7 +130,7 @@ func (r *AdminRepository) GetDashboardStats() (*repository.DashboardStats, error
 		return nil, err
 	}
 	if err := r.db.Model(&models.LoanRequest{}).
-		Where("status = ? AND expected_return_date IS NOT NULL AND expected_return_date < ?", "accepted", time.Now()).
+		Where("status = ? AND expected_return_date < ?", "accepted", time.Now()).
 		Count(&stats.OverdueCount).Error; err != nil {
 		return nil, err
 	}
