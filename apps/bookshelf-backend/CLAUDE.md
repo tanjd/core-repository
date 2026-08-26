@@ -124,12 +124,11 @@ key/Google Books ID), so a title always carries a resolvable key even before it 
   otherwise huma's wildcard swallows the literal paths.
 
 `LoanRequestRepository.ListActiveByBorrowerID` (added alongside this feature, for the frontend's
-"currently borrowed" cards) sorts with
-`Order("expected_return_date IS NULL, expected_return_date ASC, requested_at ASC")` — a
-SQLite-specific NULLS-last idiom relying on boolean expressions evaluating to 0/1, not portable
-as-is to a different SQL dialect. `ListByBorrowerIDPaginated` also gained an optional
-`statuses []string` filter (empty/nil = no filter) so the frontend can split "current" vs.
-"history" tabs without new endpoints.
+"currently borrowed" cards) sorts with `Order("expected_return_date ASC, requested_at ASC")` —
+no NULLs-last handling needed since `return-date-default-spec.md` made `expected_return_date`
+`NOT NULL`. `ListByBorrowerIDPaginated` also gained an optional `statuses []string` filter
+(empty/nil = no filter) so the frontend can split "current" vs. "history" tabs without new
+endpoints.
 
 ## Backup and restore
 

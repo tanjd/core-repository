@@ -886,7 +886,7 @@ func (r *LoanRequestRepository) ListByBorrowerIDPaginated(borrowerID uint, statu
 }
 
 // ListActiveByBorrowerID returns borrowerID's accepted loan requests,
-// mimicking the GORM implementation's due-date-ascending / NULLs-last order.
+// mimicking the GORM implementation's due-date-ascending order.
 func (r *LoanRequestRepository) ListActiveByBorrowerID(borrowerID uint) ([]models.LoanRequest, error) {
 	r.mu.Lock()
 	out := []models.LoanRequest{}
@@ -901,16 +901,10 @@ func (r *LoanRequestRepository) ListActiveByBorrowerID(borrowerID uint) ([]model
 	}
 	sort.Slice(out, func(i, j int) bool {
 		a, b := out[i].ExpectedReturnDate, out[j].ExpectedReturnDate
-		if a == nil && b == nil {
+		if a.Equal(b) {
 			return out[i].RequestedAt.Before(out[j].RequestedAt)
 		}
-		if a == nil {
-			return false
-		}
-		if b == nil {
-			return true
-		}
-		return a.Before(*b)
+		return a.Before(b)
 	})
 	return out, nil
 }

@@ -1,4 +1,4 @@
-## Status: Draft — awaiting review · Scope: `apps/bookshelf` + `apps/bookshelf-backend` · Depends on: `Copy`, `LoanRequest` (existing — schema change to `Copy`, no new tables)
+## Status: Implemented · Scope: `apps/bookshelf` + `apps/bookshelf-backend` · Depends on: `Copy`, `LoanRequest` (existing — schema change to `Copy`, no new tables)
 
 Every loan gets a real expected return date. The per-copy `return_date_required` opt-out goes away,
 the borrower-side field is always shown with a sensible default of **30 days**, and the accept-side
@@ -328,15 +328,17 @@ as one-off SQL against the existing `loan_requests` table — no dashboard neede
 
 ## Rollout
 
-- **Comms**: one-time in-app announcement (using the existing `Announcement` machinery — see
-  `apps/bookshelf/src/lib/announcements.ts`) explaining that every borrow now has a soft return
-  date defaulting to 30 days. Text drafted by product; targets both borrowers and owners.
-- **Owner-facing note in copy-setup form** during the first release cycle after the toggle is
-  removed: _"Return dates are now on for every borrow, defaulting to 30 days. You can still
-  counter the date when you accept."_ Removed one release later.
-- **Pending-loan backfill notification**: any borrower whose pending loan got a backfilled date
-  gets a notification (existing `Notification` type, add a new `type` variant
-  `expected_return_date_backfilled`). Owner sees the same on their side.
+**Descoped at build time.** This is a single-admin self-hosted app — the person implementing this
+spec and the person who'd run any comms are the same person. Reviewed and cut:
+
+- **Comms**: no code built. `Announcement` is already admin-authored content via
+  `/admin/announcements` — if a rollout announcement is wanted, it's written by hand post-deploy,
+  not something this spec needs to generate.
+- **Owner-facing note in copy-setup form**: cut. Not worth throwaway code (add-then-remove-next-release)
+  for a low-traffic single-community app.
+- **Pending-loan backfill notification** (`expected_return_date_backfilled`): cut. A silent 30-day
+  backfill on rare, short-lived pending loans is acceptable — one less notification type and
+  migration-triggered send path to build and test.
 
 ## Critical files
 
@@ -374,27 +376,19 @@ expected_return_date IS NULL` — should be 0.
   `COUNT(*) FROM loan_requests WHERE expected_return_date_changed_at IS NOT NULL`. If it's zero
   after a month of loans, the affordance is probably dead code and can be retired.
 
-## Open questions for the reviewer
+## Open questions — resolved
 
-1. **Precise copy-setup form path.** Confirm the file/component where owners currently see the
-   `return_date_required` toggle so this spec can name it precisely in the build steps.
-2. **Backfill notification wording.** Do we want to email/notify borrowers with pending loans
-   about the backfilled date, or is a silent 30-day default acceptable given how rarely a loan
-   sits in `pending` for more than a few days?
-3. **Announcement timing.** In-app announcement one week before the change, at the change, or
-   both? Recommend both — pre-announce to owners (who need to know their setup form is changing),
-   at-announce to borrowers (who see the new required field).
-4. **Frontend fallback for legacy `return_date_required` in cached responses.** Any client cache
-   or service-worker layer that would keep the old field alive briefly? If yes, plan a cache
-   bust; if no, ignore.
-5. **Notification cadence for post-accept date changes.** The spec sends one notification per
-   change with no throttling. If two parties both edit the date within seconds (which shouldn't
-   happen in practice but is theoretically possible), each gets a notification for the other's
-   change. Acceptable, or worth a 5-minute debounce? Recommend acceptable — the audit trail is
-   the source of truth; notifications are just prompts.
+1. **Precise copy-setup form path.** `src/app/share/components/CopySettings.tsx` (the toggle
+   grid shared by `share/page.tsx`'s search and manual-entry flows and `share/scan/page.tsx`).
+   The copy-edit dialog on `src/app/my-books/page.tsx` had its own duplicate checkbox, also
+   removed.
+2. **Backfill notification wording.** Skipped — no `expected_return_date_backfilled` type was
+   built. See "Rollout" above.
+3. **Announcement timing.** Moot — the in-app announcement itself was descoped. See "Rollout"
+   above.
+4. **Frontend fallback for legacy `return_date_required` in cached responses.** No service worker
+   or client cache layer exists in this app — confirmed by grep, no action needed.
+5. **Notification cadence for post-accept date changes.** Implemented as recommended: one
+   notification per change, no debounce.
 6. **Should the post-accept edit affordance also be available while the loan is `pending`?**
-   Currently gated to `accepted` only. Argument for opening it up: a borrower might realise
-   mid-negotiation that their proposed date was wrong. Argument against: `pending` already has
-   its own negotiation shape (owner counters on accept), and adding a second edit path muddles
-   ownership of the pre-accept date. Recommend keeping `accepted`-only for v1; revisit if
-   borrowers report needing it.
+   Implemented as recommended: `accepted`-only for v1.

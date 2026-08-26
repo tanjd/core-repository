@@ -196,25 +196,30 @@ func TestLoanRequestRepository_ListActiveByBorrowerID(t *testing.T) {
 	}
 
 	dueSoon := time.Now().Add(3 * 24 * time.Hour)
-	withDueDate := newCopy()
+	dueSoonCopy := newCopy()
 	require.NoError(t, loanReqs.Create(&models.LoanRequest{
-		CopyID: withDueDate.ID, BorrowerID: borrower.ID, Status: "accepted", ExpectedReturnDate: &dueSoon,
+		CopyID: dueSoonCopy.ID, BorrowerID: borrower.ID, Status: "accepted", ExpectedReturnDate: dueSoon,
 	}))
 
-	noDueDate := newCopy()
+	dueLater := time.Now().Add(30 * 24 * time.Hour)
+	dueLaterCopy := newCopy()
 	require.NoError(t, loanReqs.Create(&models.LoanRequest{
-		CopyID: noDueDate.ID, BorrowerID: borrower.ID, Status: "accepted",
+		CopyID: dueLaterCopy.ID, BorrowerID: borrower.ID, Status: "accepted", ExpectedReturnDate: dueLater,
 	}))
 
 	pendingCopy := newCopy()
-	require.NoError(t, loanReqs.Create(&models.LoanRequest{CopyID: pendingCopy.ID, BorrowerID: borrower.ID, Status: "pending"}))
+	require.NoError(t, loanReqs.Create(&models.LoanRequest{
+		CopyID: pendingCopy.ID, BorrowerID: borrower.ID, Status: "pending", ExpectedReturnDate: dueSoon,
+	}))
 
 	returnedCopy := newCopy()
-	require.NoError(t, loanReqs.Create(&models.LoanRequest{CopyID: returnedCopy.ID, BorrowerID: borrower.ID, Status: "returned"}))
+	require.NoError(t, loanReqs.Create(&models.LoanRequest{
+		CopyID: returnedCopy.ID, BorrowerID: borrower.ID, Status: "returned", ExpectedReturnDate: dueSoon,
+	}))
 
 	active, err := loanReqs.ListActiveByBorrowerID(borrower.ID)
 	require.NoError(t, err)
 	require.Len(t, active, 2, "only accepted loans are active")
-	assert.Equal(t, withDueDate.ID, active[0].CopyID, "the loan with a due date sorts before the one with no due date")
-	assert.Equal(t, noDueDate.ID, active[1].CopyID)
+	assert.Equal(t, dueSoonCopy.ID, active[0].CopyID, "the loan due sooner sorts first")
+	assert.Equal(t, dueLaterCopy.ID, active[1].CopyID)
 }

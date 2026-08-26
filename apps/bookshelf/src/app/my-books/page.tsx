@@ -157,7 +157,6 @@ export default function MyBooksPage() {
   const [editNotes, setEditNotes] = useState("");
   const [editStatus, setEditStatus] = useState<string>("available");
   const [editAutoApprove, setEditAutoApprove] = useState(false);
-  const [editReturnDateRequired, setEditReturnDateRequired] = useState(false);
   const [editHideOwner, setEditHideOwner] = useState(false);
   const [editSubmitting, setEditSubmitting] = useState(false);
 
@@ -286,7 +285,6 @@ export default function MyBooksPage() {
     setEditNotes(copy.notes ?? "");
     setEditStatus(copy.status);
     setEditAutoApprove(copy.auto_approve ?? false);
-    setEditReturnDateRequired(copy.return_date_required ?? false);
     setEditHideOwner(copy.hide_owner ?? false);
   }
 
@@ -299,7 +297,6 @@ export default function MyBooksPage() {
         notes: editNotes.trim(),
         status: editStatus,
         auto_approve: editAutoApprove,
-        return_date_required: editReturnDateRequired,
         hide_owner: editHideOwner,
       });
       toast.success("Copy updated");
@@ -923,19 +920,6 @@ export default function MyBooksPage() {
                   className="text-sm font-normal cursor-pointer"
                 >
                   Auto-approve if available
-                </Label>
-              </div>
-              <div className="flex items-center gap-2">
-                <Checkbox
-                  id="edit-return-date-required"
-                  checked={editReturnDateRequired}
-                  onCheckedChange={(c) => setEditReturnDateRequired(c === true)}
-                />
-                <Label
-                  htmlFor="edit-return-date-required"
-                  className="text-sm font-normal cursor-pointer"
-                >
-                  Require return date from borrower
                 </Label>
               </div>
               <div className="flex items-center gap-2">

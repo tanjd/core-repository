@@ -311,3 +311,24 @@ func (w *LoanWorkflow) OnReturnUndone(ctx context.Context, lr *models.LoanReques
 	}
 	return nil
 }
+
+// OnExpectedReturnDateChanged fires when either party amends the agreed
+// return date on an accepted loan (see updateExpectedReturnDate). It notifies
+// whichever party did *not* make the change — a bell-only nudge, no email,
+// since this is a lightweight field edit rather than a lifecycle event.
+func (w *LoanWorkflow) OnExpectedReturnDateChanged(ctx context.Context, lr *models.LoanRequest, changedBy uint) error {
+	recipientID := lr.BorrowerID
+	if changedBy == lr.BorrowerID {
+		recipientID = lr.Copy.OwnerID
+	}
+
+	n := models.Notification{
+		RecipientID:   recipientID,
+		Type:          "expected_return_date_changed",
+		LoanRequestID: &lr.ID,
+	}
+	if err := w.notifs.Create(&n); err != nil {
+		zerolog.Ctx(ctx).Warn().Err(err).Msg("OnExpectedReturnDateChanged: create notification")
+	}
+	return nil
+}

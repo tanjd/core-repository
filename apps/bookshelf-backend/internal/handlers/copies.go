@@ -55,12 +55,11 @@ func NewCopyHandler(
 
 type createCopyInput struct {
 	Body struct {
-		BookID             uint   `json:"book_id" required:"true" minimum:"1" doc:"ID of the book"`
-		Condition          string `json:"condition,omitempty" doc:"Physical condition: good, fair, or worn"`
-		Notes              string `json:"notes,omitempty" doc:"Optional notes visible to borrowers"`
-		AutoApprove        *bool  `json:"auto_approve,omitempty" doc:"Automatically accept the first request"`
-		ReturnDateRequired *bool  `json:"return_date_required,omitempty" doc:"Require borrower to provide an expected return date"`
-		HideOwner          *bool  `json:"hide_owner,omitempty" doc:"Hide your identity from borrowers (shown as anonymous)"`
+		BookID      uint   `json:"book_id" required:"true" minimum:"1" doc:"ID of the book"`
+		Condition   string `json:"condition,omitempty" doc:"Physical condition: good, fair, or worn"`
+		Notes       string `json:"notes,omitempty" doc:"Optional notes visible to borrowers"`
+		AutoApprove *bool  `json:"auto_approve,omitempty" doc:"Automatically accept the first request"`
+		HideOwner   *bool  `json:"hide_owner,omitempty" doc:"Hide your identity from borrowers (shown as anonymous)"`
 	}
 }
 
@@ -69,12 +68,11 @@ type createCopyOutput struct{ Body models.Copy }
 type updateCopyInput struct {
 	ID   uint `path:"id" doc:"Copy ID"`
 	Body struct {
-		Condition          *string `json:"condition,omitempty" doc:"Physical condition: good, fair, or worn"`
-		Notes              *string `json:"notes,omitempty" doc:"Notes visible to borrowers"`
-		Status             *string `json:"status,omitempty" doc:"Status: available or unavailable"`
-		AutoApprove        *bool   `json:"auto_approve,omitempty" doc:"Automatically accept the first request"`
-		ReturnDateRequired *bool   `json:"return_date_required,omitempty" doc:"Require borrower to provide an expected return date"`
-		HideOwner          *bool   `json:"hide_owner,omitempty" doc:"Hide your identity from borrowers (shown as anonymous)"`
+		Condition   *string `json:"condition,omitempty" doc:"Physical condition: good, fair, or worn"`
+		Notes       *string `json:"notes,omitempty" doc:"Notes visible to borrowers"`
+		Status      *string `json:"status,omitempty" doc:"Status: available or unavailable"`
+		AutoApprove *bool   `json:"auto_approve,omitempty" doc:"Automatically accept the first request"`
+		HideOwner   *bool   `json:"hide_owner,omitempty" doc:"Hide your identity from borrowers (shown as anonymous)"`
 	}
 }
 
@@ -226,9 +224,6 @@ func (h *CopyHandler) createCopy(ctx context.Context, input *createCopyInput) (*
 	if input.Body.AutoApprove != nil {
 		bookCopy.AutoApprove = *input.Body.AutoApprove
 	}
-	if input.Body.ReturnDateRequired != nil {
-		bookCopy.ReturnDateRequired = *input.Body.ReturnDateRequired
-	}
 	if input.Body.HideOwner != nil {
 		bookCopy.HideOwner = *input.Body.HideOwner
 	}
@@ -268,9 +263,6 @@ func (h *CopyHandler) updateCopy(ctx context.Context, input *updateCopyInput) (*
 	}
 	if input.Body.AutoApprove != nil {
 		bookCopy.AutoApprove = *input.Body.AutoApprove
-	}
-	if input.Body.ReturnDateRequired != nil {
-		bookCopy.ReturnDateRequired = *input.Body.ReturnDateRequired
 	}
 	if input.Body.HideOwner != nil {
 		bookCopy.HideOwner = *input.Body.HideOwner

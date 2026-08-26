@@ -70,7 +70,6 @@ export default function SharePage() {
   const [condition, setCondition] = useState<Condition>("good");
   const [notes, setNotes] = useState("");
   const [autoApprove, setAutoApprove] = useState(false);
-  const [returnDateRequired, setReturnDateRequired] = useState(false);
   const [hideOwner, setHideOwner] = useState(false);
   const [submitting, setSubmitting] = useState(false);
 
@@ -127,7 +126,6 @@ export default function SharePage() {
         condition,
         notes: notes.trim() || undefined,
         auto_approve: autoApprove || undefined,
-        return_date_required: returnDateRequired || undefined,
         hide_owner: hideOwner || undefined,
       });
 
@@ -147,8 +145,6 @@ export default function SharePage() {
   const [manualCondition, setManualCondition] = useState<Condition>("good");
   const [manualNotes, setManualNotes] = useState("");
   const [manualAutoApprove, setManualAutoApprove] = useState(false);
-  const [manualReturnDateRequired, setManualReturnDateRequired] =
-    useState(false);
   const [manualHideOwner, setManualHideOwner] = useState(false);
   const [manualSubmitting, setManualSubmitting] = useState(false);
 
@@ -169,7 +165,6 @@ export default function SharePage() {
         condition: manualCondition,
         notes: manualNotes.trim() || undefined,
         auto_approve: manualAutoApprove || undefined,
-        return_date_required: manualReturnDateRequired || undefined,
         hide_owner: manualHideOwner || undefined,
       });
       toast.success("Book shared!");
@@ -277,10 +272,8 @@ export default function SharePage() {
 
                 <CopySettings
                   autoApprove={manualAutoApprove}
-                  returnDateRequired={manualReturnDateRequired}
                   hideOwner={manualHideOwner}
                   onAutoApproveChange={setManualAutoApprove}
-                  onReturnDateRequiredChange={setManualReturnDateRequired}
                   onHideOwnerChange={setManualHideOwner}
                 />
               </div>
@@ -383,10 +376,8 @@ export default function SharePage() {
 
               <CopySettings
                 autoApprove={autoApprove}
-                returnDateRequired={returnDateRequired}
                 hideOwner={hideOwner}
                 onAutoApproveChange={setAutoApprove}
-                onReturnDateRequiredChange={setReturnDateRequired}
                 onHideOwnerChange={setHideOwner}
               />
 

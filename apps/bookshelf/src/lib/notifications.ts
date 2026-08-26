@@ -14,6 +14,7 @@ export const notificationTypeLabel: Record<Notification["type"], string> = {
   wishlist_fulfilled: "A book you wanted is available",
   user_pending_approval: "New user awaiting approval",
   user_approved: "Your account has been approved",
+  expected_return_date_changed: "Return date changed",
 };
 
 // The currently logged-in user's id, as stashed in localStorage at login
@@ -62,10 +63,13 @@ export async function notificationDestination(
       return "/my-books";
     }
   }
-  if (n.type === "marked_returned") {
-    // Either party can now trigger a return, so the recipient here might be
-    // the owner (if the borrower returned it) rather than always the
-    // borrower — route each to their own view of the loan.
+  if (
+    n.type === "marked_returned" ||
+    n.type === "expected_return_date_changed"
+  ) {
+    // Either party can trigger a return or a return-date change, so the
+    // recipient here might be the owner or the borrower — route each to
+    // their own view of the loan.
     const currentUserId = currentUserID();
     if (currentUserId !== null) {
       try {

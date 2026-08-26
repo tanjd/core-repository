@@ -81,7 +81,6 @@ export interface Copy {
   notes: string;
   status: "available" | "requested" | "loaned" | "unavailable";
   auto_approve?: boolean;
-  return_date_required?: boolean;
   hide_owner?: boolean;
   book?: Book;
   owner?: PublicContact;
@@ -98,7 +97,9 @@ export interface LoanRequest {
   loaned_at?: string;
   returned_at?: string;
   returned_by?: number;
-  expected_return_date?: string;
+  expected_return_date: string;
+  expected_return_date_changed_by?: number;
+  expected_return_date_changed_at?: string;
   copy?: Copy;
   borrower?: PublicContact;
 }
@@ -118,7 +119,8 @@ export interface Notification {
     | "copy_transferred_out"
     | "wishlist_fulfilled"
     | "user_pending_approval"
-    | "user_approved";
+    | "user_approved"
+    | "expected_return_date_changed";
   loan_request_id?: number;
   wishlist_request_id?: number;
   pending_user_id?: number;

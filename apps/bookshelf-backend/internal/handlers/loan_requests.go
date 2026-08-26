@@ -41,9 +41,9 @@ func NewLoanRequestHandler(
 
 type createLoanRequestInput struct {
 	Body struct {
-		CopyID             uint    `json:"copy_id" required:"true" minimum:"1" doc:"ID of the copy to borrow"`
-		Message            string  `json:"message,omitempty" maxLength:"500" doc:"Optional message to the owner"`
-		ExpectedReturnDate *string `json:"expected_return_date,omitempty" doc:"Expected return date (YYYY-MM-DD), required when copy has return_date_required"`
+		CopyID             uint   `json:"copy_id" required:"true" minimum:"1" doc:"ID of the copy to borrow"`
+		Message            string `json:"message,omitempty" maxLength:"500" doc:"Optional message to the owner"`
+		ExpectedReturnDate string `json:"expected_return_date" required:"true" doc:"Expected return date (YYYY-MM-DD)"`
 	}
 }
 
@@ -76,19 +76,21 @@ type loanRequestCopyResponse struct {
 }
 
 type getLoanRequestBody struct {
-	ID                 uint                    `json:"id"`
-	CopyID             uint                    `json:"copy_id"`
-	BorrowerID         uint                    `json:"borrower_id"`
-	Message            string                  `json:"message"`
-	Status             string                  `json:"status"`
-	RequestedAt        time.Time               `json:"requested_at"`
-	RespondedAt        *time.Time              `json:"responded_at"`
-	LoanedAt           *time.Time              `json:"loaned_at"`
-	ReturnedAt         *time.Time              `json:"returned_at"`
-	ReturnedBy         *uint                   `json:"returned_by,omitempty"`
-	ExpectedReturnDate *time.Time              `json:"expected_return_date,omitempty"`
-	Copy               loanRequestCopyResponse `json:"copy"`
-	Borrower           safeUser                `json:"borrower"`
+	ID                          uint                    `json:"id"`
+	CopyID                      uint                    `json:"copy_id"`
+	BorrowerID                  uint                    `json:"borrower_id"`
+	Message                     string                  `json:"message"`
+	Status                      string                  `json:"status"`
+	RequestedAt                 time.Time               `json:"requested_at"`
+	RespondedAt                 *time.Time              `json:"responded_at"`
+	LoanedAt                    *time.Time              `json:"loaned_at"`
+	ReturnedAt                  *time.Time              `json:"returned_at"`
+	ReturnedBy                  *uint                   `json:"returned_by,omitempty"`
+	ExpectedReturnDate          time.Time               `json:"expected_return_date"`
+	ExpectedReturnDateChangedBy *uint                   `json:"expected_return_date_changed_by,omitempty"`
+	ExpectedReturnDateChangedAt *time.Time              `json:"expected_return_date_changed_at,omitempty"`
+	Copy                        loanRequestCopyResponse `json:"copy"`
+	Borrower                    safeUser                `json:"borrower"`
 }
 
 type getLoanRequestOutput struct{ Body getLoanRequestBody }
@@ -241,17 +243,19 @@ func buildContactPair(lr models.LoanRequest) (borrower, owner safeUser) {
 func toGetLoanRequestBody(lr models.LoanRequest) getLoanRequestBody {
 	borrowerResp, ownerResp := buildContactPair(lr)
 	return getLoanRequestBody{
-		ID:                 lr.ID,
-		CopyID:             lr.CopyID,
-		BorrowerID:         lr.BorrowerID,
-		Message:            lr.Message,
-		Status:             lr.Status,
-		RequestedAt:        lr.RequestedAt,
-		RespondedAt:        lr.RespondedAt,
-		LoanedAt:           lr.LoanedAt,
-		ReturnedAt:         lr.ReturnedAt,
-		ReturnedBy:         lr.ReturnedBy,
-		ExpectedReturnDate: lr.ExpectedReturnDate,
+		ID:                          lr.ID,
+		CopyID:                      lr.CopyID,
+		BorrowerID:                  lr.BorrowerID,
+		Message:                     lr.Message,
+		Status:                      lr.Status,
+		RequestedAt:                 lr.RequestedAt,
+		RespondedAt:                 lr.RespondedAt,
+		LoanedAt:                    lr.LoanedAt,
+		ReturnedAt:                  lr.ReturnedAt,
+		ReturnedBy:                  lr.ReturnedBy,
+		ExpectedReturnDate:          lr.ExpectedReturnDate,
+		ExpectedReturnDateChangedBy: lr.ExpectedReturnDateChangedBy,
+		ExpectedReturnDateChangedAt: lr.ExpectedReturnDateChangedAt,
 		Copy: loanRequestCopyResponse{
 			ID:        lr.Copy.ID,
 			BookID:    lr.Copy.BookID,
@@ -376,11 +380,6 @@ func (h *LoanRequestHandler) createLoanRequest(ctx context.Context, input *creat
 
 	if err := h.checkBorrowerEligibility(borrowerID); err != nil {
 		return nil, err
-	}
-
-	// Validate return date requirement.
-	if bookCopy.ReturnDateRequired && input.Body.ExpectedReturnDate == nil {
-		return nil, huma.Error400BadRequest("return date is required by the sharer")
 	}
 
 	lr, err := buildLoanRequest(borrowerID, input)
@@ -523,25 +522,37 @@ func (h *LoanRequestHandler) checkMinBooksSharedRequirement(borrowerID uint, sm 
 }
 
 // buildLoanRequest constructs a pending LoanRequest from the request body,
-// parsing the optional expected return date.
+// parsing and validating the (always-required) expected return date.
 func buildLoanRequest(borrowerID uint, input *createLoanRequestInput) (models.LoanRequest, error) {
-	lr := models.LoanRequest{
-		CopyID:      input.Body.CopyID,
-		BorrowerID:  borrowerID,
-		Message:     input.Body.Message,
-		Status:      "pending",
-		RequestedAt: time.Now(),
+	t, err := parseAndValidateReturnDate(input.Body.ExpectedReturnDate)
+	if err != nil {
+		return models.LoanRequest{}, err
 	}
 
-	if input.Body.ExpectedReturnDate != nil {
-		t, parseErr := time.Parse("2006-01-02", *input.Body.ExpectedReturnDate)
-		if parseErr != nil {
-			return models.LoanRequest{}, huma.Error400BadRequest("expected_return_date must be in YYYY-MM-DD format")
-		}
-		lr.ExpectedReturnDate = &t
-	}
+	return models.LoanRequest{
+		CopyID:             input.Body.CopyID,
+		BorrowerID:         borrowerID,
+		Message:            input.Body.Message,
+		Status:             "pending",
+		RequestedAt:        time.Now(),
+		ExpectedReturnDate: t,
+	}, nil
+}
 
-	return lr, nil
+// parseAndValidateReturnDate parses a YYYY-MM-DD date and rejects anything
+// before today (UTC) — a borrower or owner can propose today's date (an
+// immediate turnaround), but never backdate one, which would make a loan
+// overdue the moment it's set.
+func parseAndValidateReturnDate(s string) (time.Time, error) {
+	t, err := time.Parse("2006-01-02", s)
+	if err != nil {
+		return time.Time{}, huma.Error400BadRequest("expected_return_date must be in YYYY-MM-DD format")
+	}
+	today := time.Now().UTC().Truncate(24 * time.Hour)
+	if t.Before(today) {
+		return time.Time{}, huma.Error400BadRequest("expected_return_date must not be in the past")
+	}
+	return t, nil
 }
 
 // finalizeLoanRequest runs the post-create workflow: notify the owner, or
@@ -596,17 +607,19 @@ func (h *LoanRequestHandler) getLoanRequest(ctx context.Context, input *getLoanR
 	borrowerResp, ownerResp := buildContactPair(*lr)
 
 	body := getLoanRequestBody{
-		ID:                 lr.ID,
-		CopyID:             lr.CopyID,
-		BorrowerID:         lr.BorrowerID,
-		Message:            lr.Message,
-		Status:             lr.Status,
-		RequestedAt:        lr.RequestedAt,
-		RespondedAt:        lr.RespondedAt,
-		LoanedAt:           lr.LoanedAt,
-		ReturnedAt:         lr.ReturnedAt,
-		ReturnedBy:         lr.ReturnedBy,
-		ExpectedReturnDate: lr.ExpectedReturnDate,
+		ID:                          lr.ID,
+		CopyID:                      lr.CopyID,
+		BorrowerID:                  lr.BorrowerID,
+		Message:                     lr.Message,
+		Status:                      lr.Status,
+		RequestedAt:                 lr.RequestedAt,
+		RespondedAt:                 lr.RespondedAt,
+		LoanedAt:                    lr.LoanedAt,
+		ReturnedAt:                  lr.ReturnedAt,
+		ReturnedBy:                  lr.ReturnedBy,
+		ExpectedReturnDate:          lr.ExpectedReturnDate,
+		ExpectedReturnDateChangedBy: lr.ExpectedReturnDateChangedBy,
+		ExpectedReturnDateChangedAt: lr.ExpectedReturnDateChangedAt,
 		Copy: loanRequestCopyResponse{
 			ID:        lr.Copy.ID,
 			BookID:    lr.Copy.BookID,
@@ -792,14 +805,29 @@ func (h *LoanRequestHandler) updateExpectedReturnDate(
 		return nil, huma.Error400BadRequest("return date can only be changed while the loan is accepted")
 	}
 
-	t, parseErr := time.Parse("2006-01-02", input.Body.ExpectedReturnDate)
-	if parseErr != nil {
-		return nil, huma.Error400BadRequest("expected_return_date must be in YYYY-MM-DD format")
+	t, err := parseAndValidateReturnDate(input.Body.ExpectedReturnDate)
+	if err != nil {
+		return nil, err
 	}
-	lr.ExpectedReturnDate = &t
+
+	now := time.Now()
+	lr.ExpectedReturnDate = t
+	lr.ExpectedReturnDateChangedBy = &callerID
+	lr.ExpectedReturnDateChangedAt = &now
 
 	if err := h.loanReqs.Save(lr); err != nil {
 		return nil, huma.Error500InternalServerError("could not update return date")
+	}
+
+	if err := h.workflow.OnExpectedReturnDateChanged(ctx, lr, callerID); err != nil {
+		zerolog.Ctx(ctx).Warn().Err(err).Msg("workflow.OnExpectedReturnDateChanged failed")
+	}
+
+	// Reload with Copy.Book/Copy.Owner — GetByIDWithCopyAndBorrower above only
+	// preloads Copy itself, and returning that half-hydrated struct would wipe
+	// the book title/owner name out of any frontend state it overwrites.
+	if reloaded, relErr := h.loanReqs.GetByIDWithFullAssociations(lr.ID); relErr == nil {
+		lr = reloaded
 	}
 
 	return &updateExpectedReturnDateOutput{Body: *lr}, nil

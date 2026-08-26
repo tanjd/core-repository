@@ -31,7 +31,6 @@ interface ScanItem {
   condition: Condition;
   notes: string;
   autoApprove: boolean;
-  returnDateRequired: boolean;
   hideOwner: boolean;
 }
 
@@ -92,7 +91,6 @@ export default function ScanPage() {
         condition: "good",
         notes: "",
         autoApprove: false,
-        returnDateRequired: false,
         hideOwner: false,
       },
     ]);
@@ -253,7 +251,6 @@ export default function ScanPage() {
           condition: item.condition,
           notes: item.notes.trim() || undefined,
           auto_approve: item.autoApprove || undefined,
-          return_date_required: item.returnDateRequired || undefined,
           hide_owner: item.hideOwner || undefined,
         });
         return item.id;
@@ -518,12 +515,8 @@ function ScanItemCard({
             />
             <CopySettings
               autoApprove={item.autoApprove}
-              returnDateRequired={item.returnDateRequired}
               hideOwner={item.hideOwner}
               onAutoApproveChange={(autoApprove) => onChange({ autoApprove })}
-              onReturnDateRequiredChange={(returnDateRequired) =>
-                onChange({ returnDateRequired })
-              }
               onHideOwnerChange={(hideOwner) => onChange({ hideOwner })}
             />
           </div>
