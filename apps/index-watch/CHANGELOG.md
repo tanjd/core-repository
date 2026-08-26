@@ -1,3 +1,7 @@
+## 1.2.4 (2026-08-26)
+
+This was a version bump only for index-watch to align it with other projects, there were no code changes.
+
 ## 1.2.3 (2026-08-19)
 
 ### 🚀 Features

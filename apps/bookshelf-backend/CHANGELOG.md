@@ -1,3 +1,13 @@
+## 0.18.1 (2026-08-26)
+
+### 🚀 Features
+
+- **bookshelf:** add changelog UX, upgrade notices, and self-host docs ([#79](https://github.com/tanjd/core-repository/pull/79))
+
+### ❤️ Thank You
+
+- Jeddy Tan @tanjd
+
 ## 0.18.0 (2026-08-25)
 
 ### 🚀 Features

@@ -1,3 +1,14 @@
+## 1.7.5 (2026-08-26)
+
+### 🚀 Features
+
+- **bookshelf:** add changelog UX, upgrade notices, and self-host docs ([#79](https://github.com/tanjd/core-repository/pull/79))
+- **bookshelf,bookshelf-backend:** cross-edition description backfill ([#64](https://github.com/tanjd/core-repository/pull/64))
+
+### ❤️ Thank You
+
+- Jeddy Tan @tanjd
+
 ## 1.7.4 (2026-08-20)
 
 This was a version bump only for ledger-lens to align it with other projects, there were no code changes.

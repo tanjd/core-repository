@@ -1,3 +1,7 @@
+## 1.7.3 (2026-08-26)
+
+This was a version bump only for ledger-lens-backend to align it with other projects, there were no code changes.
+
 ## 1.7.2 (2026-08-19)
 
 This was a version bump only for ledger-lens-backend to align it with other projects, there were no code changes.
