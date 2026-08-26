@@ -73,6 +73,23 @@ describe("BookCard", () => {
     expect(screen.getByText("Unavailable")).toBeInTheDocument();
   });
 
+  it("links to the detail page directly when no catalogHref is provided", () => {
+    const { container } = render(<BookCard book={baseBook} />);
+
+    expect(container.querySelector("a")).toHaveAttribute("href", "/catalog/1");
+  });
+
+  it("includes catalogHref as a from param in the detail link", () => {
+    const { container } = render(
+      <BookCard book={baseBook} catalogHref="/catalog?page=3&sort=newest" />,
+    );
+
+    expect(container.querySelector("a")).toHaveAttribute(
+      "href",
+      `/catalog/1?from=${encodeURIComponent("/catalog?page=3&sort=newest")}`,
+    );
+  });
+
   it("renders a generated cover fallback when there is no cover image", () => {
     const { container } = render(<BookCard book={baseBook} />);
 
