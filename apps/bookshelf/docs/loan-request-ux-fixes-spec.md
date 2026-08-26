@@ -1,13 +1,18 @@
 # Loan Request Flow — UX fixes spec
 
-**Status:** Draft — for review · **Scope:** `apps/bookshelf` + `apps/bookshelf-backend` ·
-**Depends on:** `Copy`, `LoanRequest`, `WaitlistEntry`, `Notification`
+**Status:** Partially implemented — Fixes 1–4 shipped, Fix 5 outstanding · **Scope:**
+`apps/bookshelf` + `apps/bookshelf-backend` · **Depends on:** `Copy`, `LoanRequest`,
+`WaitlistEntry`, `Notification`
 
 A UX pass over the borrow/loan/return flow (catalog → request → accept/reject → return, plus the
 waitlist) surfaced five concrete gaps. Each is scoped independently below — pick and build in any
 order, though **Fix 1** and **Fix 2** are the cheapest and highest-impact and should go first.
 
-## Fix 1 — "Requested" copies are a dead end for everyone but the requester
+Fixes 1–4 shipped together in #71 ("loan request UX fixes"), including
+`apps/bookshelf-e2e/src/loan-request-flow.spec.ts` coverage. Fix 5 (waitlist holds/queue) has not
+been built — see its "Open decision" below on whether it's worth the scope.
+
+## Fix 1 — "Requested" copies are a dead end for everyone but the requester ✅ Implemented (#71)
 
 **Priority: high · Frontend + small backend change**
 
@@ -45,7 +50,7 @@ notify-and-clear call so `OnRejected`/`OnCancelled` invoke it too (guarded on `p
 same condition already gating the status flip) — otherwise a member who joined the waitlist during
 the "requested" limbo has no way to learn the copy opened back up short of manually re-checking.
 
-## Fix 2 — Auto-approve is invisible, and the confirmation lies when it fires
+## Fix 2 — Auto-approve is invisible, and the confirmation lies when it fires ✅ Implemented (#71)
 
 **Priority: high · Frontend only**
 
@@ -73,7 +78,7 @@ available.
 owner's contact info"` vs. the current `"Borrow request sent!"` for the pending case. No backend
   change needed — the data is already there, just unused.
 
-## Fix 3 — No visibility into overdue loans
+## Fix 3 — No visibility into overdue loans ✅ Implemented (#71)
 
 **Priority: medium · Frontend only for v1**
 
@@ -97,7 +102,7 @@ cover-refresh and backups, per `apps/bookshelf-backend/CLAUDE.md`) plus new noti
 copy. Worth doing once the visual overdue indicator ships and it's clear members still aren't
 returning books on time — don't build the automation speculatively.
 
-## Fix 4 — Owner can't counter-propose a return date
+## Fix 4 — Owner can't counter-propose a return date ✅ Implemented (#71)
 
 **Priority: medium · Frontend only**
 
@@ -118,7 +123,7 @@ uses it today. Reuse it at accept time instead of adding a new endpoint:
   then — only if the owner changed the date — `updateExpectedReturnDate(id, newDate)`.
 - No backend change required.
 
-## Fix 5 — Waitlist is "notify everyone, first click wins," not a queue
+## Fix 5 — Waitlist is "notify everyone, first click wins," not a queue ⬜ Not built
 
 **Priority: medium-high, but the largest change · Backend + frontend**
 
