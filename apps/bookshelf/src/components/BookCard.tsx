@@ -7,11 +7,15 @@ import type { Book } from "@/lib/types";
 interface BookCardProps {
   book: Book;
   ownedByMe?: boolean;
+  catalogHref?: string;
 }
 
-export function BookCard({ book, ownedByMe }: BookCardProps) {
+export function BookCard({ book, ownedByMe, catalogHref }: BookCardProps) {
+  const detailHref = catalogHref
+    ? `/catalog/${book.id}?from=${encodeURIComponent(catalogHref)}`
+    : `/catalog/${book.id}`;
   return (
-    <Link href={`/catalog/${book.id}`} className="block group">
+    <Link href={detailHref} className="block group">
       <Card className="h-full overflow-hidden transition-shadow group-hover:shadow-md py-0 gap-0">
         <div className="relative aspect-[2/3] w-full bg-muted overflow-hidden">
           {ownedByMe && (

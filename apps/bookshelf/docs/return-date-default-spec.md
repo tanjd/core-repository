@@ -23,10 +23,10 @@ defaults to `false`, so most loans go through without any date attached. Two pro
    screen (borrower request dialog, owner accept dialog, overdue banners, reminder cron) pays a
    permanent tax to accommodate a choice users don't remember making.
 
-Instrumentation from the last quarter (to be added — see "Rollout" below) is expected to show that
-the `return_date_required=false` cohort has materially worse return rates than the `true` cohort.
-If it doesn't, this spec should be reconsidered — but the null-handling code liability alone is a
-sufficient reason to unify the path even if return rates are equal.
+Instrumentation from the last quarter is expected to show that the `return_date_required=false`
+cohort has materially worse return rates than the `true` cohort. If it doesn't, this spec should
+be reconsidered — but the null-handling code liability alone is a sufficient reason to unify the
+path even if return rates are equal.
 
 ## Goals
 
@@ -59,9 +59,8 @@ sufficient reason to unify the path even if return rates are equal.
   for anything they want enforced. Adding a structured per-copy default rebuilds the
   configurability we're removing with `return_date_required`, introduces a naming collision with
   `LoanRequest.expected_return_date`, and creates a new field most owners won't remember setting
-  — the same anti-pattern with a new column name. If instrumentation later shows owners
-  routinely countering to identical dates across accepts on the same copy, we'll revisit; not
-  before.
+  — the same anti-pattern with a new column name. If owners are routinely countering to identical
+  dates across accepts on the same copy, we'll revisit; not before.
 - **Per-owner or per-community default overrides.** No `default_loan_days` setting anywhere. If
   30 days turns out to be wrong for this community, we change the constant, not the surface area.
 - **Calendar-aware defaults.** "One month" is defined as 30 days, not "the same day next month" —
@@ -84,9 +83,8 @@ Named `DEFAULT_LOAN_DAYS = 30` in both the frontend constants and backend config
   than a quarter. If a copy sits unreturned for 30+ days _plus_ a reminder cycle, that's real
   signal, not noise.
 
-If instrumentation post-launch shows a lot of borrowers manually shorten the date, we lower the
-default. If borrowers routinely extend past 30 days, we raise it. **The default is tunable code,
-not a database column** — this is the whole point.
+If borrowers routinely ask to change the default, we adjust the constant. **The default is tunable
+code, not a database column** — this is the whole point.
 
 ## Modifying the expected return date after a loan starts
 
@@ -277,22 +275,10 @@ dialog shape and shadcn primitives.
 
 ## Instrumentation
 
-Add before shipping the removal, keep for 4 weeks after:
-
-- **Borrower's submitted `expected_return_date - today` in days** on every `POST /loan-requests`.
-  Aggregate: "how often does the borrower change the default?" If >60% accept `30` unchanged, the
-  default is well-calibrated. If <20% accept it, the default is wrong.
-- **Owner-counter delta on accept**: `owner_expected_return_date - borrower_expected_return_date`
-  in days. Answers: "do owners systematically extend or shorten the borrower's proposal?"
-- **Post-accept edit rate + delta**: count of loans where
-  `expected_return_date_changed_at IS NOT NULL`, and the median +/- delta of the change. This is
-  the "how often do people actually use the edit affordance, and does it tend to extend or
-  shorten?" signal. If the affordance is rarely used, we've overbuilt it; if it's heavily used to
-  extend, 30 days may be too short.
-- **Return-rate metric**: `% of loans returned within (expected_return_date + 7 days)`, tracked
-  weekly. This is the outcome metric — the whole spec exists to move this number.
-
-All four go to the existing admin dashboard (`apps/bookshelf/src/app/admin/`), not a new tool.
+Not planned for v1. The audit columns (`expected_return_date_changed_by`,
+`expected_return_date_changed_at`) are the only signal we'll have. If the community grows to a
+point where return-rate trends or default-calibration become questions worth querying, run them
+as one-off SQL against the existing `loan_requests` table — no dashboard needed now.
 
 ## Build order
 
@@ -329,8 +315,7 @@ All four go to the existing admin dashboard (`apps/bookshelf/src/app/admin/`), n
    - `my-requests/page.tsx` and `my-books/[copyId]/requests/page.tsx`: add the "Change return
      date" dialog + amended-by muted line.
    - `NotificationPanel.tsx`: render the new notification type.
-6. **Instrumentation**: log lines + admin dashboard tiles (four metrics per the section above).
-7. **E2E** (`apps/bookshelf-e2e/src/loan-request-flow.spec.ts`):
+6. **E2E** (`apps/bookshelf-e2e/src/loan-request-flow.spec.ts`):
    - Existing "counter date" test already covers accept-time counter — keep as-is.
    - Add: borrower request with no explicit date defaults to +30d.
    - Add: copy-setup form has no return-date toggle.
@@ -377,20 +362,17 @@ expected_return_date IS NULL` — should be 0.
 
 ## How we'll know it's working
 
-- **Zero rows** where `expected_return_date IS NULL` after migration, forever.
-- **Overdue banner** actually fires on stale loans (previously silent for null-date loans).
-- **Return rate** (loans returned within expected date + 7 days) rises in the 4-week window
-  post-launch — the outcome metric. If it doesn't, we haven't fixed the underlying accountability
-  gap and the "how we communicate expectations" surface (notes echo, post-accept edits) needs
-  another pass.
-- **Default acceptance rate**: >50% of borrowers accept the 30-day default. If it's much lower,
-  the default is miscalibrated; adjust the constant.
-- **Post-accept edit usage**: the affordance is used at least occasionally (>5% of accepted
-  loans) — proves it isn't dead code. If it's never used, that's evidence the side-channel
-  conversation is enough and we can retire it in a follow-up.
+- **Zero rows** where `expected_return_date IS NULL` after migration — verified by querying
+  `COUNT(*) FROM loan_requests WHERE expected_return_date IS NULL` post-deploy; should be 0
+  permanently.
+- **Overdue banner** fires on stale loans (previously silent for null-date loans).
 - **No user complaints** about "I couldn't borrow without picking a date" — if we get more than
-  a handful, the field's default-and-required framing needs revisiting (e.g., a one-tap
-  "use 30 days" chip alongside the picker).
+  a handful, reconsider whether the default-and-required framing is the right UX choice (a
+  one-tap "use 30 days" chip alongside the picker would lower friction without removing
+  accountability).
+- **Post-accept edit affordance used at least occasionally** — the audit columns tell us
+  `COUNT(*) FROM loan_requests WHERE expected_return_date_changed_at IS NOT NULL`. If it's zero
+  after a month of loans, the affordance is probably dead code and can be retired.
 
 ## Open questions for the reviewer
 

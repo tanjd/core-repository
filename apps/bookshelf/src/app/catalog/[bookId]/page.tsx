@@ -169,6 +169,19 @@ export default function BookDetailPage() {
   const [expectedReturnDate, setExpectedReturnDate] = useState("");
   const [requesting, setRequesting] = useState(false);
 
+  // The catalog URL (with page/filter params) that brought the user here,
+  // embedded as ?from= by BookCard so the breadcrumb can send them back to
+  // the exact page they were on rather than always resetting to /catalog.
+  // Validated to /catalog* to guard against open-redirect via a crafted URL.
+  const [catalogHref, setCatalogHref] = useState("/catalog");
+  useEffect(() => {
+    const from = new URLSearchParams(window.location.search).get("from");
+    // window.location isn't available during SSR — same setState-in-effect
+    // exception as CatalogPage's URL hydration on mount.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    if (from?.startsWith("/catalog")) setCatalogHref(from);
+  }, []);
+
   const identifiedRef = useRef(false);
   useEffect(() => {
     if (identifiedRef.current) return;
@@ -317,7 +330,7 @@ export default function BookDetailPage() {
             <RotateCw className="size-4" /> Try again
           </Button>
           <Button variant="outline" asChild>
-            <Link href="/catalog">
+            <Link href={catalogHref}>
               <ArrowLeft className="size-4" /> Back to catalog
             </Link>
           </Button>
@@ -347,7 +360,7 @@ export default function BookDetailPage() {
         className="flex items-center gap-1 text-sm text-muted-foreground -ml-1"
       >
         <Button variant="ghost" size="sm" asChild className="h-8 px-2">
-          <Link href="/catalog" aria-label="Back to catalog">
+          <Link href={catalogHref} aria-label="Back to catalog">
             <ArrowLeft className="size-4" />
             <span>Catalog</span>
           </Link>

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, type MouseEvent } from "react";
 import Link from "next/link";
 import { useRouter, usePathname } from "next/navigation";
 import { Search, SlidersHorizontal, Heart, X, Loader2 } from "lucide-react";
@@ -122,6 +122,16 @@ export default function CatalogPage() {
   // Debounced search/sort/filter — reset to page 1. Skips the mount pass
   // (the effect above already fetched the initial page).
   const mountedRef = useRef(false);
+  // Resets mountedRef on every (re)mount so React Strict Mode's simulated
+  // unmount→remount doesn't cause the debounce effect to see
+  // mountedRef.current=true (left over from the first invocation) and fire
+  // updateUrl("", "title", false, 1), which would strip ?page=N from the URL.
+  // useRef values persist across the Strict Mode simulation; an explicit []
+  // reset effect — registered before the debounce effect so it runs first —
+  // is the standard fix.
+  useEffect(() => {
+    mountedRef.current = false;
+  }, []);
   useEffect(() => {
     if (!mountedRef.current) {
       mountedRef.current = true;
@@ -142,6 +152,23 @@ export default function CatalogPage() {
     // changing what the effect does.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [search, sort, availableOnly]);
+
+  // Clicking into a book (or any other link) means the pending debounced
+  // fetch/updateUrl is about to be superseded by a navigation — if it fires
+  // anyway once the click's navigation is already underway, its
+  // router.replace(pathname, ...) can race the Link's navigation and win,
+  // snapping the browser back to the catalog instead of the book page (seen
+  // as a real, if rare, failure in book-cover-fallback.spec.ts: search text
+  // switches sort to "relevance" synchronously, arming the 300ms debounce,
+  // and a fast click into the lone result could still be in flight when it
+  // fires). Cancelling on any outbound link click removes the race outright.
+  function cancelPendingUrlSyncOnNavigate(e: MouseEvent) {
+    if (!(e.target as HTMLElement).closest("a")) return;
+    if (debounceRef.current) {
+      clearTimeout(debounceRef.current);
+      debounceRef.current = null;
+    }
+  }
 
   function handleSearchChange(value: string) {
     setSearch(value);
@@ -181,10 +208,31 @@ export default function CatalogPage() {
   const total = result?.total ?? 0;
   const hasActiveFilters = !!search.trim() || availableOnly || sort !== "title";
 
+  // Mirror the same serialisation logic as updateUrl so the 'from' param
+  // baked into each book-detail link always matches the current URL.
+  const currentCatalogHref = (() => {
+    const params = new URLSearchParams();
+    if (search.trim()) params.set("q", search.trim());
+    if (sort !== "title") params.set("sort", sort);
+    if (availableOnly) params.set("available", "true");
+    if (page > 1) params.set("page", String(page));
+    const qs = params.toString();
+    return qs ? `/catalog?${qs}` : "/catalog";
+  })();
+
   return (
-    <div className="flex flex-col gap-8">
+    <div
+      className="flex flex-col gap-8"
+      onClickCapture={cancelPendingUrlSyncOnNavigate}
+    >
       {/* Recently added bookshelf (only when not searching) */}
-      {!search && <BookshelfRow limit={12} ownedBookIds={ownedBookIds} />}
+      {!search && (
+        <BookshelfRow
+          limit={12}
+          ownedBookIds={ownedBookIds}
+          catalogHref={currentCatalogHref}
+        />
+      )}
 
       <div className="flex flex-col gap-1">
         <h1 className="text-2xl font-bold">Book Catalog</h1>
@@ -231,6 +279,7 @@ export default function CatalogPage() {
                 <SelectItem value="title">Title A–Z</SelectItem>
                 <SelectItem value="author">Author A–Z</SelectItem>
                 <SelectItem value="newest">Newest First</SelectItem>
+                <SelectItem value="popular">Most Borrowed</SelectItem>
                 {search.trim() && (
                   <SelectItem value="relevance">Best Match</SelectItem>
                 )}
@@ -363,6 +412,7 @@ export default function CatalogPage() {
                   key={book.id}
                   book={book}
                   ownedByMe={ownedBookIds.has(book.id)}
+                  catalogHref={currentCatalogHref}
                 />
               ))}
             </div>

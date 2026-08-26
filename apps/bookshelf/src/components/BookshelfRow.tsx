@@ -7,10 +7,21 @@ import type { Book } from "@/lib/types";
 import { Badge } from "@/components/ui/badge";
 import { BookCover } from "@/components/BookCover";
 
-function BookSpine({ book, ownedByMe }: { book: Book; ownedByMe: boolean }) {
+function BookSpine({
+  book,
+  ownedByMe,
+  catalogHref,
+}: {
+  book: Book;
+  ownedByMe: boolean;
+  catalogHref?: string;
+}) {
+  const detailHref = catalogHref
+    ? `/catalog/${book.id}?from=${encodeURIComponent(catalogHref)}`
+    : `/catalog/${book.id}`;
   return (
     <Link
-      href={`/catalog/${book.id}`}
+      href={detailHref}
       className="group flex-shrink-0 w-24 md:w-28 flex flex-col focus:outline-none"
       title={book.title}
     >
@@ -67,9 +78,14 @@ function BookSpineSkeleton() {
 interface BookshelfRowProps {
   limit?: number;
   ownedBookIds: Set<number>;
+  catalogHref?: string;
 }
 
-export function BookshelfRow({ limit = 12, ownedBookIds }: BookshelfRowProps) {
+export function BookshelfRow({
+  limit = 12,
+  ownedBookIds,
+  catalogHref,
+}: BookshelfRowProps) {
   const [books, setBooks] = useState<Book[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -104,6 +120,7 @@ export function BookshelfRow({ limit = 12, ownedBookIds }: BookshelfRowProps) {
                     <BookSpine
                       book={book}
                       ownedByMe={ownedBookIds.has(book.id)}
+                      catalogHref={catalogHref}
                     />
                   </div>
                 ))}
