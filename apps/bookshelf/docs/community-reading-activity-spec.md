@@ -1,6 +1,6 @@
 # Community Reading Activity — spec
 
-**Status:** Approved for build · **Scope:** `apps/bookshelf` + `apps/bookshelf-backend` ·
+**Status:** Implemented (#75) · **Scope:** `apps/bookshelf` + `apps/bookshelf-backend` ·
 **Depends on:** `Book`, `Copy`, `LoanRequest` (all existing — no new tables, no migration)
 
 Surface, on each book and across the catalog, how much the community is actually reading a title —
