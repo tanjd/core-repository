@@ -1,3 +1,13 @@
+## 0.25.0 (2026-08-27)
+
+### 🚀 Features
+
+- **bookshelf:** redesign changelog page into component based layout ([#81](https://github.com/tanjd/core-repository/pull/81))
+
+### ❤️ Thank You
+
+- Jeddy Tan @tanjd
+
 ## 0.24.0 (2026-08-26)
 
 ### 🚀 Features
