@@ -94,6 +94,18 @@ func (r *BookRepository) buildListQuery(search, sort string, availableOnly bool)
 			GROUP BY copies.book_id
 		) AS book_borrows ON book_borrows.book_id = books.id`).
 			Order("COALESCE(book_borrows.borrow_count, 0) DESC, books.title ASC")
+	case "recommended":
+		// Member "highly recommend this" thumbs-ups — see
+		// docs/book-recommendations-spec.md. Left-join the per-book
+		// recommendation count so books with zero recommendations still
+		// appear (title-sorted among the zeroes via COALESCE), same shape
+		// as the "popular" case above.
+		tx = tx.Joins(`LEFT JOIN (
+			SELECT book_id, COUNT(*) AS recommend_count
+			FROM recommendations
+			GROUP BY book_id
+		) AS book_recommends ON book_recommends.book_id = books.id`).
+			Order("COALESCE(book_recommends.recommend_count, 0) DESC, books.title ASC")
 	case "relevance":
 		// Only meaningful alongside a search term — a prefix match on
 		// title or author ranks above a mid-string substring match, so a

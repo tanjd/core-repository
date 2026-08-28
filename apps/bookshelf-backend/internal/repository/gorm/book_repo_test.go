@@ -230,6 +230,40 @@ func TestBookRepository_ListPaginated_PopularSort(t *testing.T) {
 	assert.Equal(t, []string{beta.Title, gamma.Title, alpha.Title}, titles)
 }
 
+func TestBookRepository_ListPaginated_RecommendedSort(t *testing.T) {
+	db := openTestDB(t)
+	books := NewBookRepository(db)
+	copies := NewCopyRepository(db)
+	recs := NewRecommendationRepository(db)
+
+	owner := models.User{Name: "Owner", Email: "owner@example.com"}
+	require.NoError(t, db.Create(&owner).Error)
+	u1 := models.User{Name: "U1", Email: "u1@example.com"}
+	require.NoError(t, db.Create(&u1).Error)
+	u2 := models.User{Name: "U2", Email: "u2@example.com"}
+	require.NoError(t, db.Create(&u2).Error)
+
+	// Ordering by title alone would put "Alpha" first — sort=recommended
+	// should override that with thumbs-up count.
+	alpha, _ := seedBookWithAvailableCopy(t, books, copies, owner, "Alpha (never recommended)")
+	beta, _ := seedBookWithAvailableCopy(t, books, copies, owner, "Beta (recommended twice)")
+	gamma, _ := seedBookWithAvailableCopy(t, books, copies, owner, "Gamma (recommended once)")
+
+	require.NoError(t, recs.Create(beta.ID, u1.ID))
+	require.NoError(t, recs.Create(beta.ID, u2.ID))
+	require.NoError(t, recs.Create(gamma.ID, u1.ID))
+
+	result, err := books.ListPaginated("", "recommended", false, 1, 20)
+	require.NoError(t, err)
+
+	titles := make([]string, len(result.Items))
+	for i, b := range result.Items {
+		titles[i] = b.Title
+	}
+	// Beta (2) > Gamma (1) > Alpha (0, title tiebreaker among zeroes).
+	assert.Equal(t, []string{beta.Title, gamma.Title, alpha.Title}, titles)
+}
+
 func TestBookRepository_CountCopies(t *testing.T) {
 	db := openTestDB(t)
 	books := NewBookRepository(db)

@@ -20,6 +20,12 @@ know more about a book, link out to an existing site (e.g. Google Books) rather 
 surface here. Weigh new feature proposals against this scope — metadata-adjacent features are a
 signal to link out, not to build in.
 
+Ratings, reviews, and long-form book criticism remain out of scope under this guardrail — link out
+to Google Books. A simple member "highly recommend this" thumbs-up is in scope, though (see
+`apps/bookshelf/docs/book-recommendations-spec.md`), because it surfaces community reading
+behaviour adjacent to the exchange flow without implying a rating average or duplicating an
+external site's job.
+
 ## Migration history
 
 Squash-imported from the standalone `tanjd/bookshelf` repo's `backend/` directory (personal

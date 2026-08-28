@@ -22,11 +22,15 @@ type BookHandler struct {
 	// wishlistWorkflow is optional (nil-safe) — see createBook — so
 	// existing tests that construct a BookHandler without one keep working.
 	wishlistWorkflow *services.WishlistWorkflow
+	// recommendations is optional (nil-safe), same reasoning as
+	// wishlistWorkflow — a nil value degrades recommendation_count/
+	// your_recommendation to their zero values rather than panicking.
+	recommendations repository.RecommendationRepository
 }
 
 // NewBookHandler creates a new BookHandler.
-func NewBookHandler(books repository.BookRepository, users repository.UserRepository, coversDir string, wishlistWorkflow *services.WishlistWorkflow) *BookHandler {
-	return &BookHandler{books: books, users: users, coversDir: coversDir, wishlistWorkflow: wishlistWorkflow}
+func NewBookHandler(books repository.BookRepository, users repository.UserRepository, coversDir string, wishlistWorkflow *services.WishlistWorkflow, recommendations repository.RecommendationRepository) *BookHandler {
+	return &BookHandler{books: books, users: users, coversDir: coversDir, wishlistWorkflow: wishlistWorkflow, recommendations: recommendations}
 }
 
 // bookResponse wraps a Book and adds the computed availability +
@@ -35,11 +39,17 @@ func NewBookHandler(books repository.BookRepository, users repository.UserReposi
 // "returned" (pending/rejected/cancelled don't count — same rule as
 // admin_repo.go's MostBorrowedBooks). WaitlistCount is the live waitlist
 // depth across every copy. See docs/community-reading-activity-spec.md.
+// RecommendationCount and YourRecommendation are the book-recommendations
+// feature's count + viewer-relative flag — see
+// docs/book-recommendations-spec.md. YourRecommendation follows the same
+// canSeeOwner-style degradation as getBook: false when there's no session.
 type bookResponse struct {
 	models.Book
-	AvailableCopies int64 `json:"available_copies"`
-	BorrowCount     int64 `json:"borrow_count"`
-	WaitlistCount   int64 `json:"waitlist_count"`
+	AvailableCopies     int64 `json:"available_copies"`
+	BorrowCount         int64 `json:"borrow_count"`
+	WaitlistCount       int64 `json:"waitlist_count"`
+	RecommendationCount int64 `json:"recommendation_count"`
+	YourRecommendation  bool  `json:"your_recommendation"`
 }
 
 // --- Input / Output types ---
@@ -47,7 +57,7 @@ type bookResponse struct {
 type listBooksInput struct {
 	Q             string `query:"q" doc:"Search by title or author"`
 	OLKey         string `query:"ol_key" doc:"Filter by exact Open Library key (returns single book)"`
-	Sort          string `query:"sort" doc:"Sort order: title (default), author, newest, relevance (best-match, only meaningful with q)"`
+	Sort          string `query:"sort" doc:"Sort order: title (default), author, newest, popular, recommended, relevance (best-match, only meaningful with q)"`
 	AvailableOnly bool   `query:"available_only" doc:"Only return books with at least one available copy"`
 	Page          int    `query:"page" minimum:"1" doc:"Page number (default 1)"`
 	PageSize      int    `query:"page_size" minimum:"1" maximum:"100" doc:"Items per page (default 20)"`
@@ -103,6 +113,7 @@ func (h *BookHandler) RegisterRoutes(api huma.API) {
 		Path:        "/books",
 		Tags:        []string{"books"},
 		Summary:     "List books with optional search, sort, filter, and pagination",
+		Security:    []map[string][]string{{"bearer": {}}},
 	}, h.listBooks)
 
 	huma.Register(api, huma.Operation{
@@ -111,6 +122,7 @@ func (h *BookHandler) RegisterRoutes(api huma.API) {
 		Path:        "/books/recent",
 		Tags:        []string{"books"},
 		Summary:     "List recently added books (for the new arrivals shelf)",
+		Security:    []map[string][]string{{"bearer": {}}},
 	}, h.listRecentBooks)
 
 	huma.Register(api, huma.Operation{
@@ -119,6 +131,7 @@ func (h *BookHandler) RegisterRoutes(api huma.API) {
 		Path:        "/books/{id}",
 		Tags:        []string{"books"},
 		Summary:     "Get a book by ID",
+		Security:    []map[string][]string{{"bearer": {}}},
 	}, h.getBook)
 
 	huma.Register(api, huma.Operation{
@@ -134,14 +147,19 @@ func (h *BookHandler) RegisterRoutes(api huma.API) {
 
 // --- Handlers ---
 
-func (h *BookHandler) listBooks(_ context.Context, input *listBooksInput) (*listBooksOutput, error) {
+func (h *BookHandler) listBooks(ctx context.Context, input *listBooksInput) (*listBooksOutput, error) {
+	userID, err := middleware.GetRequiredUserID(ctx)
+	if err != nil {
+		return nil, huma.Error401Unauthorized("authentication required")
+	}
+
 	if input.OLKey != "" {
 		book, err := h.books.FindByOLKey(input.OLKey)
 		if err != nil {
 			return nil, huma.Error404NotFound("book not found")
 		}
 		var out listBooksOutput
-		out.Body.Items = []bookResponse{h.toBookResponse(*book)}
+		out.Body.Items = []bookResponse{h.toBookResponse(*book, userID)}
 		out.Body.Total = 1
 		out.Body.Page = 1
 		out.Body.PageSize = 1
@@ -163,7 +181,7 @@ func (h *BookHandler) listBooks(_ context.Context, input *listBooksInput) (*list
 		return nil, huma.Error500InternalServerError("could not fetch books")
 	}
 
-	items, err := h.toBooksResponse(result.Items)
+	items, err := h.toBooksResponse(result.Items, userID)
 	if err != nil {
 		return nil, huma.Error500InternalServerError("could not fetch book counts")
 	}
@@ -177,7 +195,12 @@ func (h *BookHandler) listBooks(_ context.Context, input *listBooksInput) (*list
 	return &out, nil
 }
 
-func (h *BookHandler) listRecentBooks(_ context.Context, input *listRecentBooksInput) (*listRecentBooksOutput, error) {
+func (h *BookHandler) listRecentBooks(ctx context.Context, input *listRecentBooksInput) (*listRecentBooksOutput, error) {
+	userID, err := middleware.GetRequiredUserID(ctx)
+	if err != nil {
+		return nil, huma.Error401Unauthorized("authentication required")
+	}
+
 	limit := input.Limit
 	if limit < 1 {
 		limit = 16
@@ -186,7 +209,7 @@ func (h *BookHandler) listRecentBooks(_ context.Context, input *listRecentBooksI
 	if err != nil {
 		return nil, huma.Error500InternalServerError("could not fetch recent books")
 	}
-	resp, err := h.toBooksResponse(books)
+	resp, err := h.toBooksResponse(books, userID)
 	if err != nil {
 		return nil, huma.Error500InternalServerError("could not fetch book counts")
 	}
@@ -194,6 +217,11 @@ func (h *BookHandler) listRecentBooks(_ context.Context, input *listRecentBooksI
 }
 
 func (h *BookHandler) getBook(ctx context.Context, input *getBookInput) (*getBookOutput, error) {
+	userID, err := middleware.GetRequiredUserID(ctx)
+	if err != nil {
+		return nil, huma.Error401Unauthorized("authentication required")
+	}
+
 	book, err := h.books.GetByIDWithCopies(input.ID)
 	if err != nil {
 		if errors.Is(err, repository.ErrNotFound) {
@@ -202,22 +230,16 @@ func (h *BookHandler) getBook(ctx context.Context, input *getBookInput) (*getBoo
 		return nil, huma.Error500InternalServerError("could not fetch book")
 	}
 
-	// Determine whether the requesting user can see owner names.
-	// Requires: authenticated + email-verified.
-	canSeeOwner := false
-	if userID := middleware.GetUserID(ctx); userID != 0 {
-		if u, lookupErr := h.users.FindByID(userID); lookupErr == nil && u.Verified {
-			canSeeOwner = true
-		}
-	}
+	// Owner names are only revealed to email-verified members — an authenticated
+	// but unverified caller still gets them stripped. HideOwner (member-choice
+	// anonymity, per Copy) takes precedence regardless.
+	u, lookupErr := h.users.FindByID(userID)
+	canSeeOwner := lookupErr == nil && u.Verified
 
 	for i := range book.Copies {
 		if book.Copies[i].HideOwner || !canSeeOwner {
-			// Strip owner entirely — frontend uses hide_owner flag to distinguish
-			// "anonymous by choice" from "sign in and verify required".
 			book.Copies[i].Owner = models.User{}
 		} else {
-			// Redact sensitive fields — expose name only.
 			book.Copies[i].Owner = models.User{
 				ID:   book.Copies[i].Owner.ID,
 				Name: book.Copies[i].Owner.Name,
@@ -225,7 +247,7 @@ func (h *BookHandler) getBook(ctx context.Context, input *getBookInput) (*getBoo
 		}
 	}
 
-	return &getBookOutput{Body: h.toBookResponse(*book)}, nil
+	return &getBookOutput{Body: h.toBookResponse(*book, userID)}, nil
 }
 
 func (h *BookHandler) createBook(ctx context.Context, input *createBookInput) (*createBookOutput, error) {
@@ -331,11 +353,12 @@ func findExistingBook(books repository.BookRepository, olKey, googleBooksID, isb
 	return nil, repository.ErrNotFound
 }
 
-// toBookResponse computes the available_copies + borrow + waitlist counts
-// for a single book, reusing the batch queries with a one-element slice.
-// Prefer toBooksResponse for list operations to avoid N+1 queries.
-func (h *BookHandler) toBookResponse(book models.Book) bookResponse {
-	resp, err := h.toBooksResponse([]models.Book{book})
+// toBookResponse computes the available_copies + borrow + waitlist +
+// recommendation counts for a single book, reusing the batch queries with a
+// one-element slice. Prefer toBooksResponse for list operations to avoid
+// N+1 queries. userID is 0 for an anonymous caller — see toBooksResponse.
+func (h *BookHandler) toBookResponse(book models.Book, userID uint) bookResponse {
+	resp, err := h.toBooksResponse([]models.Book{book}, userID)
 	if err != nil || len(resp) == 0 {
 		// Errors from the counters degrade to zeroes rather than failing
 		// the request — same forgiving contract the previous
@@ -345,9 +368,12 @@ func (h *BookHandler) toBookResponse(book models.Book) bookResponse {
 	return resp[0]
 }
 
-// toBooksResponse fetches available copy + borrow + waitlist counts for all
-// books in three batched queries and returns the assembled responses.
-func (h *BookHandler) toBooksResponse(books []models.Book) ([]bookResponse, error) {
+// toBooksResponse fetches available copy + borrow + waitlist +
+// recommendation counts for all books in batched queries and returns the
+// assembled responses. userID is the requesting caller's ID (0 for
+// anonymous) — YourRecommendation is always false for userID 0, and the
+// HasRecommendedBatch query is skipped entirely in that case.
+func (h *BookHandler) toBooksResponse(books []models.Book, userID uint) ([]bookResponse, error) {
 	ids := make([]uint, len(books))
 	for i, b := range books {
 		ids[i] = b.ID
@@ -364,13 +390,31 @@ func (h *BookHandler) toBooksResponse(books []models.Book) ([]bookResponse, erro
 	if err != nil {
 		return nil, err
 	}
+
+	var recCounts map[uint]int64
+	var yourRecs map[uint]bool
+	if h.recommendations != nil {
+		recCounts, err = h.recommendations.CountByBookBatch(ids)
+		if err != nil {
+			return nil, err
+		}
+		if userID != 0 {
+			yourRecs, err = h.recommendations.HasRecommendedBatch(userID, ids)
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+
 	resp := make([]bookResponse, len(books))
 	for i, b := range books {
 		resp[i] = bookResponse{
-			Book:            b,
-			AvailableCopies: available[b.ID],
-			BorrowCount:     borrows[b.ID],
-			WaitlistCount:   waitlists[b.ID],
+			Book:                b,
+			AvailableCopies:     available[b.ID],
+			BorrowCount:         borrows[b.ID],
+			WaitlistCount:       waitlists[b.ID],
+			RecommendationCount: recCounts[b.ID],
+			YourRecommendation:  yourRecs[b.ID],
 		}
 	}
 	return resp, nil

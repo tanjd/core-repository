@@ -1,215 +1,226 @@
-# Book Recommendations (Topical) — spec
+# Book Recommendations — spec
 
-**Status:** Planned — not approved for build · **Gated on:**
-`community-reading-activity-spec.md` shipping + ~1 month of observed usage · **Scope:**
-`apps/bookshelf` + `apps/bookshelf-backend` · **Depends on:** `Book`, `Copy`, `LoanRequest`,
-`Notification`
+**Status:** Approved for build · **Scope:** `apps/bookshelf` + `apps/bookshelf-backend` ·
+**Depends on:** `Book`, `Copy`, `LoanRequest`
 
-Let members endorse books they've actually read with **topical tags** (e.g. `prayer`,
-`parenting`, `evangelism`) — so the catalog can answer _"what's good on X?"_ instead of forcing a
-reader to browse a global "popular" list and hope.
+Let members give a book a lightweight thumbs-up — "I'd highly recommend this" — so the catalog can
+surface well-liked books without building a star-rating or review system.
 
-This spec is deliberately **not approved for build.** It replaces the earlier `book-reviews-spec.md`
-(now deprecated), which answered a different question (per-book star ratings). It sits behind
-Feature A (`community-reading-activity-spec.md`) and is only revisited if that feature ships and
-members still ask for topical discovery afterward.
+This spec is deliberately **not approved for build.** It replaces the earlier
+`book-reviews-spec.md` (now deprecated), which answered a different question (per-book star
+ratings). It sits behind Feature A (`community-reading-activity-spec.md`) and is only revisited if
+that feature ships and members still ask for a "what's good" signal afterward.
+
+Earlier drafts of this spec explored topical tags (`prayer`, `parenting`, ...) alongside the
+thumbs-up, aiming at "what's good on X?" discovery. That's deliberately dropped for v1 — tags add
+real surface (normalization, hygiene, a `/recommended/[tag]` route, aggregation-by-tag) for a
+discovery need nobody's confirmed yet. If members ask for topical browsing after this ships,
+revisit tags as a v2 addition on top of this simpler shape rather than building both at once.
+
+This spec deliberately scopes to **intent and behavior**, not implementation. Table shapes, route
+strings, file names, HTTP status codes, and index strategies are the implementer's call at build
+time — the sections below constrain what the feature must _do_, not how it must be built. When a
+choice below rules out a category of implementation (e.g. "deleted members' thumbs-ups don't
+count"), that's a behavioral constraint on the resulting system, not a directive about which
+query to write.
 
 ## Why this shape, not per-book star ratings
 
-The original review spec optimised for _"is this specific book good?"_ (Goodreads-style). Members
-actually asked _"what's being read on X?"_ and _"what would people recommend?"_ Star ratings
-answer the first, tags answer the second — and the second is what was asked. Concretely, tags
-have three advantages here:
+The original review spec optimised for _"is this specific book good?"_ (Goodreads-style), computed
+as an average of 1–5 stars. Two problems with that on a small catalog:
 
-1. **Signal survives small N.** On a catalog with 1–2 endorsements per book, a 4.5-star average
-   is noise; "2 members recommend this for `parenting`" is still information.
-2. **Discovery pivot for free.** Once tags exist, `/recommended/[tag]` is a route away — no
-   separate "categorize the catalog" project.
-3. **Matches how people actually recommend books in a small community.** "You should read this for
-   X" is the natural sentence; "I rate this 4/5" is not.
+1. **An average implies precision the data doesn't have.** On 1–2 ratings per book, "4.5 stars"
+   reads as authoritative but is noise.
+2. **It invites the wrong mental model.** The product's job (per `apps/bookshelf-backend/CLAUDE.md`)
+   is exchange, not book criticism — link out to Google Books for a rating.
 
-Explicit trade-off: this loses the "definitive rating" mental model. That's fine — the product's
-job (per `apps/bookshelf-backend/CLAUDE.md`) is exchange, not book criticism; link out to Google
-Books for a rating.
+A thumbs-up count sidesteps both: it's a raw count, not an average, so it doesn't overstate its
+own precision at low N ("2 members highly recommend this" reads as exactly what it is). And "I'd
+recommend this" is the sentence people actually use in a small community — closer to a nod than a
+review.
 
-## Preconditions before this gets approved
+## Preconditions considered before approval
 
-Do **not** start this until all four are true:
+These were the four gates the feature had to clear before being approved for build — kept as a
+record of what "ready" meant, so a future gated feature can borrow the shape:
 
 1. Feature A has shipped and been live for at least one month.
 2. `sort=popular` usage in the catalog is non-trivial (rough bar: >5% of catalog visits with an
-   explicit sort change).
-3. Members have separately asked for _topical_ discovery ("books on X") after Feature A shipped —
-   not just "reviews" or "ratings" in the abstract.
+   explicit sort change) — evidence members want a "what's good" view, not just alphabetical/newest.
+3. Members have separately asked for a way to see which books are well-liked after Feature A
+   shipped — not just "reviews" or "ratings" in the abstract.
 4. `CLAUDE.md`'s product-scope guardrail is either amended to explicitly allow member-provided
-   endorsement metadata, or a clear carve-out is documented (the "we allow endorsement but not
-   review/rating" line — see the "Scope-guardrail decision" section below).
-
-If any of these is missing, defer.
+   endorsement metadata, or a clear carve-out is documented (see "Scope-guardrail decision" below).
 
 ## Goals
 
-- A member who owns or has borrowed a book can endorse it with (a) an optional recommend/skip
-  boolean and (b) 0–5 free-text tags.
-- A book's detail page shows aggregate endorsements grouped by tag ("3 members recommend this
-  for `prayer`").
-- A `/recommended/[tag]` page lists books ordered by endorsement count for that tag.
-- One endorsement per member per book, editable, not anonymous.
+- Any authenticated member can toggle a thumbs-up ("highly recommend") on a book.
+- A book's detail page and every catalog card show the thumbs-up count.
+- Catalog cards additionally reflect the current viewer's own state — the button appears
+  "already recommended" when the viewer has recommended that book, so a member can toggle their
+  own nod from the card without opening the detail page. This is the whole feature's UX bet: a
+  thumbs-up is a nod, not a review, and a nod that costs three taps and a page load isn't a nod.
+- The catalog gets a `Most Recommended` sort option.
+- One thumbs-up per member per book. Toggling again removes it — there's no separate "edit" flow
+  since there's nothing to edit besides on/off.
 
 ## Non-goals (v1 of this feature)
 
 - **Star ratings.** Explicit no. See the reasoning above.
+- **Topical tags / `/recommended/[tag]` discovery.** Deferred — see the intro. May become a v2 on
+  top of this if members ask for it.
+- **A negative signal ("wouldn't recommend").** This is a like, not a rating with two poles — not
+  hearting a book says nothing. Modeled after a social "like" button, not a thumbs-up/down pair.
 - **Free-text review bodies / comments.** Explicit no — brings moderation load, gives no discovery
   lift, and duplicates what Google Books already does well.
-- **Curated / admin-owned tag taxonomy.** Tags are member-provided free text, normalised
-  (lowercase, trim, collapse whitespace, `-` for spaces). Curation can come later if the tag
-  space fragments (see "Open questions" below).
-- **Notification-to-owners when a new endorsement lands.** The wishlist-workflow-style notify path
-  is out for v1 — it adds surface without a clear benefit for endorsements (unlike loan requests,
-  which need attention). Revisit if members ask for it.
-- **Photo attachments, upvoting endorsements, moderation queue.**
+- **Anonymous thumbs-ups.** Unlike wishlist requests (which have an `anonymous` flag), a
+  thumbs-up is an explicit endorsement — the recommender's identity is part of the signal. If
+  members ask for anonymous recommends, revisit as v2, but the default expectation is your name
+  attaches to your nod.
+- **Notification-to-owners when a new thumbs-up lands.** The wishlist-workflow-style notify path is
+  out for v1 — it adds surface without a clear benefit here (unlike loan requests, which need
+  attention). Revisit if members ask for it.
+- **Photo attachments, moderation queue, admin override.** There's no free text to moderate — a
+  thumbs-up is just a member's own signal on their own account, so there's nothing here for an
+  admin to remove that the member himself couldn't just un-toggle.
 
 ## Who can endorse what
 
-Same eligibility rule as the deprecated review spec — a recommendation should mean the person
-actually read the book:
+Any authenticated member, no ownership or loan-history check. (An earlier draft gated this on
+having owned/borrowed the book; dropped for the same reason as the review spec's version of that
+rule — hard to enforce honestly, and it shrinks participation right when the feature needs it to
+produce a useful signal.)
 
-- **Eligible:** the member owns a copy of the book, **or** has an `accepted`/`returned`
-  `LoanRequest` against a copy of it.
-- **One endorsement per member per book.** Re-submitting edits the existing row rather than
-  creating a second one.
-- **Only the author can edit or delete.** No admin override in v1.
+One thumbs-up per member per book, toggled on/off. No separate edit — re-tapping just removes it.
 
-## Data model (proposed)
+## Behaviors
 
-New `Recommendation` table. No changes to `Notification` for v1 (see "Non-goals" above — no
-notify workflow).
+### The thumbs-up itself
 
-| Field                       | Type     | Notes                                                                      |
-| --------------------------- | -------- | -------------------------------------------------------------------------- |
-| `id`                        | `uint`   | Primary key.                                                               |
-| `book_id`                   | `uint`   | FK → `books.id`. Part of a unique pair with recommender.                   |
-| `recommender_id`            | `uint`   | FK → `users.id`.                                                           |
-| `recommends`                | `bool`   | `true` = recommend, `false` = read but wouldn't recommend. Default `true`. |
-| `tags`                      | `string` | Comma-separated, normalised, 0–5 entries. See "Tag storage" below.         |
-| `created_at` / `updated_at` | `time`   | Standard timestamps.                                                       |
+- **Toggling.** An authenticated member can add or remove their own thumbs-up on any book.
+  Adding when already recommended is a no-op; removing when not recommended is a no-op. Two
+  rapid taps in either direction never leave a book with duplicate rows, error the member out,
+  or land in an inconsistent state — the second tap either lands as the toggle it looks like, or
+  it's the no-op described above.
+- **No admin override.** There is no admin surface for adding, removing, or moderating another
+  member's thumbs-up. A thumbs-up is a member's own signal on their own account.
 
-Unique index on `(book_id, recommender_id)`.
+### What a book carries
 
-**Tag storage — decision needed at approval time:**
+- **A count.** Every book, everywhere it appears (catalog cards, detail page, list responses,
+  detail responses), carries the number of members who currently recommend it. Members who have
+  since been deleted from the community don't contribute to this count — see "Live-community
+  signal" below.
+- **A viewer-relative flag.** Every book response carries whether the current viewer has
+  recommended it. For an anonymous viewer (no session), this is always false — nothing ever
+  appears "recommended by you" without a logged-in you.
 
-- _Option A (recommended for v1):_ `tags` as a comma-separated string on `Recommendation`. Simple,
-  matches SQLite's strengths, cheap to add. Aggregation is `SELECT tag, COUNT(*) ...` after a
-  `json_each`-style split, or done in Go after fetch. Downside: no referential integrity, no
-  cheap "list all known tags" query.
-- _Option B:_ Separate `tag` table + `recommendation_tags` join table. Cleaner, standard shape,
-  but three tables and two migrations for a feature we're not sure will earn its keep. Overkill
-  for v1.
+### Live-community signal
 
-Pick A unless the tag surface grows unexpectedly complex during v1.
+A book's count and facepile reflect the _current_ community, not historical membership. When a
+member is deleted, their thumbs-ups fall out of every book's count and every facepile with them.
+Rationale: the feature exists to answer "what would _this community_ recommend right now?" — an
+ex-member's endorsement is stale by definition (unlike a completed loan under Feature A, which
+is a factual historical event). This also keeps the count and the facepile trivially consistent
+with each other: whatever the count says, the facepile can enumerate.
 
-## API surface (proposed)
+Whether this is implemented as an on-delete cascade, a filter-at-read, or something else is not
+this spec's problem — the constraint is that the count and facepile must never include a member
+who has been removed from the community.
 
-| Route                              | Auth        | Behavior                                                                         |
-| ---------------------------------- | ----------- | -------------------------------------------------------------------------------- |
-| `GET /books/{id}/recommendations`  | Public      | List a book's endorsements, newest first — recommender name + recommends + tags. |
-| `POST /books/{id}/recommendations` | Required    | Upsert an endorsement. 403 if ineligible.                                        |
-| `PATCH /recommendations/{id}`      | Author only | Edit `recommends` / `tags`.                                                      |
-| `DELETE /recommendations/{id}`     | Author only | Remove the endorsement.                                                          |
-| `GET /recommendations/tags`        | Public      | List distinct tags with counts (for the tag cloud / discovery entrypoint).       |
-| `GET /recommendations/tags/{tag}`  | Public      | List books endorsed with `{tag}`, ordered by endorsement count DESC, then title. |
+### Catalog surface
 
-`GET /books` and `GET /books/{id}` responses gain `recommendation_count` (int) and `top_tags`
-(top 3 tags by frequency for that book, or empty). The single-book response additionally carries
-`you_can_recommend` (bool) and `your_recommendation` (nullable), so the frontend doesn't need a
-second round trip to decide whether to render the endorse form.
+- **Sort.** The catalog exposes a `Most Recommended` sort alongside its existing options. When
+  active, books are ordered by thumbs-up count high to low; ties resolve by title so the order
+  is stable across page loads.
+- **Card.** Each catalog card shows the count and a toggle affordance that reflects the viewer's
+  own state on that book (filled for "I recommend this", outline for "I don't"). Tapping the
+  toggle recommends or un-recommends without leaving the catalog; the count and the toggle
+  update immediately on tap and revert on failure (see "Failure UX" below).
+- **Facepile stays off the card.** Cards remain at count + toggle only — no facepile at card
+  density, consistent with this app's "cards over dense tables" mobile stance. Detail lives on
+  the detail page.
 
-## Frontend surface (proposed)
+### Detail-page surface
 
-- `src/components/TagChips.tsx` (new): render a list of tags as small chips (reused on book
-  detail, tag list, endorsement cards). No shadcn primitive — plain styled `<span>`s.
-- `src/components/RecommendSection.tsx` (new): fetches `getBookRecommendations`, shows the count +
-  top tags + list of endorsers, and — gated on `you_can_recommend` — an "Endorse this book"
-  dialog with a recommend/skip toggle and a tag input (comma-separated, max 5, live-normalised).
-- `src/app/recommended/[tag]/page.tsx` (new): lists books for a tag. Reuses `BookCard`.
-- `src/app/catalog/page.tsx`: adds a new sort option `Most Recommended`. Optionally, a horizontal
-  tag-cloud row above the results (top N tags, click → `/recommended/[tag]`).
-- `src/app/catalog/[bookId]/page.tsx`: add `<RecommendSection />` below the "Copies" section. If
-  Feature A shipped, `<RecommendSection />` sits below its borrow/waitlist stats row.
-- `src/lib/types.ts`: `Recommendation` type; extend `Book` with `recommendation_count?`,
-  `top_tags?`, `you_can_recommend?`, `your_recommendation?`.
+- **Toggle.** The detail page carries the same recommend affordance as the card, in the same
+  state, wired to the same behavior. Tapping either surface toggles the same underlying thing.
+- **Facepile.** Below the "Copies" section, the detail page shows who has recommended this
+  book — the first few recommenders as small initials avatars, with an "and N others" tap
+  target that opens a full names-only list of every recommender when there are more than fit.
+  When nobody has recommended the book, the facepile renders nothing at all — no
+  "recommended by nobody" empty state.
+- **Empty-state coordination with Feature A.** If Feature A's borrow/waitlist stats row is
+  already hidden (both counts zero) and no member has recommended this book yet, the entire
+  community-signal area is absent from the detail page rather than leaving a lonely orphan
+  component.
 
-## Backend surface (proposed)
+### Failure UX
 
-- `internal/models/models.go`: new `Recommendation` struct with the fields above.
-- Migration `000010_create_recommendations.{up,down}.sql` (next available number at approval
-  time — `000009` is the current tail, but new migrations may land before this feature is
-  approved; check `internal/db/migrations/` at that time). Table + unique `(book_id,
-recommender_id)` index.
-- `internal/repository/repository.go` + `internal/repository/gorm/recommendation_repo.go` (new):
-  `Create`, `Save`, `Delete`, `GetByID`, `FindByBookAndRecommender`, `ListByBookID`,
-  `CountByBookBatch(bookIDs) (map[uint]int64, error)`, `TopTagsByBookBatch(bookIDs, k) (map[uint][]string, error)`,
-  `ListDistinctTagsWithCounts()`, `ListBooksByTag(tag string) ([]models.Book, error)`,
-  `CanUserRecommend(bookID, userID) (bool, error)` (same eligibility check the review spec had —
-  join through `Copy` for ownership OR through `Copy`+`LoanRequest` for a completed loan),
-  `DeleteByBookID(bookID) error` (for the orphaned-book cleanup path).
-- `internal/handlers/recommendations.go` (new): the six routes above.
-- `internal/handlers/books.go`: `bookResponse` gains `RecommendationCount int64` + `TopTags []string`;
-  `getBook` additionally gains `YouCanRecommend bool` and `YourRecommendation *models.Recommendation`.
-- `internal/handlers/copies.go`: `maybeDeleteOrphanedBook` calls
-  `recommendations.DeleteByBookID(bookID)` alongside the existing `wishlists.ClearFulfilledBookID`
-  call.
-- `cmd/server/main.go`: wire `recommendationRepo` into `NewBookHandler`, construct and register
-  `RecommendationHandler`.
+Toggling is optimistic: the count and the toggle update the instant the member taps, before the
+server confirms. If the request fails (network, session expired, server error), the UI reverts
+to its pre-tap state and surfaces a non-blocking error message. The member is never left staring
+at a count that says one thing while the server thinks another.
+
+### Accessibility
+
+The recommend button is icon-only on both card and detail-page surfaces. Its accessible name
+discloses both its current state ("recommended" vs "not recommended") and the book it acts on,
+so a screen-reader user hears "recommend _Deep Work_" rather than "button." The "and N others"
+affordance on the facepile is a real focusable, keyboard-activatable control, not decorative
+text.
 
 ## Scope-guardrail decision
 
 Both `apps/bookshelf/CLAUDE.md` and `apps/bookshelf-backend/CLAUDE.md` explicitly warn against
 _"ratings, reviews, 'more like this', richer descriptions"_ as out-of-scope book-discovery
-features. Endorsements-with-tags is closer to _member-provided metadata about a book they've
-read_ than to _external book criticism_ — but it's still a metadata surface, and the guardrail
-should be updated at approval time rather than quietly ignored. Proposed amendment to both files:
+features. A thumbs-up is closer to _a member's own lightweight signal on a book they're vouching
+for_ than to _external book criticism_ — but it's still community-provided metadata, and the
+guardrail should be updated at approval time rather than quietly ignored. Proposed amendment to
+both files:
 
 > Ratings, reviews, and long-form book criticism remain out of scope — link out to Google Books.
-> Member endorsements of a book they've actually read (recommend/skip + short topical tags) are
-> in scope, because they surface community reading behaviour (adjacent to the exchange flow) and
-> support discovery of _"what's being read here"_ without duplicating an external site's job.
+> A simple member "highly recommend this" thumbs-up is in scope, because it surfaces community
+> reading behaviour (adjacent to the exchange flow) without implying a rating average or duplicating
+> an external site's job.
 
 If the amendment feels too broad, this feature isn't approved yet.
 
-## Open questions to resolve at approval time
+## Open questions — resolved
 
-- **Tag hygiene.** Left to natural convergence in v1 (normalisation + surface the top-N tag list
-  prominently so members reuse existing tags). If tag fragmentation is bad after a month, add
-  admin merge/rename tools then, not now.
+These were open during earlier drafts of this spec and are settled now; kept here so the reasoning
+isn't lost:
+
+- **Facepile avatar treatment:** reuse the app's existing initials-avatar look (the small
+  circle-with-two-letters used on copy cards for owners) rather than inventing something new.
+- **Facepile size:** show the first 3 recommenders, collapse the rest into "and N others."
+- **Overflow behavior:** "and N others" is tappable/focusable, opening a simple names-only
+  list — not just decorative text.
+- **Card interactivity:** cards carry a live toggle reflecting the viewer's own state, not a
+  count-only decoration. See "Catalog surface."
+- **Deleted members:** their thumbs-ups don't count. See "Live-community signal."
+- **Threshold badge ("Community Favorite"):** considered as an alternative to the facepile, not
+  chosen for v1. Worth revisiting as a v1.1 addition if, post-launch, catalog browsing still seems
+  to need a stronger "this is popular" signal than a bare count provides — but don't build it
+  speculatively alongside v1.
+
+## Open questions still to resolve at approval time
+
 - **Notify workflow.** Explicitly deferred (see Non-goals). Revisit if members ask.
-- **Global "top tags" limit.** The tag cloud on the catalog page probably wants a hard cap (top
-  20?) with a "see all" affordance — decide at implementation time.
-- **Does this warrant its own top-level nav tab?** Probably not — `/recommended` is reachable
-  via tag chips on the catalog and detail pages. If usage is high, promote to a nav tab; if not,
-  keep it as a discovery-only URL.
-
-## Build order (when approved)
-
-1. Data model + migration.
-2. Repository layer + eligibility check + batch aggregates. Tests alongside existing repo suite.
-3. API handlers.
-4. Frontend — tag chips, recommend dialog, `/recommended/[tag]` page, catalog tag cloud +
-   `sort=recommended`.
-5. End-to-end coverage — borrow → return → recommend with tags → detail-page aggregate → tag
-   listing page.
+- **Does this warrant its own top-level nav tab or discovery page?** Probably not for a v1 that's
+  just a count + sort — no dedicated `/recommended` route exists in this shape. If usage is high,
+  a "Most Recommended" landing view could be added later without needing tags.
+- **Topical tags as a v2.** If members ask for "what's good on X" after this ships, revisit the
+  earlier tag design rather than bolting it on ad hoc — see the intro.
 
 ## How we'll know it's working
 
 Ship gates for approval (repeated here so they're not lost):
 
-- Ratio of eligible members who leave at least one endorsement ≥ some threshold (pick at
-  approval; ~15% for a first-month bar).
-- Distinct tag count grows past the trivial (>10 tags across the catalog) within a month —
-  otherwise the tag pivot didn't earn its shape.
-- `/recommended/[tag]` page views are non-zero and repeat — otherwise members aren't actually
-  using the discovery pivot, and this could've been a simpler recommend/skip boolean.
+- Ratio of members who give at least one thumbs-up ≥ some threshold (pick at approval; ~15% for a
+  first-month bar).
+- The `Most Recommended` sort is used in the catalog non-trivially within a month — otherwise
+  members aren't using it as a discovery signal, and the feature isn't earning its keep.
 
-If any of these fails a month post-launch, prune the feature back rather than layering more on
-top: the recommend/skip boolean without tags may still be worth keeping; the tag surface may be
-worth removing.
+If either fails a month post-launch, consider pruning the feature rather than layering more on top
+(e.g. tags) — a signal nobody uses isn't fixed by adding more surface to it.

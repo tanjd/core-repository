@@ -1415,6 +1415,153 @@ func (r *WishlistRequestRepository) ClearFulfilledBookID(bookID uint) error {
 	return nil
 }
 
+// RecommendationRepository is an in-memory fake of
+// repository.RecommendationRepository.
+type RecommendationRepository struct {
+	mu     sync.Mutex
+	nextID uint
+	byID   map[uint]*models.Recommendation
+	users  *UserRepository
+}
+
+// NewRecommendationRepository creates an empty fake RecommendationRepository.
+// users is optional (nil-safe) — when set, ListByBookID hydrates the
+// Recommender association from it, mimicking GORM's Preload("Recommender").
+func NewRecommendationRepository(users *UserRepository) *RecommendationRepository {
+	return &RecommendationRepository{byID: map[uint]*models.Recommendation{}, users: users}
+}
+
+// Create adds recommenderID's thumbs-up on bookID, or returns
+// repository.ErrConflict for a duplicate (book_id, recommender_id) pair.
+func (r *RecommendationRepository) Create(bookID, recommenderID uint) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	for _, rec := range r.byID {
+		if rec.BookID == bookID && rec.RecommenderID == recommenderID {
+			return repository.ErrConflict
+		}
+	}
+	r.nextID++
+	r.byID[r.nextID] = &models.Recommendation{ID: r.nextID, BookID: bookID, RecommenderID: recommenderID, CreatedAt: time.Now()}
+	return nil
+}
+
+// Delete removes recommenderID's thumbs-up on bookID, if present.
+func (r *RecommendationRepository) Delete(bookID, recommenderID uint) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	for id, rec := range r.byID {
+		if rec.BookID == bookID && rec.RecommenderID == recommenderID {
+			delete(r.byID, id)
+			return nil
+		}
+	}
+	return nil
+}
+
+// FindByBookAndRecommender returns the stored recommendation for
+// (bookID, recommenderID), or repository.ErrNotFound.
+func (r *RecommendationRepository) FindByBookAndRecommender(bookID, recommenderID uint) (*models.Recommendation, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	for _, rec := range r.byID {
+		if rec.BookID == bookID && rec.RecommenderID == recommenderID {
+			cp := *rec
+			return &cp, nil
+		}
+	}
+	return nil, repository.ErrNotFound
+}
+
+// ListByBookID returns bookID's recommenders newest-first.
+func (r *RecommendationRepository) ListByBookID(bookID uint) ([]models.Recommendation, error) {
+	r.mu.Lock()
+	out := []models.Recommendation{}
+	for _, rec := range r.byID {
+		if rec.BookID == bookID {
+			out = append(out, *rec)
+		}
+	}
+	r.mu.Unlock()
+	sort.Slice(out, func(i, j int) bool { return out[i].CreatedAt.After(out[j].CreatedAt) })
+	if r.users != nil {
+		for i := range out {
+			if u, err := r.users.FindByID(out[i].RecommenderID); err == nil {
+				out[i].Recommender = *u
+			}
+		}
+	}
+	return out, nil
+}
+
+// CountByBookBatch returns bookID → recommendation count for the requested
+// book IDs. Books with zero recommendations are absent from the map.
+func (r *RecommendationRepository) CountByBookBatch(bookIDs []uint) (map[uint]int64, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	wanted := map[uint]bool{}
+	for _, id := range bookIDs {
+		wanted[id] = true
+	}
+	out := map[uint]int64{}
+	for _, rec := range r.byID {
+		if wanted[rec.BookID] {
+			out[rec.BookID]++
+		}
+	}
+	return out, nil
+}
+
+// HasRecommendedBatch returns bookID → whether userID has recommended it,
+// for the requested book IDs. Absent keys default to false.
+func (r *RecommendationRepository) HasRecommendedBatch(userID uint, bookIDs []uint) (map[uint]bool, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	wanted := map[uint]bool{}
+	for _, id := range bookIDs {
+		wanted[id] = true
+	}
+	out := map[uint]bool{}
+	for _, rec := range r.byID {
+		if rec.RecommenderID == userID && wanted[rec.BookID] {
+			out[rec.BookID] = true
+		}
+	}
+	return out, nil
+}
+
+// DeleteByBookID removes every recommendation for bookID.
+func (r *RecommendationRepository) DeleteByBookID(bookID uint) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	for id, rec := range r.byID {
+		if rec.BookID == bookID {
+			delete(r.byID, id)
+		}
+	}
+	return nil
+}
+
+// DeleteByRecommenderID removes every recommendation made by recommenderID.
+func (r *RecommendationRepository) DeleteByRecommenderID(recommenderID uint) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	for id, rec := range r.byID {
+		if rec.RecommenderID == recommenderID {
+			delete(r.byID, id)
+		}
+	}
+	return nil
+}
+
+// Count returns the number of stored recommendations — a test helper, not
+// part of the repository.RecommendationRepository interface.
+func (r *RecommendationRepository) Count() int {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return len(r.byID)
+}
+
 // paginationBounds returns the [start, end) slice bounds for page/pageSize
 // over a collection of the given length.
 func paginationBounds(length, page, pageSize int) (start, end int) {
@@ -1448,4 +1595,5 @@ var (
 	_ repository.RegistrationVerificationRepository = (*RegistrationVerificationRepository)(nil)
 	_ repository.WishlistRequestRepository          = (*WishlistRequestRepository)(nil)
 	_ repository.BookRepository                     = (*BookRepository)(nil)
+	_ repository.RecommendationRepository           = (*RecommendationRepository)(nil)
 )

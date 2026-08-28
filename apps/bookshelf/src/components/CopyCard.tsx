@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
+import { InitialsAvatar } from "@/components/InitialsAvatar";
 import type { Copy } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
@@ -41,23 +42,6 @@ const statusDotClass: Record<Copy["status"], string> = {
   unavailable: "bg-muted-foreground/50",
 };
 
-function OwnerAvatar({ name }: { name: string }) {
-  const initials = name
-    .split(/\s+/)
-    .filter(Boolean)
-    .slice(0, 2)
-    .map((s) => s[0]?.toUpperCase() ?? "")
-    .join("");
-  return (
-    <span
-      aria-hidden="true"
-      className="inline-flex size-7 shrink-0 items-center justify-center rounded-full bg-muted text-xs font-medium text-muted-foreground"
-    >
-      {initials || "?"}
-    </span>
-  );
-}
-
 export function CopyCard({
   copy,
   actions,
@@ -88,9 +72,9 @@ export function CopyCard({
         <div className="flex flex-wrap items-center justify-between gap-2">
           <div className="flex items-center gap-2 min-w-0">
             {ownerName ? (
-              <OwnerAvatar name={ownerName} />
+              <InitialsAvatar name={ownerName} />
             ) : (
-              <OwnerAvatar name="?" />
+              <InitialsAvatar name="?" />
             )}
             <div className="flex flex-col min-w-0">
               {ownerName ? (

@@ -12,6 +12,8 @@ import { Textarea } from "@/components/ui/textarea";
 import { CopyCard } from "@/components/CopyCard";
 import { BookCover } from "@/components/BookCover";
 import { WaitlistButton } from "@/components/WaitlistButton";
+import { RecommendButton } from "@/components/RecommendButton";
+import { RecommendedBy } from "@/components/RecommendedBy";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -164,6 +166,9 @@ export default function BookDetailPage() {
   // re-read their server state — e.g. after a borrow request accepted
   // one copy, changing the surrounding state.
   const [refreshKey, setRefreshKey] = useState(0);
+  // Bumped whenever the recommend toggle resolves, so RecommendedBy
+  // re-fetches and reflects the viewer's own change in the facepile.
+  const [recommendationsRefreshKey, setRecommendationsRefreshKey] = useState(0);
 
   // Request dialog state
   const [selectedCopy, setSelectedCopy] = useState<Copy | null>(null);
@@ -432,6 +437,18 @@ export default function BookDetailPage() {
               borrowCount={book.borrow_count}
               waitlistCount={book.waitlist_count}
             />
+            {/* Same recommend affordance and state as BookCard's, wired to
+                the same behavior — tapping either surface toggles the same
+                underlying thumbs-up. See docs/book-recommendations-spec.md's
+                "Detail-page surface". */}
+            <RecommendButton
+              bookId={book.id}
+              bookTitle={book.title}
+              recommended={book.your_recommendation ?? false}
+              count={book.recommendation_count ?? 0}
+              className="self-start"
+              onToggled={() => setRecommendationsRefreshKey((k) => k + 1)}
+            />
           </div>
         </div>
 
@@ -600,6 +617,16 @@ export default function BookDetailPage() {
             .
           </p>
         )}
+
+        {/* Renders nothing when nobody has recommended the book — no
+            wrapper, no heading — so an untouched book leaves no orphan
+            component here, coordinating with ReadingActivityRow's identical
+            self-hiding behavior above. See docs/book-recommendations-spec.md's
+            "Empty-state coordination with Feature A". */}
+        <RecommendedBy
+          bookId={book.id}
+          refreshKey={recommendationsRefreshKey}
+        />
       </div>
 
       {/* Request dialog */}

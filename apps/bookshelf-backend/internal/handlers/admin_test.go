@@ -22,7 +22,7 @@ func newAdminHandlerWithCopiesAndLoans() (*AdminHandler, *repotest.AdminReposito
 	loans := repotest.NewLoanRequestRepository(copies, repotest.NewNotificationRepository(), repotest.NewUserRepository())
 	email := services.NewEmailService("", "", "", "", "", "", "", "http://localhost:3000")
 	registration := services.NewRegistrationWorkflow(admin, repotest.NewNotificationRepository(), repotest.NewBookRepository(), email)
-	return NewAdminHandler(admin, copies, loans, services.NewGoogleBooksKeyPool(nil), registration), admin, copies, loans
+	return NewAdminHandler(admin, copies, loans, services.NewGoogleBooksKeyPool(nil), registration, nil), admin, copies, loans
 }
 
 func TestAdminHandler_RequiresAdmin(t *testing.T) {
@@ -182,7 +182,7 @@ func TestUpdateUser_ApprovalNotifiesUser(t *testing.T) {
 	notifs := repotest.NewNotificationRepository()
 	email := services.NewEmailService("", "", "", "", "", "", "", "http://localhost:3000")
 	registration := services.NewRegistrationWorkflow(admin, notifs, repotest.NewBookRepository(), email)
-	h := NewAdminHandler(admin, copies, loans, services.NewGoogleBooksKeyPool(nil), registration)
+	h := NewAdminHandler(admin, copies, loans, services.NewGoogleBooksKeyPool(nil), registration, nil)
 
 	require.NoError(t, admin.SaveUser(&models.User{ID: 1, Role: "admin"}))
 	require.NoError(t, admin.SaveUser(&models.User{ID: 2, Role: "user", PendingApproval: true}))
@@ -280,6 +280,26 @@ func TestDeleteUser(t *testing.T) {
 		assertStatus(t, err, 409)
 		_, findErr := admin.FindUserByID(2)
 		require.NoError(t, findErr)
+	})
+
+	t.Run("clears the target's recommendation rows before deleting them", func(t *testing.T) {
+		admin := repotest.NewAdminRepository()
+		copies := repotest.NewCopyRepository()
+		loans := repotest.NewLoanRequestRepository(copies, repotest.NewNotificationRepository(), repotest.NewUserRepository())
+		email := services.NewEmailService("", "", "", "", "", "", "", "http://localhost:3000")
+		registration := services.NewRegistrationWorkflow(admin, repotest.NewNotificationRepository(), repotest.NewBookRepository(), email)
+		recommendations := repotest.NewRecommendationRepository(repotest.NewUserRepository())
+		h := NewAdminHandler(admin, copies, loans, services.NewGoogleBooksKeyPool(nil), registration, recommendations)
+
+		require.NoError(t, admin.SaveUser(&models.User{ID: 1, Role: "admin"}))
+		require.NoError(t, admin.SaveUser(&models.User{ID: 2, Role: "user"}))
+		require.NoError(t, recommendations.Create(10, 2))
+		require.NoError(t, recommendations.Create(11, 2))
+
+		_, err := h.deleteUser(fakeAuthedCtx(t, 1, "admin"), &adminUserIDInput{ID: 2})
+
+		require.NoError(t, err)
+		assert.Equal(t, 0, recommendations.Count(), "the deleted user's recommendations must no longer contribute to any book's count")
 	})
 }
 

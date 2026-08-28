@@ -109,4 +109,25 @@ describe("BookCard", () => {
       "https://example.com/cover.jpg",
     );
   });
+
+  it("renders a recommend toggle reflecting the viewer's state and count, but no facepile", () => {
+    render(
+      <BookCard
+        book={{
+          ...baseBook,
+          recommendation_count: 4,
+          your_recommendation: true,
+        }}
+      />,
+    );
+
+    expect(
+      screen.getByRole("button", {
+        name: "Remove your recommendation for The Go Programming Language",
+      }),
+    ).toBeInTheDocument();
+    expect(screen.getByText("4")).toBeInTheDocument();
+    // "Facepile stays off the card" — count + toggle only.
+    expect(screen.queryByText("Recommended by")).not.toBeInTheDocument();
+  });
 });

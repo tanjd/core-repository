@@ -13,7 +13,7 @@ import (
 func newBookHandler() (*BookHandler, *repotest.BookRepository) {
 	books := repotest.NewBookRepository()
 	users := repotest.NewUserRepository()
-	return NewBookHandler(books, users, "", nil), books
+	return NewBookHandler(books, users, "", nil, nil), books
 }
 
 // bookHandlerFixture wires up the full set of fake repositories needed by
@@ -23,11 +23,12 @@ func newBookHandler() (*BookHandler, *repotest.BookRepository) {
 // into newBookHandler so the existing createBook tests, which need none of
 // these extras, stay untouched.
 type bookHandlerFixture struct {
-	handler  *BookHandler
-	books    *repotest.BookRepository
-	copies   *repotest.CopyRepository
-	loans    *repotest.LoanRequestRepository
-	waitlist *repotest.WaitlistRepository
+	handler         *BookHandler
+	books           *repotest.BookRepository
+	copies          *repotest.CopyRepository
+	loans           *repotest.LoanRequestRepository
+	waitlist        *repotest.WaitlistRepository
+	recommendations *repotest.RecommendationRepository
 }
 
 func newBookHandlerWithReadingActivity() *bookHandlerFixture {
@@ -37,15 +38,17 @@ func newBookHandlerWithReadingActivity() *bookHandlerFixture {
 	users := repotest.NewUserRepository()
 	loans := repotest.NewLoanRequestRepository(copies, notifs, users)
 	waitlist := repotest.NewWaitlistRepository()
+	recommendations := repotest.NewRecommendationRepository(users)
 	books.SetCopies(copies)
 	books.SetLoans(loans)
 	books.SetWaitlist(waitlist)
 	return &bookHandlerFixture{
-		handler:  NewBookHandler(books, users, "", nil),
-		books:    books,
-		copies:   copies,
-		loans:    loans,
-		waitlist: waitlist,
+		handler:         NewBookHandler(books, users, "", nil, recommendations),
+		books:           books,
+		copies:          copies,
+		loans:           loans,
+		waitlist:        waitlist,
+		recommendations: recommendations,
 	}
 }
 
@@ -170,6 +173,27 @@ func TestCreateBook_Unauthenticated(t *testing.T) {
 	assertStatus(t, err, 401)
 }
 
+func TestListBooks_Unauthenticated(t *testing.T) {
+	h, _ := newBookHandler()
+
+	_, err := h.listBooks(fakeAuthedCtxNone(), &listBooksInput{})
+	assertStatus(t, err, 401)
+}
+
+func TestListRecentBooks_Unauthenticated(t *testing.T) {
+	h, _ := newBookHandler()
+
+	_, err := h.listRecentBooks(fakeAuthedCtxNone(), &listRecentBooksInput{})
+	assertStatus(t, err, 401)
+}
+
+func TestGetBook_Unauthenticated(t *testing.T) {
+	h, _ := newBookHandler()
+
+	_, err := h.getBook(fakeAuthedCtxNone(), &getBookInput{ID: 1})
+	assertStatus(t, err, 401)
+}
+
 func TestToBooksResponse_PopulatesBorrowAndWaitlistCounts(t *testing.T) {
 	f := newBookHandlerWithReadingActivity()
 
@@ -188,7 +212,7 @@ func TestToBooksResponse_PopulatesBorrowAndWaitlistCounts(t *testing.T) {
 	untouchedCopy := models.Copy{BookID: untouched.ID, OwnerID: 1, Status: "available"}
 	require.NoError(t, f.copies.Create(&untouchedCopy))
 
-	resp, err := f.handler.toBooksResponse([]models.Book{borrowed, untouched})
+	resp, err := f.handler.toBooksResponse([]models.Book{borrowed, untouched}, 0)
 	require.NoError(t, err)
 	require.Len(t, resp, 2)
 
@@ -202,6 +226,61 @@ func TestToBooksResponse_PopulatesBorrowAndWaitlistCounts(t *testing.T) {
 	assert.EqualValues(t, 0, byTitle["Untouched"].WaitlistCount)
 }
 
+func TestToBooksResponse_PopulatesRecommendationCountAndYourRecommendation(t *testing.T) {
+	f := newBookHandlerWithReadingActivity()
+
+	recommended := models.Book{Title: "Recommended", Author: "A"}
+	require.NoError(t, f.books.Create(&recommended))
+	untouched := models.Book{Title: "Untouched", Author: "A"}
+	require.NoError(t, f.books.Create(&untouched))
+
+	require.NoError(t, f.recommendations.Create(recommended.ID, 5))
+	require.NoError(t, f.recommendations.Create(recommended.ID, 6))
+
+	t.Run("counts are always populated, viewer flag reflects the caller", func(t *testing.T) {
+		resp, err := f.handler.toBooksResponse([]models.Book{recommended, untouched}, 5)
+		require.NoError(t, err)
+		byTitle := map[string]bookResponse{}
+		for _, r := range resp {
+			byTitle[r.Title] = r
+		}
+		assert.EqualValues(t, 2, byTitle["Recommended"].RecommendationCount)
+		assert.True(t, byTitle["Recommended"].YourRecommendation)
+		assert.EqualValues(t, 0, byTitle["Untouched"].RecommendationCount)
+		assert.False(t, byTitle["Untouched"].YourRecommendation)
+	})
+
+	t.Run("your_recommendation is false when the caller hasn't recommended the book", func(t *testing.T) {
+		resp, err := f.handler.toBooksResponse([]models.Book{recommended}, 99)
+		require.NoError(t, err)
+		require.Len(t, resp, 1)
+		assert.EqualValues(t, 2, resp[0].RecommendationCount)
+		assert.False(t, resp[0].YourRecommendation)
+	})
+}
+
+func TestGetBook_PopulatesRecommendationFields(t *testing.T) {
+	f := newBookHandlerWithReadingActivity()
+
+	book := models.Book{Title: "Solo", Author: "A"}
+	require.NoError(t, f.books.Create(&book))
+	require.NoError(t, f.recommendations.Create(book.ID, 5))
+
+	t.Run("authenticated caller who recommended it", func(t *testing.T) {
+		out, err := f.handler.getBook(fakeAuthedCtx(t, 5, "user"), &getBookInput{ID: book.ID})
+		require.NoError(t, err)
+		assert.EqualValues(t, 1, out.Body.RecommendationCount)
+		assert.True(t, out.Body.YourRecommendation)
+	})
+
+	t.Run("authenticated caller who has not recommended it", func(t *testing.T) {
+		out, err := f.handler.getBook(fakeAuthedCtx(t, 99, "user"), &getBookInput{ID: book.ID})
+		require.NoError(t, err)
+		assert.EqualValues(t, 1, out.Body.RecommendationCount)
+		assert.False(t, out.Body.YourRecommendation)
+	})
+}
+
 func TestToBookResponse_PopulatesBorrowAndWaitlistCounts(t *testing.T) {
 	f := newBookHandlerWithReadingActivity()
 
@@ -213,7 +292,7 @@ func TestToBookResponse_PopulatesBorrowAndWaitlistCounts(t *testing.T) {
 	require.NoError(t, f.waitlist.Add(copyRec.ID, 3))
 	require.NoError(t, f.waitlist.Add(copyRec.ID, 4))
 
-	resp := f.handler.toBookResponse(book)
+	resp := f.handler.toBookResponse(book, 0)
 	assert.EqualValues(t, 1, resp.BorrowCount)
 	assert.EqualValues(t, 2, resp.WaitlistCount)
 }

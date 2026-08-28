@@ -21,7 +21,7 @@ func newCopyHandler(coversDir string) (*CopyHandler, *repotest.CopyRepository, *
 	books := repotest.NewBookRepository()
 	books.SetCopies(copies)
 	wishlists := repotest.NewWishlistRequestRepository()
-	return NewCopyHandler(copies, users, notifs, waitlists, admin, books, wishlists, coversDir, nil), copies, books, wishlists
+	return NewCopyHandler(copies, users, notifs, waitlists, admin, books, wishlists, coversDir, nil, nil), copies, books, wishlists
 }
 
 func TestDeleteCopy_OrphanedKeylessBookCleanup(t *testing.T) {
@@ -94,6 +94,30 @@ func TestDeleteCopy_OrphanedKeylessBookCleanup(t *testing.T) {
 		got, err := wishlists.GetByID(req.ID)
 		require.NoError(t, err, "wishlist request row must survive, just with the dangling pointer cleared")
 		assert.Nil(t, got.FulfilledBookID)
+	})
+
+	t.Run("clears the orphaned book's recommendation rows", func(t *testing.T) {
+		copies := repotest.NewCopyRepository()
+		users := repotest.NewUserRepository()
+		notifs := repotest.NewNotificationRepository()
+		waitlists := repotest.NewWaitlistRepository()
+		admin := repotest.NewAdminRepository()
+		books := repotest.NewBookRepository()
+		books.SetCopies(copies)
+		wishlists := repotest.NewWishlistRequestRepository()
+		recommendations := repotest.NewRecommendationRepository(users)
+		h := NewCopyHandler(copies, users, notifs, waitlists, admin, books, wishlists, "", nil, recommendations)
+
+		book := models.Book{Title: "Recommended Then Orphaned", Author: "A"}
+		require.NoError(t, books.Create(&book))
+		bookCopy := models.Copy{BookID: book.ID, OwnerID: 1, Status: "available"}
+		require.NoError(t, copies.Create(&bookCopy))
+		require.NoError(t, recommendations.Create(book.ID, 2))
+
+		_, err := h.deleteCopy(fakeAuthedCtx(t, 1, "user"), &deleteCopyInput{ID: bookCopy.ID})
+		require.NoError(t, err)
+
+		assert.Equal(t, 0, recommendations.Count(), "the orphaned book's recommendation rows must not survive its deletion")
 	})
 
 	t.Run("removes the cached cover file for a deleted orphaned book", func(t *testing.T) {
