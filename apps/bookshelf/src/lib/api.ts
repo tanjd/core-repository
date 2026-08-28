@@ -18,6 +18,7 @@ import type {
   VerificationStatus,
   DashboardStats,
   WishlistRequest,
+  Recommendation,
 } from "./types";
 
 export type {
@@ -38,6 +39,7 @@ export type {
   VerificationStatus,
   DashboardStats,
   WishlistRequest,
+  Recommendation,
 };
 
 // Mirrors internal/handlers/auth.go's minPasswordLength/maxPasswordLength —
@@ -446,6 +448,15 @@ export const api = {
   getBook: (id: number) => request<Book>(`/books/${id}`),
   createBook: (data: Partial<Book>) =>
     request<Book>("/books", { method: "POST", body: JSON.stringify(data) }),
+
+  // Recommendations ("highly recommend this" thumbs-up) — see
+  // apps/bookshelf/docs/book-recommendations-spec.md.
+  recommendBook: (bookId: number) =>
+    request<void>(`/books/${bookId}/recommendations`, { method: "POST" }),
+  unrecommendBook: (bookId: number) =>
+    request<void>(`/books/${bookId}/recommendations`, { method: "DELETE" }),
+  getRecommendations: (bookId: number) =>
+    request<Recommendation[]>(`/books/${bookId}/recommendations`),
 
   // Metadata search (proxied through backend)
   searchMetadata: (q: string) =>

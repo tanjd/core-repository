@@ -20,7 +20,11 @@ headless-browser script.
 See `apps/bookshelf-backend/CLAUDE.md`'s "Product scope" section before proposing metadata-heavy
 features (richer book detail pages, ratings/reviews, "more like this") — the product's focus is
 identifying books available in the community and facilitating the exchange, not book discovery;
-link out to a site like Google Books instead of building that surface here.
+link out to a site like Google Books instead of building that surface here. Ratings, reviews, and
+long-form book criticism remain out of scope this way — but a simple member "highly recommend
+this" thumbs-up (see `docs/book-recommendations-spec.md`) is in scope, because it surfaces
+community reading behaviour adjacent to the exchange flow without implying a rating average or
+duplicating an external site's job.
 
 Its `Dockerfile` follows `apps/ledger-lens`'s sub-pattern rather than a plain `npm ci`/`npm run
 build`: this app's `package.json` is a bare version manifest like every other TS app here (no

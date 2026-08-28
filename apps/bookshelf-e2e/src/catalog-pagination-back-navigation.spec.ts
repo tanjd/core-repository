@@ -42,6 +42,14 @@ async function setupCatalogMocks(page: import("@playwright/test").Page) {
   await page.route("**/api/books/21**", async (route) => {
     await route.fulfill({ json: page2Book });
   });
+  // Registered after the broader "**/api/books/21**" route above so it
+  // takes precedence (Playwright tries matching routes last-registered
+  // first) — otherwise that route's catch-all would also answer the book
+  // detail page's GET .../recommendations call with the Book JSON object
+  // instead of an array, crashing RecommendedBy's render.
+  await page.route("**/api/books/21/recommendations**", async (route) => {
+    await route.fulfill({ json: [] });
+  });
   await page.route("**/api/books*", async (route) => {
     const url = new URL(route.request().url());
     const requestedPage = Number(url.searchParams.get("page") ?? "1");

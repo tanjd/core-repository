@@ -252,3 +252,37 @@ type WishlistRequestRepository interface {
 	// at a deleted one.
 	ClearFulfilledBookID(bookID uint) error
 }
+
+// RecommendationRepository handles persistence for Recommendation records —
+// a member's toggleable "highly recommend this" thumbs-up on a book. See
+// docs/book-recommendations-spec.md.
+type RecommendationRepository interface {
+	// Create adds recommenderID's thumbs-up on bookID. Returns ErrConflict on
+	// a duplicate (book_id, recommender_id) pair — treating that as an
+	// idempotent success is the caller's job, not this method's.
+	Create(bookID, recommenderID uint) error
+	// Delete removes recommenderID's thumbs-up on bookID. Idempotent: no
+	// error when the row doesn't exist.
+	Delete(bookID, recommenderID uint) error
+	FindByBookAndRecommender(bookID, recommenderID uint) (*models.Recommendation, error)
+	// ListByBookID returns bookID's recommenders newest-first, with
+	// Recommender preloaded.
+	ListByBookID(bookID uint) ([]models.Recommendation, error)
+	// CountByBookBatch returns bookID → recommendation count for all
+	// requested book IDs in a single query. Books with zero recommendations
+	// are absent from the map, same convention as CountAvailableCopiesBatch.
+	CountByBookBatch(bookIDs []uint) (map[uint]int64, error)
+	// HasRecommendedBatch returns bookID → whether userID has recommended
+	// it, for all requested book IDs in a single query. Absent keys default
+	// to false.
+	HasRecommendedBatch(userID uint, bookIDs []uint) (map[uint]bool, error)
+	// DeleteByBookID removes every recommendation for bookID — called before
+	// hard-deleting an orphaned keyless Book (see
+	// CopyHandler.maybeDeleteOrphanedBook).
+	DeleteByBookID(bookID uint) error
+	// DeleteByRecommenderID removes every recommendation made by
+	// recommenderID — called before deleting a User, so an ex-member's
+	// thumbs-ups fall out of every book's count and facepile (see
+	// docs/book-recommendations-spec.md's "Live-community signal").
+	DeleteByRecommenderID(recommenderID uint) error
+}

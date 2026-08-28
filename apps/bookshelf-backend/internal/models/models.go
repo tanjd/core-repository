@@ -182,6 +182,17 @@ type WishlistRequest struct {
 	FulfilledBook   *Book      `json:"fulfilled_book,omitempty"`
 }
 
+// Recommendation is a member's lightweight "I'd highly recommend this"
+// thumbs-up on a book — one per (book, recommender) pair, toggled on/off
+// rather than edited. See docs/book-recommendations-spec.md.
+type Recommendation struct {
+	ID            uint      `gorm:"primarykey" json:"id"`
+	BookID        uint      `gorm:"not null;uniqueIndex:idx_recommendations_book_recommender" json:"book_id"`
+	RecommenderID uint      `gorm:"not null;uniqueIndex:idx_recommendations_book_recommender" json:"recommender_id"`
+	CreatedAt     time.Time `json:"created_at"`
+	Recommender   User      `json:"recommender,omitempty"`
+}
+
 // Notification is an in-app alert delivered to a user.
 // Type values: request_received | request_accepted | request_rejected |
 //

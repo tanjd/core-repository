@@ -71,6 +71,21 @@ export interface Book {
   borrow_count?: number;
   waitlist_count?: number;
   description_enriched?: boolean;
+  // recommendation_count: how many current members have given this book a
+  // "highly recommend this" thumbs-up. your_recommendation: whether the
+  // current viewer has (always false for an anonymous viewer). Both are
+  // populated by the backend on GET /books and GET /books/{id} — see
+  // apps/bookshelf/docs/book-recommendations-spec.md.
+  recommendation_count?: number;
+  your_recommendation?: boolean;
+}
+
+// Recommendation is one entry in a book's recommender list — the wire shape
+// returned by GET /books/{id}/recommendations, newest first. See
+// apps/bookshelf/docs/book-recommendations-spec.md.
+export interface Recommendation {
+  recommender_name: string;
+  created_at: string;
 }
 
 export interface Copy {

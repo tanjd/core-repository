@@ -29,11 +29,17 @@ type AdminHandler struct {
 	loans              repository.LoanRequestRepository
 	googleBooksKeyPool *services.GoogleBooksKeyPool
 	registration       *services.RegistrationWorkflow
+	// recommendations is optional (nil-safe), same reasoning as
+	// BookHandler.recommendations — deleteUser clears the target's
+	// recommendation rows before the user itself is deleted, so an
+	// ex-member's thumbs-ups fall out of every book's count and facepile.
+	// See docs/book-recommendations-spec.md's "Live-community signal".
+	recommendations repository.RecommendationRepository
 }
 
 // NewAdminHandler creates a new AdminHandler.
-func NewAdminHandler(admin repository.AdminRepository, copies repository.CopyRepository, loans repository.LoanRequestRepository, googleBooksKeyPool *services.GoogleBooksKeyPool, registration *services.RegistrationWorkflow) *AdminHandler {
-	return &AdminHandler{admin: admin, copies: copies, loans: loans, googleBooksKeyPool: googleBooksKeyPool, registration: registration}
+func NewAdminHandler(admin repository.AdminRepository, copies repository.CopyRepository, loans repository.LoanRequestRepository, googleBooksKeyPool *services.GoogleBooksKeyPool, registration *services.RegistrationWorkflow, recommendations repository.RecommendationRepository) *AdminHandler {
+	return &AdminHandler{admin: admin, copies: copies, loans: loans, googleBooksKeyPool: googleBooksKeyPool, registration: registration, recommendations: recommendations}
 }
 
 // --- Input / Output types ---
@@ -334,33 +340,17 @@ func (h *AdminHandler) deleteUser(ctx context.Context, input *adminUserIDInput) 
 		}
 		return nil, huma.Error500InternalServerError("could not fetch user")
 	}
-	if target.Role == "admin" {
-		count, err := h.admin.CountByRole("admin")
-		if err != nil {
-			return nil, huma.Error500InternalServerError("could not check admin count")
-		}
-		if count <= 1 {
-			return nil, huma.Error400BadRequest("cannot delete the last admin")
-		}
+	if err := h.guardLastAdmin(target); err != nil {
+		return nil, err
+	}
+	if err := h.guardDeletableUser(input.ID); err != nil {
+		return nil, err
 	}
 
-	// Deleting the user would otherwise orphan any copies they own and any
-	// loan requests they're a party to, since neither has an ON DELETE
-	// behavior enforced at the DB or ORM level — require an admin to resolve
-	// those first rather than silently leaving dangling references.
-	copyCount, err := h.copies.CountByOwnerID(input.ID)
-	if err != nil {
-		return nil, huma.Error500InternalServerError("could not check owned copies")
-	}
-	if copyCount > 0 {
-		return nil, huma.Error409Conflict("cannot delete a user who still owns copies — transfer or remove them first")
-	}
-	activeLoanCount, err := h.loans.CountActiveLoansByBorrower(input.ID)
-	if err != nil {
-		return nil, huma.Error500InternalServerError("could not check active loan requests")
-	}
-	if activeLoanCount > 0 {
-		return nil, huma.Error409Conflict("cannot delete a user with active loan requests — resolve them first")
+	if h.recommendations != nil {
+		if err := h.recommendations.DeleteByRecommenderID(input.ID); err != nil {
+			return nil, huma.Error500InternalServerError("could not clear user's recommendations")
+		}
 	}
 
 	if err := h.admin.DeleteUser(input.ID); err != nil {
@@ -368,6 +358,43 @@ func (h *AdminHandler) deleteUser(ctx context.Context, input *adminUserIDInput) 
 	}
 
 	return nil, nil
+}
+
+// guardLastAdmin rejects deleting target if they're the community's sole
+// remaining admin.
+func (h *AdminHandler) guardLastAdmin(target *models.User) error {
+	if target.Role != "admin" {
+		return nil
+	}
+	count, err := h.admin.CountByRole("admin")
+	if err != nil {
+		return huma.Error500InternalServerError("could not check admin count")
+	}
+	if count <= 1 {
+		return huma.Error400BadRequest("cannot delete the last admin")
+	}
+	return nil
+}
+
+// guardDeletableUser rejects deleting userID while they still own copies or
+// hold active loan requests — neither has an ON DELETE behavior enforced at
+// the DB or ORM level, so deleting them first would orphan those rows.
+func (h *AdminHandler) guardDeletableUser(userID uint) error {
+	copyCount, err := h.copies.CountByOwnerID(userID)
+	if err != nil {
+		return huma.Error500InternalServerError("could not check owned copies")
+	}
+	if copyCount > 0 {
+		return huma.Error409Conflict("cannot delete a user who still owns copies — transfer or remove them first")
+	}
+	activeLoanCount, err := h.loans.CountActiveLoansByBorrower(userID)
+	if err != nil {
+		return huma.Error500InternalServerError("could not check active loan requests")
+	}
+	if activeLoanCount > 0 {
+		return huma.Error409Conflict("cannot delete a user with active loan requests — resolve them first")
+	}
+	return nil
 }
 
 func (h *AdminHandler) getSettings(ctx context.Context, _ *struct{}) (*adminSettingsOutput, error) {

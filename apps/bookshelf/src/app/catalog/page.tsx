@@ -30,6 +30,7 @@ const SORT_LABELS: Record<string, string> = {
   author: "Author A–Z",
   newest: "Newest First",
   popular: "Most Borrowed",
+  recommended: "Most Recommended",
   relevance: "Best Match",
 };
 
@@ -280,6 +281,7 @@ export default function CatalogPage() {
                 <SelectItem value="author">Author A–Z</SelectItem>
                 <SelectItem value="newest">Newest First</SelectItem>
                 <SelectItem value="popular">Most Borrowed</SelectItem>
+                <SelectItem value="recommended">Most Recommended</SelectItem>
                 {search.trim() && (
                   <SelectItem value="relevance">Best Match</SelectItem>
                 )}

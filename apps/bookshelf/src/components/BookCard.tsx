@@ -2,6 +2,7 @@ import Link from "next/link";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { BookCover } from "@/components/BookCover";
+import { RecommendButton } from "@/components/RecommendButton";
 import type { Book } from "@/lib/types";
 
 interface BookCardProps {
@@ -40,8 +41,8 @@ export function BookCard({ book, ownedByMe, catalogHref }: BookCardProps) {
               {book.author}
             </p>
           )}
-          {typeof book.available_copies === "number" && (
-            <div className="mt-auto pt-1">
+          <div className="mt-auto pt-1 flex items-center justify-between gap-2">
+            {typeof book.available_copies === "number" ? (
               <Badge
                 variant={book.available_copies > 0 ? "success" : "secondary"}
               >
@@ -49,8 +50,21 @@ export function BookCard({ book, ownedByMe, catalogHref }: BookCardProps) {
                   ? `${book.available_copies} available`
                   : "Unavailable"}
               </Badge>
-            </div>
-          )}
+            ) : (
+              <span />
+            )}
+            {/* Count + toggle only — no facepile at card density, per
+                docs/book-recommendations-spec.md's "Facepile stays off the
+                card". Tapping recommends/un-recommends without leaving the
+                catalog; RecommendButton stops the click from also
+                triggering this card's <Link> navigation. */}
+            <RecommendButton
+              bookId={book.id}
+              bookTitle={book.title}
+              recommended={book.your_recommendation ?? false}
+              count={book.recommendation_count ?? 0}
+            />
+          </div>
         </CardContent>
       </Card>
     </Link>

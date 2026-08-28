@@ -31,6 +31,10 @@ type CopyHandler struct {
 	// wishlistWorkflow is optional (nil-safe) — see importBooks — so
 	// existing tests that construct a CopyHandler without one keep working.
 	wishlistWorkflow *services.WishlistWorkflow
+	// recommendations is optional (nil-safe), same reasoning as
+	// wishlistWorkflow — used by maybeDeleteOrphanedBook to clear a deleted
+	// book's recommendation rows too. See docs/book-recommendations-spec.md.
+	recommendations repository.RecommendationRepository
 }
 
 // NewCopyHandler creates a new CopyHandler.
@@ -44,10 +48,12 @@ func NewCopyHandler(
 	wishlists repository.WishlistRequestRepository,
 	coversDir string,
 	wishlistWorkflow *services.WishlistWorkflow,
+	recommendations repository.RecommendationRepository,
 ) *CopyHandler {
 	return &CopyHandler{
 		copies: copies, users: users, notifs: notifs, waitlists: waitlists, admin: admin,
 		books: books, wishlists: wishlists, coversDir: coversDir, wishlistWorkflow: wishlistWorkflow,
+		recommendations: recommendations,
 	}
 }
 
@@ -377,6 +383,12 @@ func (h *CopyHandler) maybeDeleteOrphanedBook(ctx context.Context, bookID uint) 
 	if h.wishlists != nil {
 		if err := h.wishlists.ClearFulfilledBookID(bookID); err != nil {
 			log.Warn().Err(err).Msg("could not clear wishlist fulfilled_book_id before orphan delete")
+		}
+	}
+
+	if h.recommendations != nil {
+		if err := h.recommendations.DeleteByBookID(bookID); err != nil {
+			log.Warn().Err(err).Msg("could not clear recommendations before orphan delete")
 		}
 	}
 
