@@ -10,24 +10,29 @@
     "CI": "${localEnv:CI}"
   },
   "features": {
+    "ghcr.io/stuartleeks/dev-container-features/shell-history:0": {},
+    "ghcr.io/devcontainers-extra/features/pre-commit:2": {},
+    "ghcr.io/devcontainers/features/docker-in-docker:4": {
+      "installDockerBuildx": true,
+      "installDockerComposeSwitch": true,
+      "dockerDashComposeVersion": "v2"
+    },
     "ghcr.io/devcontainers/features/python:1": {
       "version": "3.14"
     },
     "ghcr.io/va-h/devcontainers-features/uv:1": {
-      "version": "0.12.5",
       "shellautocompletion": true
     },
-    "ghcr.io/devcontainers/features/node:2.1.0": {
+    "ghcr.io/devcontainers/features/node:2": {
       "nodeGypDependencies": true,
       "installYarnUsingApt": true,
       "version": "24",
-      "pnpmVersion": "11.23.0",
+      "pnpmVersion": "11.24.0",
       "nvmVersion": "0.40.6"
     },
     "ghcr.io/devcontainers/features/go:1": {
-      "version": "1.26.7",
-      "golangciLintVersion": "2.13.1"
-    },
+      "version": "1.26"
+    }
   },
   "postCreateCommand": "bash .devcontainer/post-create.sh",
   "customizations": {
@@ -37,8 +42,6 @@
         "oxc.oxc-vscode",
         "mgesbert.python-path",
         "ms-python.python",
-        "ms-python.vscode-pylance",
-        "ms-vsliveshare.vsliveshare",
         "nrwl.angular-console",
         "tamasfe.even-better-toml",
         "golang.go"
