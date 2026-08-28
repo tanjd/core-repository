@@ -10,22 +10,6 @@
     "CI": "${localEnv:CI}"
   },
   "features": {
-    "ghcr.io/devcontainers-extra/features/zsh-plugins:0": {
-      "plugins": "npm git zsh-autosuggestions zsh-syntax-highlighting sudo",
-      "omzPlugins": "https://github.com/zsh-users/zsh-autosuggestions https://github.com/zsh-users/zsh-syntax-highlighting.git",
-      "username": "vscode"
-    },
-    "ghcr.io/stuartleeks/dev-container-features/shell-history:0": {},
-    "ghcr.io/anthropics/devcontainer-features/claude-code:1.0": {},
-    "ghcr.io/devcontainers-extra/features/pre-commit:2": {
-      "version": "4.6.2"
-    },
-    "ghcr.io/devcontainers/features/docker-in-docker:4.0.0": {
-      "installDockerBuildx": true,
-      "installDockerComposeSwitch": true,
-      "version": "29.7.2",
-      "dockerDashComposeVersion": "v2"
-    },
     "ghcr.io/devcontainers/features/python:1": {
       "version": "3.14"
     },
@@ -44,9 +28,6 @@
       "version": "1.26.7",
       "golangciLintVersion": "2.13.1"
     },
-    "ghcr.io/devcontainers/features/github-cli:1": {
-      "version": "2.98.0"
-    }
   },
   "postCreateCommand": "bash .devcontainer/post-create.sh",
   "customizations": {
