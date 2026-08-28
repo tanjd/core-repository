@@ -1,3 +1,17 @@
+## 0.26.0 (2026-08-28)
+
+### 🚀 Features
+
+- **bookshelf:** add book recommendations ([#82](https://github.com/tanjd/core-repository/pull/82))
+
+### Database migrations
+
+Includes migration **000015** — automatic on startup; no manual SQL required.
+
+### ❤️ Thank You
+
+- Jeddy Tan @tanjd
+
 ## 0.25.0 (2026-08-27)
 
 ### 🚀 Features
