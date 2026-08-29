@@ -181,7 +181,12 @@ cp -r /data/. /backup/`.
 
 ## Known gaps
 
-- **The registration phone-OTP endpoints are dead weight, kept on purpose.**
+- **Monthly digest non-goals (intentionally parked).** The digest service
+  (`internal/services/digest.go`) sends sequentially with no worker pool, no per-recipient
+  delivery ledger, and no daily budget counter. At ~100 members this is fine: even a full send
+  fits within any relay's 300/day cap in a single run. If the membership grows significantly,
+  add batching then; over-engineering it now would obscure the simple happy path. These three
+  non-goals are called out explicitly in `apps/bookshelf/docs/monthly-digest-spec.md`.
   `/auth/register/send-phone-otp` and `/auth/register/verify-phone-otp` are registered, working
   and tested, but nothing calls them: registration is a single email step since the magic-link
   rework (`apps/bookshelf/docs/magic-link-registration-spec.md`), and phone is now a plain

@@ -12,6 +12,7 @@ export interface User {
   google_books_key_configured: boolean;
   pending_email?: string;
   email_notifications_enabled: boolean;
+  monthly_digest_enabled: boolean;
   telegram_username?: string;
   whatsapp_username?: string;
   contact_note?: string;

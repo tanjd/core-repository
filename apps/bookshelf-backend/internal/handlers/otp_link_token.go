@@ -15,6 +15,12 @@ import (
 // carries.
 const otpLinkTokenTTL = 15 * time.Minute
 
+// unsubscribeTokenTTL is how long a digest unsubscribe link stays valid.
+// Longer than OTP links because a digest email may sit unread for weeks;
+// a 1-year window covers the realistic "received it last month, clicking now"
+// case without requiring token storage or revocation machinery.
+const unsubscribeTokenTTL = 365 * 24 * time.Hour
+
 // Magic-link token purposes — embedded as a claim so a token minted for one
 // flow can't be replayed against another's verify endpoint.
 const (
@@ -23,6 +29,21 @@ const (
 	otpLinkPurposeEmailChange   = "email_change"
 	otpLinkPurposeOTPVerify     = "otp_verify"
 )
+
+// unsubscribePurpose is the purpose claim embedded in digest unsubscribe
+// tokens — kept separate from otpLinkPurpose* constants because it uses a
+// different claims shape (UserID instead of Identifier+Code) and a
+// different TTL.
+const unsubscribePurpose = "unsubscribe_digest"
+
+// unsubscribeClaims is the JWT payload for a one-click digest unsubscribe
+// link. Carries only the member's identity — no code, no email — since
+// the only action is "this link is genuine, flip the flag."
+type unsubscribeClaims struct {
+	Purpose string `json:"purpose"`
+	UserID  uint   `json:"user_id"`
+	jwt.RegisteredClaims
+}
 
 // otpLinkClaims is the JWT payload embedded in a magic-link email URL.
 // Unlike registrationVerificationClaims (minted *after* a code is verified,

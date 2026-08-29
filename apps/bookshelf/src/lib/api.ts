@@ -384,6 +384,7 @@ export const api = {
     email?: string;
     google_books_api_key?: string;
     email_notifications_enabled?: boolean;
+    monthly_digest_enabled?: boolean;
     telegram_username?: string;
     whatsapp_username?: string;
     contact_note?: string;
@@ -391,6 +392,11 @@ export const api = {
     request<User & { pending_email_debug_code?: string }>("/auth/me", {
       method: "PATCH",
       body: JSON.stringify(data),
+    }),
+  unsubscribeDigest: (token: string) =>
+    request<{ email: string }>("/unsubscribe/digest", {
+      method: "POST",
+      body: JSON.stringify({ token }),
     }),
   changePassword: (data: {
     current_password: string;
@@ -714,6 +720,11 @@ export const api = {
   adminGetJobs: () => request<JobStatus[]>("/admin/jobs"),
   adminRunJob: (job: string) =>
     request<void>(`/admin/jobs/${job}/run`, { method: "POST" }),
+  adminDigestTestEmail: () =>
+    request<{ sent: boolean; recipient: string }>(
+      "/admin/jobs/monthly-digest/test-email",
+      { method: "POST" },
+    ),
 
   // Backups
   adminListBackups: () => request<BackupInfo[]>("/admin/backups"),

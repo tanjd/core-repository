@@ -7,7 +7,9 @@ import (
 	"net"
 	"net/smtp"
 	"strings"
+	"time"
 
+	"github.com/golang-jwt/jwt/v5"
 	"github.com/rs/zerolog"
 )
 
@@ -21,6 +23,7 @@ type EmailService struct {
 	env              string
 	devEmailOverride string
 	frontendOrigin   string
+	jwtSecret        string
 }
 
 // NewEmailService creates a new EmailService.
@@ -35,6 +38,14 @@ func NewEmailService(host, port, username, password, from, env, devEmailOverride
 		devEmailOverride: devEmailOverride,
 		frontendOrigin:   strings.TrimRight(frontendOrigin, "/"),
 	}
+}
+
+// WithJWTSecret sets the JWT secret used by UnsubscribeLink. Call this
+// immediately after NewEmailService if the service needs to mint unsubscribe
+// tokens (i.e. when sending digest email).
+func (s *EmailService) WithJWTSecret(secret string) *EmailService {
+	s.jwtSecret = secret
+	return s
 }
 
 // URL builds an absolute frontend URL from path, for linking recipients back
@@ -103,4 +114,41 @@ func (s *EmailService) SendEmailAsync(ctx context.Context, recipient, subject, h
 			zerolog.Ctx(ctx).Error().Err(err).Str("to", recipient).Str("subject", subject).Msg("async email send failed")
 		}
 	}()
+}
+
+// unsubscribeLinkTTL is the lifetime of a one-click unsubscribe token.
+const unsubscribeLinkTTL = 365 * 24 * time.Hour
+
+// unsubscribeLinkPurpose is the purpose claim embedded in unsubscribe tokens
+// so they can't be replayed against other signed-token endpoints.
+const unsubscribeLinkPurpose = "unsubscribe_digest"
+
+type unsubscribeLinkClaims struct {
+	Purpose string `json:"purpose"`
+	UserID  uint   `json:"user_id"`
+	jwt.RegisteredClaims
+}
+
+// UnsubscribeLink mints a 1-year signed unsubscribe token for userID and
+// returns the full frontend URL to the unsubscribe confirmation page.
+// Returns an empty string if no JWT secret has been configured via
+// WithJWTSecret (e.g. in tests that don't need real links).
+func (s *EmailService) UnsubscribeLink(userID uint) string {
+	if s.jwtSecret == "" {
+		return s.URL("/unsubscribe?token=test-token")
+	}
+	claims := unsubscribeLinkClaims{
+		Purpose: unsubscribeLinkPurpose,
+		UserID:  userID,
+		RegisteredClaims: jwt.RegisteredClaims{
+			ExpiresAt: jwt.NewNumericDate(time.Now().Add(unsubscribeLinkTTL)),
+			IssuedAt:  jwt.NewNumericDate(time.Now()),
+		},
+	}
+	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
+	signed, err := token.SignedString([]byte(s.jwtSecret))
+	if err != nil {
+		return s.URL("/unsubscribe?token=error")
+	}
+	return s.URL("/unsubscribe?token=" + signed)
 }

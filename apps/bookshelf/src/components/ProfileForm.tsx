@@ -36,6 +36,7 @@ export function ProfileForm() {
   const [phone, setPhone] = useState("");
   const [emailNotificationsEnabled, setEmailNotificationsEnabled] =
     useState(true);
+  const [monthlyDigestEnabled, setMonthlyDigestEnabled] = useState(true);
   const [telegramUsername, setTelegramUsername] = useState("");
   const [whatsappUsername, setWhatsappUsername] = useState("");
   const [contactNote, setContactNote] = useState("");
@@ -85,6 +86,7 @@ export function ProfileForm() {
             : (u.phone ?? ""),
         );
         setEmailNotificationsEnabled(u.email_notifications_enabled);
+        setMonthlyDigestEnabled(u.monthly_digest_enabled);
         setTelegramUsername(u.telegram_username ?? "");
         setWhatsappUsername(u.whatsapp_username ?? "");
         setContactNote(u.contact_note ?? "");
@@ -134,6 +136,7 @@ export function ProfileForm() {
         email: email.trim() || undefined,
         phone: fullPhone,
         email_notifications_enabled: emailNotificationsEnabled,
+        monthly_digest_enabled: monthlyDigestEnabled,
         telegram_username: telegramUsername.trim(),
         whatsapp_username: whatsappUsername.trim(),
         contact_note: contactNote.trim(),
@@ -568,6 +571,24 @@ export function ProfileForm() {
                         emailNotificationsEnabled
                           ? "Disable email notifications"
                           : "Enable email notifications"
+                      }
+                    />
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-sm font-medium">Monthly digest</p>
+                      <p className="text-xs text-muted-foreground mt-0.5">
+                        A once-a-month email with new books and top recommended
+                        books in the community.
+                      </p>
+                    </div>
+                    <Switch
+                      checked={monthlyDigestEnabled}
+                      onCheckedChange={setMonthlyDigestEnabled}
+                      aria-label={
+                        monthlyDigestEnabled
+                          ? "Disable monthly digest"
+                          : "Enable monthly digest"
                       }
                     />
                   </div>

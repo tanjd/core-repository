@@ -111,6 +111,9 @@ func main() {
 	descriptionReconciliationSvc := services.NewDescriptionReconciliationService(bookRepo, googleBooksKeyPool)
 	coverBackfillSvc := services.NewCoverBackfillService(bookRepo, coversDir, googleBooksKeyPool)
 
+	digestSvc := services.NewDigestService(bookRepo, recommendationRepo, userRepo, adminRepo,
+		emailSvc.WithJWTSecret(cfg.JWTSecret))
+
 	scheduler := services.NewScheduler(bookRepo, adminRepo, coversDir, cfg.MetadataRefreshInterval)
 	scheduler.RegisterJob("backup", "backup_interval", 24*time.Hour, backupSvc.CreateSnapshot)
 	scheduler.RegisterJob("description-reconciliation", "description_reconciliation_interval", 24*time.Hour, descriptionReconciliationSvc.Run)
@@ -123,6 +126,7 @@ func main() {
 	// indexed statement.
 	scheduler.RegisterJob("registration-prune", "registration_prune_interval", time.Hour,
 		pruneRegistrationVerifications(regVerificationRepo))
+	scheduler.RegisterJob("monthly-digest", "monthly_digest_interval", 24*time.Hour, digestSvc.Run)
 
 	seedYAMLConfig(cfg.AppConfigPath, adminRepo)
 
@@ -138,12 +142,13 @@ func main() {
 	loanH := handlers.NewLoanRequestHandler(copyRepo, loanRepo, adminRepo, userRepo, workflow)
 	notifH := handlers.NewNotificationHandler(notifRepo)
 	adminH := handlers.NewAdminHandler(adminRepo, copyRepo, loanRepo, googleBooksKeyPool, registrationWorkflow, recommendationRepo)
-	jobsH := handlers.NewJobsHandler(scheduler)
+	jobsH := handlers.NewJobsHandler(scheduler, digestSvc, userRepo)
 	backupH := handlers.NewBackupHandler(backupSvc)
 	waitlistH := handlers.NewWaitlistHandler(copyRepo, waitlistRepo)
 	announcementH := handlers.NewAnnouncementHandler(announcementRepo)
 	wishlistH := handlers.NewWishlistHandler(wishlistRepo, bookRepo, wishlistWorkflow)
 	recommendationH := handlers.NewRecommendationHandler(recommendationRepo)
+	unsubscribeH := handlers.NewUnsubscribeHandler(userRepo, cfg.JWTSecret, cfg.Env)
 
 	// Router
 	mux := http.NewServeMux()
@@ -200,6 +205,7 @@ func main() {
 	announcementH.RegisterRoutes(api)
 	wishlistH.RegisterRoutes(api)
 	recommendationH.RegisterRoutes(api)
+	unsubscribeH.RegisterRoutes(api)
 
 	// Middleware chain: security headers → request logging → CORS → auth enrichment → mux
 	corsHandler := cors.New(cors.Options{

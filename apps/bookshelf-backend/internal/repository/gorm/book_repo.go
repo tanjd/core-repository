@@ -2,6 +2,7 @@ package gorm
 
 import (
 	"errors"
+	"time"
 
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
@@ -156,6 +157,16 @@ func (r *BookRepository) ListPaginated(search, sort string, availableOnly bool, 
 func (r *BookRepository) ListRecent(limit int) ([]models.Book, error) {
 	var books []models.Book
 	err := r.db.Where("EXISTS (SELECT 1 FROM copies WHERE copies.book_id = books.id)").
+		Order("books.created_at DESC").
+		Limit(limit).
+		Find(&books).Error
+	return books, err
+}
+
+func (r *BookRepository) ListCreatedBetween(from, to time.Time, limit int) ([]models.Book, error) {
+	var books []models.Book
+	err := r.db.Where("books.created_at >= ? AND books.created_at < ?", from, to).
+		Preload("Copies").
 		Order("books.created_at DESC").
 		Limit(limit).
 		Find(&books).Error

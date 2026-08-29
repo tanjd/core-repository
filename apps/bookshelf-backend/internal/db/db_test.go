@@ -25,7 +25,7 @@ func TestMigrationVersion_afterOpen(t *testing.T) {
 	}
 
 	// Keep in sync with the highest numbered *.up.sql in internal/db/migrations/.
-	const expectedMigrationCount uint = 15
+	const expectedMigrationCount uint = 16
 	if version != expectedMigrationCount {
 		t.Fatalf("MigrationVersion() = %d, want %d", version, expectedMigrationCount)
 	}

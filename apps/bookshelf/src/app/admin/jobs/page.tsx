@@ -7,7 +7,10 @@ import { api } from "@/lib/api";
 import type { JobStatus } from "@/lib/types";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Switch } from "@/components/ui/switch";
 import { ScheduledTaskCard } from "@/components/admin/ScheduledTaskCard";
+
+const MONTHLY_DIGEST_ENABLED_KEY = "monthly_digest_enabled";
 
 const JOB_META: Record<string, { label: string; description: string }> = {
   "cover-refresh": {
@@ -30,6 +33,11 @@ const JOB_META: Record<string, { label: string; description: string }> = {
     description:
       "Deletes abandoned signups that never submitted their verification code. Runs automatically on the configured interval.",
   },
+  "monthly-digest": {
+    label: "Monthly Digest",
+    description:
+      "Sends a monthly email to opted-in members with new books and top recommendations from the previous calendar month.",
+  },
 };
 
 const INTERVAL_PRESETS = ["1h", "6h", "12h", "24h", "48h", "168h"];
@@ -47,6 +55,7 @@ const JOB_SETTING_KEYS: Record<string, string> = {
   "description-reconciliation": "description_reconciliation_interval",
   "cover-backfill": "cover_backfill_interval",
   "registration-prune": "registration_prune_interval",
+  "monthly-digest": "monthly_digest_interval",
 };
 
 export default function AdminJobsPage() {
@@ -54,11 +63,21 @@ export default function AdminJobsPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [triggering, setTriggering] = useState<string | null>(null);
+  const [sendingTestEmail, setSendingTestEmail] = useState(false);
+  const [digestEnabled, setDigestEnabled] = useState(true);
+  const [savingDigestEnabled, setSavingDigestEnabled] = useState(false);
 
   const loadJobs = useCallback(async () => {
     try {
-      const data = await api.adminGetJobs();
+      const [data, settings] = await Promise.all([
+        api.adminGetJobs(),
+        api.adminGetSettings(),
+      ]);
       setJobs(data);
+      const setting = settings.find(
+        (s) => s.key === MONTHLY_DIGEST_ENABLED_KEY,
+      );
+      if (setting) setDigestEnabled(setting.value === "true");
       setError("");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to load jobs");
@@ -128,6 +147,41 @@ export default function AdminJobsPage() {
     }
   }
 
+  async function handleToggleDigestEnabled(checked: boolean) {
+    setSavingDigestEnabled(true);
+    const previous = digestEnabled;
+    setDigestEnabled(checked);
+    try {
+      await api.adminUpdateSettings([
+        { key: MONTHLY_DIGEST_ENABLED_KEY, value: checked ? "true" : "false" },
+      ]);
+      toast.success(
+        checked ? "Monthly digest enabled" : "Monthly digest disabled",
+      );
+    } catch (err) {
+      setDigestEnabled(previous);
+      toast.error(
+        err instanceof Error ? err.message : "Failed to update monthly digest",
+      );
+    } finally {
+      setSavingDigestEnabled(false);
+    }
+  }
+
+  async function handleDigestTestEmail() {
+    setSendingTestEmail(true);
+    try {
+      const result = await api.adminDigestTestEmail();
+      toast.success(`Test email sent to ${result.recipient}`);
+    } catch (err) {
+      toast.error(
+        err instanceof Error ? err.message : "Failed to send test email",
+      );
+    } finally {
+      setSendingTestEmail(false);
+    }
+  }
+
   if (loading) {
     return (
       <div className="flex flex-col gap-3 ">
@@ -180,7 +234,31 @@ export default function AdminJobsPage() {
               intervalPresets={INTERVAL_PRESETS}
               intervalLabels={INTERVAL_LABELS}
               onSaveInterval={(value) => handleSaveInterval(job.name, value)}
-            />
+            >
+              {job.name === "monthly-digest" && (
+                <div className="flex flex-wrap items-center justify-between gap-3 border-t pt-3">
+                  <div className="flex items-center gap-2">
+                    <Switch
+                      checked={digestEnabled}
+                      onCheckedChange={handleToggleDigestEnabled}
+                      disabled={savingDigestEnabled}
+                      aria-label="Enable monthly digest"
+                    />
+                    <span className="text-sm">
+                      {digestEnabled ? "Enabled" : "Disabled"}
+                    </span>
+                  </div>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={handleDigestTestEmail}
+                    disabled={sendingTestEmail}
+                  >
+                    {sendingTestEmail ? "Sending…" : "Send test email"}
+                  </Button>
+                </div>
+              )}
+            </ScheduledTaskCard>
           );
         })}
       </div>
