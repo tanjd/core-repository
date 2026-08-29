@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { BookOpen } from "lucide-react";
 import { api, emailLocalPart, validatePassword } from "@/lib/api";
 import { PasswordStrengthMeter } from "@/components/PasswordStrengthMeter";
+import { PasswordInput } from "@/components/PasswordInput";
 import {
   Card,
   CardHeader,
@@ -112,9 +113,8 @@ export default function SetupPage() {
               <label htmlFor="password" className="text-sm font-medium">
                 Password
               </label>
-              <Input
+              <PasswordInput
                 id="password"
-                type="password"
                 autoComplete="new-password"
                 required
                 minLength={12}
@@ -131,9 +131,8 @@ export default function SetupPage() {
               <label htmlFor="confirm-password" className="text-sm font-medium">
                 Confirm password
               </label>
-              <Input
+              <PasswordInput
                 id="confirm-password"
-                type="password"
                 autoComplete="new-password"
                 required
                 minLength={12}

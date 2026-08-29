@@ -7,6 +7,7 @@ import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { api, emailLocalPart, validatePassword } from "@/lib/api";
 import { PasswordStrengthMeter } from "@/components/PasswordStrengthMeter";
+import { PasswordInput } from "@/components/PasswordInput";
 import { InviteLinkCard } from "@/components/InviteLinkCard";
 import type { User, VerificationStatus } from "@/lib/types";
 import { Badge } from "@/components/ui/badge";
@@ -631,9 +632,8 @@ export function ProfileForm() {
                   >
                     Current password
                   </label>
-                  <Input
+                  <PasswordInput
                     id="current-password"
-                    type="password"
                     autoComplete="current-password"
                     value={currentPassword}
                     onChange={(e) => setCurrentPassword(e.target.value)}
@@ -644,9 +644,8 @@ export function ProfileForm() {
                   <label htmlFor="new-password" className="text-sm font-medium">
                     New password
                   </label>
-                  <Input
+                  <PasswordInput
                     id="new-password"
-                    type="password"
                     autoComplete="new-password"
                     value={newPassword}
                     onChange={(e) => setNewPassword(e.target.value)}
@@ -667,9 +666,8 @@ export function ProfileForm() {
                   >
                     Confirm new password
                   </label>
-                  <Input
+                  <PasswordInput
                     id="confirm-new-password"
-                    type="password"
                     autoComplete="new-password"
                     value={confirmNewPassword}
                     onChange={(e) => setConfirmNewPassword(e.target.value)}
@@ -737,9 +735,8 @@ export function ProfileForm() {
                   onSubmit={handleSaveGBKey}
                   className="flex flex-col gap-3"
                 >
-                  <Input
+                  <PasswordInput
                     id="gb-api-key"
-                    type="password"
                     autoComplete="off"
                     value={gbKey}
                     onChange={(e) => setGbKey(e.target.value)}
