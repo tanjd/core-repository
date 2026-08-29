@@ -7,7 +7,10 @@ import { api } from "@/lib/api";
 import type { JobStatus } from "@/lib/types";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Switch } from "@/components/ui/switch";
 import { ScheduledTaskCard } from "@/components/admin/ScheduledTaskCard";
+
+const MONTHLY_DIGEST_ENABLED_KEY = "monthly_digest_enabled";
 
 const JOB_META: Record<string, { label: string; description: string }> = {
   "cover-refresh": {
@@ -61,11 +64,20 @@ export default function AdminJobsPage() {
   const [error, setError] = useState("");
   const [triggering, setTriggering] = useState<string | null>(null);
   const [sendingTestEmail, setSendingTestEmail] = useState(false);
+  const [digestEnabled, setDigestEnabled] = useState(true);
+  const [savingDigestEnabled, setSavingDigestEnabled] = useState(false);
 
   const loadJobs = useCallback(async () => {
     try {
-      const data = await api.adminGetJobs();
+      const [data, settings] = await Promise.all([
+        api.adminGetJobs(),
+        api.adminGetSettings(),
+      ]);
       setJobs(data);
+      const setting = settings.find(
+        (s) => s.key === MONTHLY_DIGEST_ENABLED_KEY,
+      );
+      if (setting) setDigestEnabled(setting.value === "true");
       setError("");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to load jobs");
@@ -132,6 +144,27 @@ export default function AdminJobsPage() {
       toast.error(
         err instanceof Error ? err.message : "Failed to save interval",
       );
+    }
+  }
+
+  async function handleToggleDigestEnabled(checked: boolean) {
+    setSavingDigestEnabled(true);
+    const previous = digestEnabled;
+    setDigestEnabled(checked);
+    try {
+      await api.adminUpdateSettings([
+        { key: MONTHLY_DIGEST_ENABLED_KEY, value: checked ? "true" : "false" },
+      ]);
+      toast.success(
+        checked ? "Monthly digest enabled" : "Monthly digest disabled",
+      );
+    } catch (err) {
+      setDigestEnabled(previous);
+      toast.error(
+        err instanceof Error ? err.message : "Failed to update monthly digest",
+      );
+    } finally {
+      setSavingDigestEnabled(false);
     }
   }
 
@@ -203,14 +236,27 @@ export default function AdminJobsPage() {
               onSaveInterval={(value) => handleSaveInterval(job.name, value)}
             >
               {job.name === "monthly-digest" && (
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={handleDigestTestEmail}
-                  disabled={sendingTestEmail}
-                >
-                  {sendingTestEmail ? "Sending…" : "Send test email"}
-                </Button>
+                <div className="flex flex-wrap items-center justify-between gap-3 border-t pt-3">
+                  <div className="flex items-center gap-2">
+                    <Switch
+                      checked={digestEnabled}
+                      onCheckedChange={handleToggleDigestEnabled}
+                      disabled={savingDigestEnabled}
+                      aria-label="Enable monthly digest"
+                    />
+                    <span className="text-sm">
+                      {digestEnabled ? "Enabled" : "Disabled"}
+                    </span>
+                  </div>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={handleDigestTestEmail}
+                    disabled={sendingTestEmail}
+                  >
+                    {sendingTestEmail ? "Sending…" : "Send test email"}
+                  </Button>
+                </div>
               )}
             </ScheduledTaskCard>
           );

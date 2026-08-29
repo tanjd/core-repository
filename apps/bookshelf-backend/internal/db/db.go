@@ -132,8 +132,8 @@ func Seed(database *gorm.DB) {
 		{Key: "require_email_confirmation_on_change", Value: "true"},
 		{Key: "monthly_digest_enabled", Value: "true"},
 		{Key: "monthly_digest_send_day", Value: "1"},
-		{Key: "monthly_digest_new_books_limit", Value: "10"},
-		{Key: "monthly_digest_top_recommended_limit", Value: "5"},
+		{Key: "monthly_digest_new_books_limit", Value: "3"},
+		{Key: "monthly_digest_top_recommended_limit", Value: "3"},
 		{Key: "monthly_digest_interval", Value: "24h"},
 	}
 	for _, s := range defaults {

@@ -56,6 +56,53 @@ test('"Run now" on monthly-digest updates LastResult in the Jobs table', async (
   }).toPass({ timeout: 10_000 });
 });
 
+test("Enabled switch on monthly-digest toggles the global on/off setting", async ({
+  page,
+  request,
+}) => {
+  const token = await getAdminToken(request);
+
+  async function getEnabledSetting(): Promise<string | undefined> {
+    const res = await request.get(`${BACKEND_URL}/admin/settings`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    const settings = (await res.json()) as Array<{
+      key: string;
+      value: string;
+    }>;
+    return settings.find((s) => s.key === "monthly_digest_enabled")?.value;
+  }
+
+  try {
+    await login(page, E2E_ADMIN_EMAIL, E2E_ADMIN_PASSWORD);
+    await page.goto("/admin/jobs");
+    const toggle = page.getByRole("switch", { name: "Enable monthly digest" });
+    await expect(toggle).toBeVisible();
+    await expect(toggle).toBeChecked();
+
+    await toggle.click();
+    await expect(page.getByText("Monthly digest disabled")).toBeVisible();
+    await expect(toggle).not.toBeChecked();
+    await expect(async () => {
+      expect(await getEnabledSetting()).toBe("false");
+    }).toPass({ timeout: 5_000 });
+
+    await toggle.click();
+    await expect(page.getByText("Monthly digest enabled")).toBeVisible();
+    await expect(toggle).toBeChecked();
+    await expect(async () => {
+      expect(await getEnabledSetting()).toBe("true");
+    }).toPass({ timeout: 5_000 });
+  } finally {
+    // Restore regardless of assertion outcome so later tests/specs in this
+    // run see the digest in its default-enabled state.
+    await request.patch(`${BACKEND_URL}/admin/settings`, {
+      headers: { Authorization: `Bearer ${token}` },
+      data: [{ key: "monthly_digest_enabled", value: "true" }],
+    });
+  }
+});
+
 test('"Send test email" button calls the endpoint and shows a toast', async ({
   page,
 }) => {

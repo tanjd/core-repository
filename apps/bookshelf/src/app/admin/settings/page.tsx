@@ -13,6 +13,8 @@ interface SettingMeta {
   label: string;
   description: string;
   type: "bool" | "number";
+  min?: number;
+  max?: number;
 }
 
 const SETTING_LABELS: Record<string, SettingMeta> = {
@@ -60,13 +62,37 @@ const SETTING_LABELS: Record<string, SettingMeta> = {
       "Require users to verify ownership of a new email address (via a code sent to it) before it replaces their current one. Recommended to stay OFF until SMTP delivery is confirmed reliable in this deployment.",
     type: "bool",
   },
+  monthly_digest_send_day: {
+    label: "Send Day",
+    description:
+      "Day of the month (1-28) the monthly digest goes out to opted-in members.",
+    type: "number",
+    min: 1,
+    max: 28,
+  },
+  monthly_digest_new_books_limit: {
+    label: "New Books Limit",
+    description: "Maximum new-book entries shown in the digest.",
+    type: "number",
+    min: 1,
+  },
+  monthly_digest_top_recommended_limit: {
+    label: "Top Recommended Limit",
+    description: "Maximum top-recommended-book entries shown in the digest.",
+    type: "number",
+    min: 1,
+  },
 };
 
 // Grouped the same way Sonarr/Jellyfin group related settings under one
 // section rather than one flat, unrelated list — each group renders as its
 // own card, matching the status-card pattern used by the Jobs/Backups/
 // Metadata admin pages.
-const SETTING_GROUPS: { title: string; keys: string[] }[] = [
+const SETTING_GROUPS: {
+  title: string;
+  description?: string;
+  keys: string[];
+}[] = [
   {
     title: "Access & Registration",
     keys: ["allow_registration", "require_registration_approval"],
@@ -84,6 +110,16 @@ const SETTING_GROUPS: { title: string; keys: string[] }[] = [
   {
     title: "Account Security",
     keys: ["require_email_confirmation_on_change"],
+  },
+  {
+    title: "Monthly Digest",
+    description:
+      "Use the Enabled switch on the Jobs page to turn the whole feature off. These settings only shape what an active digest contains.",
+    keys: [
+      "monthly_digest_send_day",
+      "monthly_digest_new_books_limit",
+      "monthly_digest_top_recommended_limit",
+    ],
   },
 ];
 
@@ -166,7 +202,14 @@ export default function AdminSettingsPage() {
               key={group.title}
               className="rounded-lg border bg-card p-4 flex flex-col gap-3"
             >
-              <p className="font-medium text-sm">{group.title}</p>
+              <div>
+                <p className="font-medium text-sm">{group.title}</p>
+                {group.description && (
+                  <p className="text-xs text-muted-foreground mt-0.5">
+                    {group.description}
+                  </p>
+                )}
+              </div>
               {keys.map((key, i) => {
                 const meta = SETTING_LABELS[key];
                 return (
@@ -201,7 +244,8 @@ export default function AdminSettingsPage() {
                       ) : (
                         <Input
                           type="number"
-                          min={0}
+                          min={meta.min ?? 0}
+                          max={meta.max}
                           value={values[key] ?? ""}
                           onChange={(e) =>
                             setValues((prev) => ({

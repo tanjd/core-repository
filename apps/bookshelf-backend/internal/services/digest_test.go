@@ -53,10 +53,11 @@ type fakeEmailService struct {
 	mu       sync.Mutex
 	calls    int
 	sent     []string // recipient emails, in order
+	lastHTML string   // body of the most recent successful send
 	errOnNth int
 }
 
-func (f *fakeEmailService) SendEmail(_ context.Context, recipient, _, _ string) error {
+func (f *fakeEmailService) SendEmail(_ context.Context, recipient, _, html string) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.calls++
@@ -64,6 +65,7 @@ func (f *fakeEmailService) SendEmail(_ context.Context, recipient, _, _ string) 
 		return errors.New("smtp: simulated failure")
 	}
 	f.sent = append(f.sent, recipient)
+	f.lastHTML = html
 	return nil
 }
 
@@ -344,4 +346,26 @@ func TestDigestService_SendTestEmail(t *testing.T) {
 	// last_handled_month must NOT be updated by a test email
 	handled, _ := admin.GetSetting("monthly_digest_last_handled_month")
 	assert.Equal(t, "2025-05", handled, "SendTestEmail must not update last_handled_month")
+}
+
+func TestDigestService_SendTestEmail_EmptyContent_ShowsPreviewNote(t *testing.T) {
+	today := time.Date(2025, 5, 15, 9, 0, 0, 0, time.Local)
+	admin := newDigestAdminRepo(digestSettings())
+	email := &fakeEmailService{}
+	users := repotest.NewUserRepository()
+
+	adminUser := models.User{Name: "Admin", Email: "admin@example.com"}
+	require.NoError(t, users.Create(&adminUser))
+
+	// No books and no recommendations at all — a real Run() would skip
+	// sending entirely for this period; SendTestEmail should still send,
+	// but with a note explaining the preview is empty.
+	svc := newDigestService(
+		repotest.NewBookRepository(), repotest.NewRecommendationRepository(nil),
+		users, admin, email, func() time.Time { return today },
+	)
+
+	_, err := svc.SendTestEmail(context.Background(), adminUser)
+	require.NoError(t, err)
+	assert.Contains(t, email.lastHTML, "Nothing to report for April 2025")
 }

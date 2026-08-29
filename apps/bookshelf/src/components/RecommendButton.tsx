@@ -89,6 +89,11 @@ export function RecommendButton({
           ? `Remove your recommendation for ${bookTitle}`
           : `Recommend ${bookTitle}`
       }
+      title={
+        recommended
+          ? "You recommended this book — click to remove"
+          : "Thumbs up to recommend this book to other members"
+      }
       className={cn(
         "inline-flex items-center gap-1 rounded-full px-2 py-1 text-xs transition-colors disabled:opacity-60",
         recommended

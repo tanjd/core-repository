@@ -150,13 +150,13 @@ func (s *DigestService) assembleContent(now time.Time) (DigestContent, error) {
 	prevMonthStart := time.Date(now.Year(), now.Month()-1, 1, 0, 0, 0, 0, now.Location())
 	prevMonthEnd := time.Date(now.Year(), now.Month(), 1, 0, 0, 0, 0, now.Location())
 
-	newBooksLimit := 10
+	newBooksLimit := 3
 	if v, _ := s.admin.GetSetting("monthly_digest_new_books_limit"); v != "" {
 		if n, err := strconv.Atoi(v); err == nil && n > 0 {
 			newBooksLimit = n
 		}
 	}
-	topLimit := 5
+	topLimit := 3
 	if v, _ := s.admin.GetSetting("monthly_digest_top_recommended_limit"); v != "" {
 		if n, err := strconv.Atoi(v); err == nil && n > 0 {
 			topLimit = n
@@ -186,7 +186,7 @@ func (s *DigestService) assembleContent(now time.Time) (DigestContent, error) {
 // are logged and counted rather than aborting the loop.
 func (s *DigestService) sendAll(ctx context.Context, recipients []models.User, content DigestContent) (sent, failed int) {
 	for _, r := range recipients {
-		subject, html := s.render(r, content)
+		subject, html := s.render(r, content, false)
 		if err := s.email.SendEmail(ctx, r.Email, subject, html); err != nil {
 			log.Ctx(ctx).Error().Err(err).Str("to", r.Email).Msg("monthly-digest: send failed")
 			failed++
@@ -197,8 +197,12 @@ func (s *DigestService) sendAll(ctx context.Context, recipients []models.User, c
 	return
 }
 
-// render builds the subject line and HTML body for one recipient.
-func (s *DigestService) render(recipient models.User, content DigestContent) (subject, html string) {
+// render builds the subject line and HTML body for one recipient. isPreview
+// is true only for SendTestEmail's admin preview — a real send never reaches
+// this function with both sections empty (run() short-circuits before
+// sendAll in that case), so the empty-content note below only ever appears
+// in a preview, never in an email a member actually receives.
+func (s *DigestService) render(recipient models.User, content DigestContent, isPreview bool) (subject, html string) {
 	subject = fmt.Sprintf("Bookshelf digest — %s", content.PreviousMonth)
 
 	name := recipient.Name
@@ -207,6 +211,15 @@ func (s *DigestService) render(recipient models.User, content DigestContent) (su
 	}
 
 	html = fmt.Sprintf("<p>Hi %s,</p>\n<p>Here's your Bookshelf update for <strong>%s</strong>.</p>\n", name, content.PreviousMonth)
+
+	if isPreview && len(content.NewBooks) == 0 && len(content.TopRecommended) == 0 {
+		html += fmt.Sprintf(
+			"<p><em>Nothing to report for %s yet — no books were added that month and there are no "+
+				"community recommendations. A real digest would not be sent for an empty month like this; "+
+				"you're only seeing this because a preview always sends.</em></p>\n",
+			content.PreviousMonth,
+		)
+	}
 
 	if len(content.NewBooks) > 0 {
 		html += "<h2>New additions</h2>\n<ul>\n"
@@ -225,7 +238,7 @@ func (s *DigestService) render(recipient models.User, content DigestContent) (su
 		html += "</ul>\n"
 	}
 
-	html += s.email.Button("/books", "Browse the library")
+	html += s.email.Button("/catalog", "Browse the library")
 	html += fmt.Sprintf(
 		`<p style="font-size:12px;color:#888;">Don't want these emails? `+
 			`<a href="%s">Unsubscribe</a></p>`,
@@ -243,7 +256,7 @@ func (s *DigestService) SendTestEmail(ctx context.Context, adminUser models.User
 		return "", fmt.Errorf("assemble content: %w", err)
 	}
 
-	subject, html := s.render(adminUser, content)
+	subject, html := s.render(adminUser, content, true)
 	if err := s.email.SendEmail(ctx, adminUser.Email, subject, html); err != nil {
 		return "", fmt.Errorf("send: %w", err)
 	}
