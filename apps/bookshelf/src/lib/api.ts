@@ -393,6 +393,11 @@ export const api = {
       method: "PATCH",
       body: JSON.stringify(data),
     }),
+  unsubscribeDigest: (token: string) =>
+    request<{ email: string }>("/unsubscribe/digest", {
+      method: "POST",
+      body: JSON.stringify({ token }),
+    }),
   changePassword: (data: {
     current_password: string;
     new_password: string;

@@ -144,6 +144,7 @@ func main() {
 	announcementH := handlers.NewAnnouncementHandler(announcementRepo)
 	wishlistH := handlers.NewWishlistHandler(wishlistRepo, bookRepo, wishlistWorkflow)
 	recommendationH := handlers.NewRecommendationHandler(recommendationRepo)
+	unsubscribeH := handlers.NewUnsubscribeHandler(userRepo, cfg.JWTSecret, cfg.Env)
 
 	// Router
 	mux := http.NewServeMux()
@@ -200,6 +201,7 @@ func main() {
 	announcementH.RegisterRoutes(api)
 	wishlistH.RegisterRoutes(api)
 	recommendationH.RegisterRoutes(api)
+	unsubscribeH.RegisterRoutes(api)
 
 	// Middleware chain: security headers → request logging → CORS → auth enrichment → mux
 	corsHandler := cors.New(cors.Options{
