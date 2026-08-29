@@ -96,8 +96,15 @@ export default defineConfig({
       },
     },
     {
+      // Runs generate-changelog's underlying command directly first: this build
+      // bypasses Nx (see above), so it wouldn't otherwise pick up bookshelf's
+      // `build`/`test`/`lint` -> `generate-changelog` dependsOn wiring and
+      // src/lib/changelog.generated.ts (gitignored; imported by NotificationBell,
+      // which every page renders via NavBar) would be missing whenever this
+      // suite runs without bookshelf's own Nx targets also running first — e.g.
+      // nx affected on a bookshelf-backend-only change.
       command:
-        "pnpm exec next build apps/bookshelf --webpack && pnpm exec next start apps/bookshelf --port 3000",
+        "pnpm exec tsx apps/bookshelf/scripts/generate-changelog.ts && pnpm exec next build apps/bookshelf --webpack && pnpm exec next start apps/bookshelf --port 3000",
       url: "http://localhost:3000",
       reuseExistingServer: !process.env.CI,
       cwd: workspaceRoot,

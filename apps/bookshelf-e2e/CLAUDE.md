@@ -25,6 +25,21 @@ compilation entirely, so specs use plain `page.goto()` + default-timeout asserti
 retry/reload helpers, no bumped timeouts. The trade-off is a build (~30s+) at `webServer` startup
 instead of `next dev`'s near-instant boot (see `playwright.config.ts`'s `timeout` on that entry).
 
+## Frontend webServer regenerates the changelog itself
+
+The frontend `webServer` command in `playwright.config.ts` runs `generate-changelog`'s underlying
+script (`pnpm exec tsx apps/bookshelf/scripts/generate-changelog.ts`) before `next build`. This
+looks redundant next to `apps/bookshelf/project.json` declaring `generate-changelog` as a
+`dependsOn` of `build`/`test`/`lint` — it isn't: this suite's build bypasses Nx entirely (see
+"Both commands invoke the underlying tool directly" above), so it never picks up that `dependsOn`
+wiring. Without the explicit call, `src/lib/changelog.generated.ts` (gitignored, imported by
+`NotificationBell.tsx` which every page renders via `NavBar`) only exists if something else in the
+same CI job happened to run one of bookshelf's own Nx targets first — true for most PRs, but not
+for a bookshelf-backend-only change, where `nx affected -t lint test` never touches the `bookshelf`
+project. That gap broke CI the first time a backend-only PR shipped after `NotificationBell.tsx`
+started importing the generated file (PR #86) — don't remove the explicit call as
+"already handled by Nx."
+
 ## Use this suite instead of ad hoc scripts
 
 When verifying a bookshelf UI change works, run or extend this suite (`pnpm nx e2e
