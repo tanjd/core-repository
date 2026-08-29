@@ -1,9 +1,14 @@
 import { test, expect, type APIRequestContext } from "@playwright/test";
 import { E2E_ADMIN_EMAIL, E2E_ADMIN_PASSWORD } from "./test-users";
-import { login } from "./auth-helpers";
 
 // Covers the monthly-digest scheduler job entry on the Admin > Jobs page,
 // introduced in Slice 3 of apps/bookshelf/docs/monthly-digest-plan.md.
+
+// Admin auth is pre-loaded from .auth/admin.json (written by auth.setup.ts)
+// rather than navigating through the login form on every test — all four
+// tests here log in as admin only to reach /admin/jobs, not to exercise the
+// login UI itself.
+test.use({ storageState: ".auth/admin.json" });
 
 const BACKEND_URL = "http://localhost:8000";
 
@@ -17,7 +22,6 @@ async function getAdminToken(request: APIRequestContext): Promise<string> {
 }
 
 test("monthly-digest job appears in the Jobs page", async ({ page }) => {
-  await login(page, E2E_ADMIN_EMAIL, E2E_ADMIN_PASSWORD);
   await page.goto("/admin/jobs");
   await expect(page.getByText("Monthly Digest")).toBeVisible();
 });
@@ -38,7 +42,6 @@ test('"Run now" on monthly-digest updates LastResult in the Jobs table', async (
     `run job failed: ${await runRes.text()}`,
   ).toBeTruthy();
 
-  await login(page, E2E_ADMIN_EMAIL, E2E_ADMIN_PASSWORD);
   await page.goto("/admin/jobs");
   await expect(page.getByText("Monthly Digest")).toBeVisible();
 
@@ -74,7 +77,6 @@ test("Enabled switch on monthly-digest toggles the global on/off setting", async
   }
 
   try {
-    await login(page, E2E_ADMIN_EMAIL, E2E_ADMIN_PASSWORD);
     await page.goto("/admin/jobs");
     const toggle = page.getByRole("switch", { name: "Enable monthly digest" });
     await expect(toggle).toBeVisible();
@@ -106,7 +108,6 @@ test("Enabled switch on monthly-digest toggles the global on/off setting", async
 test('"Send test email" button calls the endpoint and shows a toast', async ({
   page,
 }) => {
-  await login(page, E2E_ADMIN_EMAIL, E2E_ADMIN_PASSWORD);
   await page.goto("/admin/jobs");
   await expect(page.getByText("Monthly Digest")).toBeVisible();
 
