@@ -720,6 +720,11 @@ export const api = {
   adminGetJobs: () => request<JobStatus[]>("/admin/jobs"),
   adminRunJob: (job: string) =>
     request<void>(`/admin/jobs/${job}/run`, { method: "POST" }),
+  adminDigestTestEmail: () =>
+    request<{ sent: boolean; recipient: string }>(
+      "/admin/jobs/monthly-digest/test-email",
+      { method: "POST" },
+    ),
 
   // Backups
   adminListBackups: () => request<BackupInfo[]>("/admin/backups"),

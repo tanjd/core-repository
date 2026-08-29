@@ -7,6 +7,7 @@
 package repotest
 
 import (
+	"context"
 	"sort"
 	"strings"
 	"sync"
@@ -47,6 +48,22 @@ func (r *UserRepository) Create(user *models.User) error {
 	cp := *user
 	r.byID[user.ID] = &cp
 	return nil
+}
+
+// ListDigestRecipients returns verified, non-suspended, non-pending-approval,
+// opted-in users — the in-memory fake applies the same four filters as the
+// real implementation.
+func (r *UserRepository) ListDigestRecipients(_ context.Context) ([]models.User, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	var out []models.User
+	for _, u := range r.byID {
+		if u.Verified && !u.Suspended && !u.PendingApproval && u.MonthlyDigestEnabled {
+			cp := *u
+			out = append(out, cp)
+		}
+	}
+	return out, nil
 }
 
 // FindByEmail returns the user with the given email, or
@@ -1160,6 +1177,19 @@ func (r *BookRepository) ListPaginated(_, _ string, _ bool, page, pageSize int) 
 // ListRecent returns nil — not exercised by any test using this fake yet.
 func (r *BookRepository) ListRecent(_ int) ([]models.Book, error) { return nil, nil }
 
+func (r *BookRepository) ListCreatedBetween(from, to time.Time, _ int) ([]models.Book, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	var out []models.Book
+	for _, b := range r.byID {
+		if !b.CreatedAt.Before(from) && b.CreatedAt.Before(to) {
+			cp := *b
+			out = append(out, cp)
+		}
+	}
+	return out, nil
+}
+
 // CountAvailableCopies returns 0 — not exercised by any test using this fake yet.
 func (r *BookRepository) CountAvailableCopies(_ uint) (int64, error) { return 0, nil }
 
@@ -1422,6 +1452,7 @@ type RecommendationRepository struct {
 	nextID uint
 	byID   map[uint]*models.Recommendation
 	users  *UserRepository
+	books  *BookRepository
 }
 
 // NewRecommendationRepository creates an empty fake RecommendationRepository.
@@ -1560,6 +1591,61 @@ func (r *RecommendationRepository) Count() int {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	return len(r.byID)
+}
+
+// topBookEntry is ListTopBooks' intermediate sort key before book lookup.
+type topBookEntry struct {
+	bookID uint
+	count  int64
+	title  string
+}
+
+// lookupBook returns the book for bookID, or a zero-value models.Book if the
+// fake wasn't wired with a book store or the book no longer exists.
+func (r *RecommendationRepository) lookupBook(bookID uint) models.Book {
+	var book models.Book
+	if r.books != nil {
+		r.books.mu.Lock()
+		if b, ok := r.books.byID[bookID]; ok {
+			book = *b
+		}
+		r.books.mu.Unlock()
+	}
+	return book
+}
+
+// ListTopBooks returns top-recommended books ordered by count desc, title asc,
+// excluding zero-count books. The in-memory fake mirrors the real query's semantics.
+func (r *RecommendationRepository) ListTopBooks(limit int) ([]repository.TopRecommendedBook, error) {
+	r.mu.Lock()
+	counts := map[uint]int64{}
+	for _, rec := range r.byID {
+		counts[rec.BookID]++
+	}
+	r.mu.Unlock()
+
+	var entries []topBookEntry
+	for bookID, count := range counts {
+		if count == 0 {
+			continue
+		}
+		entries = append(entries, topBookEntry{bookID, count, r.lookupBook(bookID).Title})
+	}
+	sort.Slice(entries, func(i, j int) bool {
+		if entries[i].count != entries[j].count {
+			return entries[i].count > entries[j].count
+		}
+		return entries[i].title < entries[j].title
+	})
+	if limit > 0 && len(entries) > limit {
+		entries = entries[:limit]
+	}
+
+	results := make([]repository.TopRecommendedBook, 0, len(entries))
+	for _, e := range entries {
+		results = append(results, repository.TopRecommendedBook{Book: r.lookupBook(e.bookID), Count: e.count})
+	}
+	return results, nil
 }
 
 // paginationBounds returns the [start, end) slice bounds for page/pageSize

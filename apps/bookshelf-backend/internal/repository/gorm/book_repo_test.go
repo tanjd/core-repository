@@ -1,7 +1,9 @@
 package gorm
 
 import (
+	"fmt"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -295,4 +297,57 @@ func TestBookRepository_CountCopies(t *testing.T) {
 	count, err = books.CountCopies(two.ID)
 	require.NoError(t, err)
 	assert.EqualValues(t, 2, count)
+}
+
+func TestBookRepository_ListCreatedBetween(t *testing.T) {
+	db := openTestDB(t)
+	books := NewBookRepository(db)
+	copies := NewCopyRepository(db)
+
+	owner := models.User{Name: "Owner", Email: "owner-lcd@example.com"}
+	require.NoError(t, db.Create(&owner).Error)
+
+	// Spread 5 books across 3 months by back-dating created_at directly.
+	jan := func(day int) string { return "2025-01-" + fmt.Sprintf("%02d", day) + " 10:00:00" }
+	feb := func(day int) string { return "2025-02-" + fmt.Sprintf("%02d", day) + " 10:00:00" }
+	mar := func(day int) string { return "2025-03-" + fmt.Sprintf("%02d", day) + " 10:00:00" }
+
+	createBookAt := func(title, at string) models.Book {
+		b := models.Book{Title: title, Author: "A"}
+		require.NoError(t, books.Create(&b))
+		require.NoError(t, db.Model(&b).Update("created_at", at).Error)
+		require.NoError(t, copies.Create(&models.Copy{BookID: b.ID, OwnerID: owner.ID, Status: "available"}))
+		return b
+	}
+
+	_ = createBookAt("Jan 5", jan(5))
+	feb10 := createBookAt("Feb 10", feb(10))
+	feb20 := createBookAt("Feb 20", feb(20))
+	_ = createBookAt("Mar 1", mar(1))
+	_ = createBookAt("Mar 15", mar(15))
+
+	from := time.Date(2025, 2, 1, 0, 0, 0, 0, time.UTC)
+	to := time.Date(2025, 3, 1, 0, 0, 0, 0, time.UTC)
+
+	t.Run("returns only books in the window, newest first", func(t *testing.T) {
+		result, err := books.ListCreatedBetween(from, to, 10)
+		require.NoError(t, err)
+		require.Len(t, result, 2)
+		assert.Equal(t, feb20.ID, result[0].ID, "newest first")
+		assert.Equal(t, feb10.ID, result[1].ID)
+	})
+
+	t.Run("respects limit", func(t *testing.T) {
+		result, err := books.ListCreatedBetween(from, to, 1)
+		require.NoError(t, err)
+		require.Len(t, result, 1)
+		assert.Equal(t, feb20.ID, result[0].ID, "limit keeps newest")
+	})
+
+	t.Run("empty result when no books in window", func(t *testing.T) {
+		empty := time.Date(2024, 6, 1, 0, 0, 0, 0, time.UTC)
+		result, err := books.ListCreatedBetween(empty, empty.AddDate(0, 1, 0), 10)
+		require.NoError(t, err)
+		assert.Empty(t, result)
+	})
 }

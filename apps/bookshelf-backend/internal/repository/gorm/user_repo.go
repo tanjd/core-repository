@@ -1,6 +1,7 @@
 package gorm
 
 import (
+	"context"
 	"errors"
 
 	"gorm.io/gorm"
@@ -79,4 +80,15 @@ func (r *UserRepository) CreateAdminIfNoneExists(user *models.User) error {
 		}
 		return tx.Create(user).Error
 	})
+}
+
+// ListDigestRecipients returns members who should receive the monthly digest:
+// verified, not suspended, not pending approval, and opted in.
+func (r *UserRepository) ListDigestRecipients(ctx context.Context) ([]models.User, error) {
+	var users []models.User
+	err := r.db.WithContext(ctx).
+		Where("verified = ? AND suspended = ? AND pending_approval = ? AND monthly_digest_enabled = ?",
+			true, false, false, true).
+		Find(&users).Error
+	return users, err
 }

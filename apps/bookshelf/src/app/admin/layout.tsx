@@ -28,13 +28,13 @@ export default function AdminLayout({
       <div className="max-w-6xl mx-auto px-4 py-6">
         <div className="mb-6">
           <h1 className="text-2xl font-bold mb-4">Admin</h1>
-          <nav className="flex gap-2 border-b pb-2">
+          <nav className="flex gap-2 overflow-x-auto border-b pb-2">
             {adminLinks.map((link) => (
               <Link
                 key={link.href}
                 href={link.href}
                 className={cn(
-                  "px-3 py-1.5 rounded-md text-sm font-medium transition-colors hover:bg-accent",
+                  "shrink-0 whitespace-nowrap px-3 py-1.5 rounded-md text-sm font-medium transition-colors hover:bg-accent",
                   pathname === link.href
                     ? "bg-accent text-accent-foreground"
                     : "text-muted-foreground",

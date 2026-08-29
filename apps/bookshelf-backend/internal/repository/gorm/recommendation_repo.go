@@ -104,3 +104,30 @@ func (r *RecommendationRepository) DeleteByBookID(bookID uint) error {
 func (r *RecommendationRepository) DeleteByRecommenderID(recommenderID uint) error {
 	return r.db.Where("recommender_id = ?", recommenderID).Delete(&models.Recommendation{}).Error
 }
+
+// ListTopBooks returns the top-recommended books ordered by recommendation
+// count descending, title ascending for ties. Books with zero recommendations
+// are excluded. Up to limit books are returned.
+func (r *RecommendationRepository) ListTopBooks(limit int) ([]repository.TopRecommendedBook, error) {
+	type row struct {
+		models.Book
+		Count int64
+	}
+	var rows []row
+	err := r.db.Table("recommendations").
+		Select("books.*, count(*) as count").
+		Joins("JOIN books ON books.id = recommendations.book_id").
+		Group("recommendations.book_id").
+		Having("count(*) > 0").
+		Order("count DESC, books.title ASC").
+		Limit(limit).
+		Scan(&rows).Error
+	if err != nil {
+		return nil, err
+	}
+	result := make([]repository.TopRecommendedBook, len(rows))
+	for i, row := range rows {
+		result[i] = repository.TopRecommendedBook{Book: row.Book, Count: row.Count}
+	}
+	return result, nil
+}

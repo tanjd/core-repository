@@ -4,6 +4,7 @@
 package repository
 
 import (
+	"context"
 	"errors"
 	"time"
 
@@ -37,6 +38,9 @@ type UserRepository interface {
 	// ErrConflict if an admin already exists (closes the TOCTOU window
 	// between check and insert).
 	CreateAdminIfNoneExists(user *models.User) error
+	// ListDigestRecipients returns verified, non-suspended, non-pending-approval,
+	// opted-in members — the target audience for the monthly digest email.
+	ListDigestRecipients(ctx context.Context) ([]models.User, error)
 }
 
 // RegistrationVerificationRepository handles persistence for the short-lived
@@ -75,6 +79,10 @@ type BookRepository interface {
 	CountAll() (int64, error)
 	ListPaginated(search, sort string, availableOnly bool, page, pageSize int) (*PaginatedResult[models.Book], error)
 	ListRecent(limit int) ([]models.Book, error)
+	// ListCreatedBetween returns books whose created_at is in [from, to),
+	// ordered newest first, up to limit. Used by the monthly digest to
+	// populate the "new this month" section.
+	ListCreatedBetween(from, to time.Time, limit int) ([]models.Book, error)
 	GetByIDWithCopies(id uint) (*models.Book, error)
 	Create(book *models.Book) error
 	Save(book *models.Book) error
@@ -285,4 +293,15 @@ type RecommendationRepository interface {
 	// thumbs-ups fall out of every book's count and facepile (see
 	// docs/book-recommendations-spec.md's "Live-community signal").
 	DeleteByRecommenderID(recommenderID uint) error
+	// ListTopBooks returns the top-recommended books ordered by recommendation
+	// count descending, title ascending for ties, excluding books with zero
+	// recommendations. Up to limit books are returned.
+	ListTopBooks(limit int) ([]TopRecommendedBook, error)
+}
+
+// TopRecommendedBook pairs a book with its community recommendation count,
+// used to build the "top picks" section of the monthly digest.
+type TopRecommendedBook struct {
+	Book  models.Book
+	Count int64
 }
