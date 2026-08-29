@@ -94,11 +94,13 @@ export default function ForgotPasswordPage() {
       emailLocalPart(email),
     ]);
     if (passwordError) {
-      setError(passwordError);
+      // Checklist already shows which requirement is unmet — no prose error
+      // needed.
       return;
     }
     if (newPassword !== confirmPassword) {
-      setError("Passwords do not match");
+      // Live match indicator already shows the mismatch; just block
+      // submission.
       return;
     }
     setResetting(true);

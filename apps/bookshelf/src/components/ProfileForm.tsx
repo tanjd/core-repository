@@ -173,11 +173,13 @@ export function ProfileForm() {
       emailLocalPart(user?.email ?? ""),
     ]);
     if (validationError) {
-      setPwError(validationError);
+      // Checklist already shows which requirement is unmet — no prose error
+      // needed.
       return;
     }
     if (newPassword !== confirmNewPassword) {
-      setPwError("New passwords do not match");
+      // Live match indicator already shows the mismatch; just block
+      // submission.
       return;
     }
     setChangingPw(true);
