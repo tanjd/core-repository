@@ -1,3 +1,13 @@
+## 0.20.1 (2026-08-29)
+
+### 🩹 Fixes
+
+- **bookshelf-backend:** persist scheduler job lastRunAt across restarts ([#86](https://github.com/tanjd/core-repository/pull/86))
+
+### ❤️ Thank You
+
+- Jeddy Tan @tanjd
+
 ## 0.20.0 (2026-08-29)
 
 ### 🚀 Features
