@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { api, emailLocalPart, validatePassword } from "@/lib/api";
 import { PasswordStrengthMeter } from "@/components/PasswordStrengthMeter";
+import { PasswordInput } from "@/components/PasswordInput";
 import {
   Card,
   CardHeader,
@@ -218,9 +219,8 @@ export default function ForgotPasswordPage() {
                   <label htmlFor="new-password" className="text-sm font-medium">
                     New password
                   </label>
-                  <Input
+                  <PasswordInput
                     id="new-password"
-                    type="password"
                     autoComplete="new-password"
                     required
                     value={newPassword}
@@ -239,9 +239,8 @@ export default function ForgotPasswordPage() {
                   >
                     Confirm new password
                   </label>
-                  <Input
+                  <PasswordInput
                     id="confirm-new-password"
-                    type="password"
                     autoComplete="new-password"
                     required
                     value={confirmPassword}

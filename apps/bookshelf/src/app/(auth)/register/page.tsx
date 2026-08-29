@@ -11,6 +11,7 @@ import {
   type RegistrationResult,
 } from "@/lib/api";
 import { PasswordStrengthMeter } from "@/components/PasswordStrengthMeter";
+import { PasswordInput } from "@/components/PasswordInput";
 import {
   Card,
   CardHeader,
@@ -334,9 +335,8 @@ export default function RegisterPage() {
                   <label htmlFor="password" className="text-sm font-medium">
                     Password
                   </label>
-                  <Input
+                  <PasswordInput
                     id="password"
-                    type="password"
                     autoComplete="new-password"
                     required
                     value={password}
@@ -355,9 +355,8 @@ export default function RegisterPage() {
                   >
                     Confirm password
                   </label>
-                  <Input
+                  <PasswordInput
                     id="confirm-password"
-                    type="password"
                     autoComplete="new-password"
                     required
                     value={confirmPassword}
