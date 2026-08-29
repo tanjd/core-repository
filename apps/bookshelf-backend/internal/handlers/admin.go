@@ -35,11 +35,16 @@ type AdminHandler struct {
 	// ex-member's thumbs-ups fall out of every book's count and facepile.
 	// See docs/book-recommendations-spec.md's "Live-community signal".
 	recommendations repository.RecommendationRepository
+	// inviteCodes is optional (nil-safe), same reasoning as recommendations
+	// above — deleteUser and a suspend transition both revoke the target's
+	// invite code, so a removed or suspended member can't keep bringing in
+	// new signups via an outstanding link. See docs/invite-code-spec.md.
+	inviteCodes repository.InviteCodeRepository
 }
 
 // NewAdminHandler creates a new AdminHandler.
-func NewAdminHandler(admin repository.AdminRepository, copies repository.CopyRepository, loans repository.LoanRequestRepository, googleBooksKeyPool *services.GoogleBooksKeyPool, registration *services.RegistrationWorkflow, recommendations repository.RecommendationRepository) *AdminHandler {
-	return &AdminHandler{admin: admin, copies: copies, loans: loans, googleBooksKeyPool: googleBooksKeyPool, registration: registration, recommendations: recommendations}
+func NewAdminHandler(admin repository.AdminRepository, copies repository.CopyRepository, loans repository.LoanRequestRepository, googleBooksKeyPool *services.GoogleBooksKeyPool, registration *services.RegistrationWorkflow, recommendations repository.RecommendationRepository, inviteCodes repository.InviteCodeRepository) *AdminHandler {
+	return &AdminHandler{admin: admin, copies: copies, loans: loans, googleBooksKeyPool: googleBooksKeyPool, registration: registration, recommendations: recommendations, inviteCodes: inviteCodes}
 }
 
 // --- Input / Output types ---
@@ -309,6 +314,14 @@ func (h *AdminHandler) applySuspendedUpdate(user *models.User, callerID uint, su
 		return huma.Error400BadRequest("cannot suspend yourself")
 	}
 	user.Suspended = suspended
+	// A suspended member can't keep bringing in new signups via an
+	// outstanding invite link — revoke it alongside the state change. A
+	// no-op if they have none.
+	if suspended && h.inviteCodes != nil {
+		if err := h.inviteCodes.DeleteByInviter(user.ID); err != nil {
+			return huma.Error500InternalServerError("could not revoke user's invite code")
+		}
+	}
 	return nil
 }
 
@@ -350,6 +363,11 @@ func (h *AdminHandler) deleteUser(ctx context.Context, input *adminUserIDInput) 
 	if h.recommendations != nil {
 		if err := h.recommendations.DeleteByRecommenderID(input.ID); err != nil {
 			return nil, huma.Error500InternalServerError("could not clear user's recommendations")
+		}
+	}
+	if h.inviteCodes != nil {
+		if err := h.inviteCodes.DeleteByInviter(input.ID); err != nil {
+			return nil, huma.Error500InternalServerError("could not revoke user's invite code")
 		}
 	}
 

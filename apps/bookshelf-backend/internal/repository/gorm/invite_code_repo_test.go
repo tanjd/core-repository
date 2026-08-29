@@ -30,6 +30,26 @@ func TestInviteCodeRepository_FindOrCreateByInviter(t *testing.T) {
 	})
 }
 
+func TestInviteCodeRepository_FindByInviter(t *testing.T) {
+	db := openTestDB(t)
+	user := models.User{Name: "U1", Email: "u1-fbi@example.com"}
+	require.NoError(t, db.Create(&user).Error)
+	codes := NewInviteCodeRepository(db)
+
+	t.Run("returns ErrNotFound before a code exists", func(t *testing.T) {
+		_, err := codes.FindByInviter(user.ID)
+		require.ErrorIs(t, err, repository.ErrNotFound)
+	})
+
+	t.Run("returns the row once one exists", func(t *testing.T) {
+		_, err := codes.FindOrCreateByInviter(user.ID, "fbicode1")
+		require.NoError(t, err)
+		ic, err := codes.FindByInviter(user.ID)
+		require.NoError(t, err)
+		assert.Equal(t, "fbicode1", ic.Code)
+	})
+}
+
 func TestInviteCodeRepository_FindByCode(t *testing.T) {
 	db := openTestDB(t)
 	user := models.User{Name: "U1", Email: "u1-fbc@example.com"}

@@ -1648,6 +1648,128 @@ func (r *RecommendationRepository) ListTopBooks(limit int) ([]repository.TopReco
 	return results, nil
 }
 
+// InviteCodeRepository is an in-memory fake of repository.InviteCodeRepository.
+type InviteCodeRepository struct {
+	mu        sync.Mutex
+	nextID    uint
+	byInviter map[uint]*models.InviteCode
+	byCode    map[string]uint // code -> inviterID
+	users     *UserRepository
+}
+
+// NewInviteCodeRepository creates an empty fake InviteCodeRepository. users
+// is optional (nil-safe) — when set, ListAll hydrates the Inviter
+// association from it, mimicking GORM's Preload("Inviter").
+func NewInviteCodeRepository(users *UserRepository) *InviteCodeRepository {
+	return &InviteCodeRepository{
+		byInviter: map[uint]*models.InviteCode{},
+		byCode:    map[string]uint{},
+		users:     users,
+	}
+}
+
+// FindByInviter returns inviterID's existing code, or repository.ErrNotFound.
+func (r *InviteCodeRepository) FindByInviter(inviterID uint) (*models.InviteCode, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	ic, ok := r.byInviter[inviterID]
+	if !ok {
+		return nil, repository.ErrNotFound
+	}
+	cp := *ic
+	return &cp, nil
+}
+
+// FindOrCreateByInviter returns inviterID's existing code, or inserts one
+// with code if none exists yet.
+func (r *InviteCodeRepository) FindOrCreateByInviter(inviterID uint, code string) (*models.InviteCode, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if ic, ok := r.byInviter[inviterID]; ok {
+		cp := *ic
+		return &cp, nil
+	}
+	r.nextID++
+	ic := &models.InviteCode{ID: r.nextID, Code: code, InviterID: inviterID, CreatedAt: time.Now()}
+	r.byInviter[inviterID] = ic
+	r.byCode[code] = inviterID
+	cp := *ic
+	return &cp, nil
+}
+
+// FindByCode returns the code's row, or repository.ErrNotFound.
+func (r *InviteCodeRepository) FindByCode(code string) (*models.InviteCode, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	inviterID, ok := r.byCode[code]
+	if !ok {
+		return nil, repository.ErrNotFound
+	}
+	cp := *r.byInviter[inviterID]
+	return &cp, nil
+}
+
+// Regenerate replaces inviterID's code with newCode.
+func (r *InviteCodeRepository) Regenerate(inviterID uint, newCode string) (*models.InviteCode, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if old, ok := r.byInviter[inviterID]; ok {
+		delete(r.byCode, old.Code)
+	} else {
+		r.nextID++
+	}
+	ic := &models.InviteCode{ID: r.nextID, Code: newCode, InviterID: inviterID, CreatedAt: time.Now()}
+	r.byInviter[inviterID] = ic
+	r.byCode[newCode] = inviterID
+	cp := *ic
+	return &cp, nil
+}
+
+// DeleteByInviter removes inviterID's code, if present.
+func (r *InviteCodeRepository) DeleteByInviter(inviterID uint) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if ic, ok := r.byInviter[inviterID]; ok {
+		delete(r.byCode, ic.Code)
+		delete(r.byInviter, inviterID)
+	}
+	return nil
+}
+
+// DeleteByID removes the code with the given ID, or returns repository.ErrNotFound.
+func (r *InviteCodeRepository) DeleteByID(id uint) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	for inviterID, ic := range r.byInviter {
+		if ic.ID == id {
+			delete(r.byCode, ic.Code)
+			delete(r.byInviter, inviterID)
+			return nil
+		}
+	}
+	return repository.ErrNotFound
+}
+
+// ListAll returns every stored code, newest first.
+func (r *InviteCodeRepository) ListAll() ([]models.InviteCode, error) {
+	r.mu.Lock()
+	out := make([]models.InviteCode, 0, len(r.byInviter))
+	for _, ic := range r.byInviter {
+		cp := *ic
+		out = append(out, cp)
+	}
+	r.mu.Unlock()
+	sort.Slice(out, func(i, j int) bool { return out[i].CreatedAt.After(out[j].CreatedAt) })
+	if r.users != nil {
+		for i := range out {
+			if u, err := r.users.FindByID(out[i].InviterID); err == nil {
+				out[i].Inviter = *u
+			}
+		}
+	}
+	return out, nil
+}
+
 // paginationBounds returns the [start, end) slice bounds for page/pageSize
 // over a collection of the given length.
 func paginationBounds(length, page, pageSize int) (start, end int) {
@@ -1682,4 +1804,5 @@ var (
 	_ repository.WishlistRequestRepository          = (*WishlistRequestRepository)(nil)
 	_ repository.BookRepository                     = (*BookRepository)(nil)
 	_ repository.RecommendationRepository           = (*RecommendationRepository)(nil)
+	_ repository.InviteCodeRepository               = (*InviteCodeRepository)(nil)
 )

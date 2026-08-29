@@ -309,6 +309,11 @@ type TopRecommendedBook struct {
 // InviteCodeRepository handles persistence for InviteCode records — a
 // member's permanent, multi-use invite link. See docs/invite-code-spec.md.
 type InviteCodeRepository interface {
+	// FindByInviter returns inviterID's existing code, or ErrNotFound if they
+	// don't have one yet. Lets a caller distinguish "already has a code"
+	// from "about to create one" — needed by GET /invite-code's creation
+	// gate (see docs/invite-code-spec.md's allow_invite_codes semantics).
+	FindByInviter(inviterID uint) (*models.InviteCode, error)
 	// FindOrCreateByInviter returns inviterID's existing code, or inserts one
 	// using code if none exists yet. code is only used on the create path —
 	// the caller generates it before calling in, so a collision can be

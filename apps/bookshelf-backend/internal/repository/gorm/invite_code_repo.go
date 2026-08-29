@@ -26,7 +26,7 @@ func NewInviteCodeRepository(db *gorm.DB) *InviteCodeRepository {
 // succeed, and the loser falls back to a plain lookup so both callers end up
 // with the same row, rather than one of them erroring.
 func (r *InviteCodeRepository) FindOrCreateByInviter(inviterID uint, code string) (*models.InviteCode, error) {
-	ic, err := r.findByInviter(inviterID)
+	ic, err := r.FindByInviter(inviterID)
 	if err == nil {
 		return ic, nil
 	}
@@ -37,14 +37,14 @@ func (r *InviteCodeRepository) FindOrCreateByInviter(inviterID uint, code string
 	ic = &models.InviteCode{Code: code, InviterID: inviterID}
 	if createErr := r.db.Create(ic).Error; createErr != nil {
 		if isUniqueViolation(createErr) {
-			return r.findByInviter(inviterID)
+			return r.FindByInviter(inviterID)
 		}
 		return nil, createErr
 	}
 	return ic, nil
 }
 
-func (r *InviteCodeRepository) findByInviter(inviterID uint) (*models.InviteCode, error) {
+func (r *InviteCodeRepository) FindByInviter(inviterID uint) (*models.InviteCode, error) {
 	var ic models.InviteCode
 	if err := r.db.Where("inviter_id = ?", inviterID).First(&ic).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
