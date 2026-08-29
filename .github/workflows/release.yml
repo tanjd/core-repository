@@ -47,7 +47,7 @@ jobs:
       - name: Read pnpm version from devcontainer config
         id: pnpm-version
         run: |
-          version=$(jq -r '.features["ghcr.io/devcontainers/features/node:2.1.0"].pnpmVersion' .devcontainer/devcontainer.json)
+          version=$(jq -r '.features["ghcr.io/devcontainers/features/node:2"].pnpmVersion' .devcontainer/devcontainer.json)
           echo "version=$version" >> "$GITHUB_OUTPUT"
 
       - uses: pnpm/action-setup@v6
