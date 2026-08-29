@@ -8,6 +8,7 @@ import { toast } from "sonner";
 import { api, emailLocalPart, validatePassword } from "@/lib/api";
 import { PasswordStrengthMeter } from "@/components/PasswordStrengthMeter";
 import { PasswordInput } from "@/components/PasswordInput";
+import { PasswordMatchIndicator } from "@/components/PasswordMatchIndicator";
 import { InviteLinkCard } from "@/components/InviteLinkCard";
 import type { User, VerificationStatus } from "@/lib/types";
 import { Badge } from "@/components/ui/badge";
@@ -672,6 +673,10 @@ export function ProfileForm() {
                     value={confirmNewPassword}
                     onChange={(e) => setConfirmNewPassword(e.target.value)}
                     placeholder="Re-enter new password"
+                  />
+                  <PasswordMatchIndicator
+                    password={newPassword}
+                    confirm={confirmNewPassword}
                   />
                 </div>
                 {pwError && (

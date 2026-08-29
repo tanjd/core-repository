@@ -12,6 +12,7 @@ import {
 } from "@/lib/api";
 import { PasswordStrengthMeter } from "@/components/PasswordStrengthMeter";
 import { PasswordInput } from "@/components/PasswordInput";
+import { PasswordMatchIndicator } from "@/components/PasswordMatchIndicator";
 import {
   Card,
   CardHeader,
@@ -380,6 +381,10 @@ export default function RegisterPage() {
                     value={confirmPassword}
                     onChange={(e) => setConfirmPassword(e.target.value)}
                     placeholder="Re-enter your password"
+                  />
+                  <PasswordMatchIndicator
+                    password={password}
+                    confirm={confirmPassword}
                   />
                 </div>
                 <div className="flex flex-col gap-1.5">
