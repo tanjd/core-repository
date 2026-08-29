@@ -27,6 +27,11 @@ const defaultInterval = 24 * time.Hour
 // avoiding an unbounded burst of outbound requests.
 const coverRefreshConcurrency = 6
 
+// coverRefreshLastRunKey is the AdminRepository setting cover-refresh's
+// lastRunAt is persisted under, so it survives process restarts. See the
+// "extra" job type below for the equivalent per-RegisterJob key.
+const coverRefreshLastRunKey = "cover_refresh_last_run_at"
+
 // JobStatus describes the current state of a background job.
 type JobStatus struct {
 	Name       string     `json:"name"`
@@ -48,10 +53,44 @@ func nextRunAt(lastRunAt *time.Time, interval time.Duration) *time.Time {
 	return &next
 }
 
+// isDue reports whether a job with the given last-run time should run now,
+// given its configured interval. A nil last-run time (never run, whether
+// truly never or just not yet hydrated from admin settings) is always due.
+func isDue(last *time.Time, interval time.Duration) bool {
+	return last == nil || time.Since(*last) >= interval
+}
+
+// hydrateLastRunAt loads a job's persisted last-run timestamp from admin
+// settings, so it survives a process restart instead of always looking like
+// the job has never run. A missing key, parse failure, or nil admin repo are
+// all treated as "never run" — the same as true first-ever boot.
+func hydrateLastRunAt(admin repository.AdminRepository, key string) *time.Time {
+	if admin == nil {
+		return nil
+	}
+	raw, err := admin.GetSetting(key)
+	if err != nil || raw == "" {
+		return nil
+	}
+	t, err := time.Parse(time.RFC3339, raw)
+	if err != nil {
+		return nil
+	}
+	return &t
+}
+
 // Scheduler runs periodic background tasks such as refreshing book cover
 // images. Cover-refresh is the scheduler's original built-in job; additional
 // named jobs (e.g. "backup") are attached via RegisterJob, sharing the same
 // ticker/trigger/status machinery via the job type below.
+//
+// Cover-refresh's running/lastRunAt/lastResult tracking (beginRun/endRun/
+// setLastResult) and job's equivalent fields (runJob) are intentionally
+// duplicated rather than unified — cover-refresh's beginRun/defer endRun()
+// shape and concurrency-limited download loop don't fit job.run's single
+// func(ctx) string signature. Both paths persist lastRunAt through the same
+// hydrateLastRunAt/isDue helpers above, so a future unification only needs
+// to delete one of the two call sites, not rewrite the persistence logic.
 type Scheduler struct {
 	books     repository.BookRepository
 	admin     repository.AdminRepository
@@ -72,6 +111,7 @@ type Scheduler struct {
 type job struct {
 	name       string
 	settingKey string
+	lastRunKey string // AdminRepository key lastRunAt is persisted under
 	fallback   time.Duration
 	run        func(ctx context.Context) string
 	trigger    chan struct{}
@@ -122,6 +162,7 @@ func (s *Scheduler) RegisterJob(name, settingKey string, fallback time.Duration,
 	s.extra = append(s.extra, &job{
 		name:       name,
 		settingKey: settingKey,
+		lastRunKey: strings.TrimSuffix(settingKey, "_interval") + "_last_run_at",
 		fallback:   fallback,
 		run:        run,
 		trigger:    make(chan struct{}, 1),
@@ -208,6 +249,10 @@ func (s *Scheduler) TriggerNow(name string) bool {
 func (s *Scheduler) Start(ctx context.Context) {
 	log.Info().Dur("interval", s.interval()).Msg("scheduler started")
 
+	s.mu.Lock()
+	s.lastRunAt = hydrateLastRunAt(s.admin, coverRefreshLastRunKey)
+	s.mu.Unlock()
+
 	var extraWg sync.WaitGroup
 	for _, j := range s.extra {
 		extraWg.Add(1)
@@ -220,11 +265,19 @@ func (s *Scheduler) Start(ctx context.Context) {
 	ticker := time.NewTicker(time.Minute)
 	defer ticker.Stop()
 
-	// Run once on startup after a short delay to avoid blocking server startup.
+	// Run once on startup after a short delay to avoid blocking server
+	// startup, unless a persisted lastRunAt shows the job already ran
+	// recently enough that it isn't due yet (e.g. this process just
+	// restarted rather than being a true first boot).
 	go func() {
 		select {
 		case <-time.After(30 * time.Second):
-			s.refreshCovers(ctx)
+			s.mu.RLock()
+			last := s.lastRunAt
+			s.mu.RUnlock()
+			if isDue(last, s.interval()) {
+				s.refreshCovers(ctx)
+			}
 		case <-ctx.Done():
 		}
 	}()
@@ -236,7 +289,7 @@ func (s *Scheduler) Start(ctx context.Context) {
 			s.mu.RLock()
 			last := s.lastRunAt
 			s.mu.RUnlock()
-			if last != nil && time.Since(*last) < s.interval() {
+			if !isDue(last, s.interval()) {
 				continue
 			}
 			s.refreshCovers(ctx)
@@ -255,13 +308,26 @@ func (s *Scheduler) Start(ctx context.Context) {
 func (s *Scheduler) runJobLoop(ctx context.Context, j *job) {
 	interval := s.jobInterval(j)
 	log.Info().Str("job", j.name).Dur("interval", interval).Msg("scheduler: job registered")
+
+	j.mu.Lock()
+	j.lastRunAt = hydrateLastRunAt(s.admin, j.lastRunKey)
+	j.mu.Unlock()
+
 	ticker := time.NewTicker(time.Minute)
 	defer ticker.Stop()
 
+	// Run once on startup after a short delay, unless a persisted lastRunAt
+	// shows the job already ran recently enough that it isn't due yet (e.g.
+	// this process just restarted rather than being a true first boot).
 	go func() {
 		select {
 		case <-time.After(30 * time.Second):
-			s.runJob(ctx, j)
+			j.mu.RLock()
+			last := j.lastRunAt
+			j.mu.RUnlock()
+			if isDue(last, s.jobInterval(j)) {
+				s.runJob(ctx, j)
+			}
 		case <-ctx.Done():
 		}
 	}()
@@ -272,7 +338,7 @@ func (s *Scheduler) runJobLoop(ctx context.Context, j *job) {
 			j.mu.RLock()
 			last := j.lastRunAt
 			j.mu.RUnlock()
-			if last != nil && time.Since(*last) < s.jobInterval(j) {
+			if !isDue(last, s.jobInterval(j)) {
 				continue
 			}
 			s.runJob(ctx, j)
@@ -299,6 +365,12 @@ func (s *Scheduler) runJob(ctx context.Context, j *job) {
 	j.lastRunAt = &now
 	j.lastResult = "running…"
 	j.mu.Unlock()
+
+	if s.admin != nil {
+		if err := s.admin.UpsertSetting(j.lastRunKey, now.UTC().Format(time.RFC3339)); err != nil {
+			log.Warn().Err(err).Str("job", j.name).Msg("scheduler: failed to persist last-run time")
+		}
+	}
 
 	result := j.run(ctx)
 
@@ -361,14 +433,22 @@ booksLoop:
 // already running. Returns false if a run was already in progress.
 func (s *Scheduler) beginRun() bool {
 	s.mu.Lock()
-	defer s.mu.Unlock()
 	if s.running {
+		s.mu.Unlock()
 		return false
 	}
 	s.running = true
 	now := time.Now()
 	s.lastRunAt = &now
 	s.lastResult = "running…"
+	s.mu.Unlock()
+
+	if s.admin != nil {
+		if err := s.admin.UpsertSetting(coverRefreshLastRunKey, now.UTC().Format(time.RFC3339)); err != nil {
+			log.Warn().Err(err).Msg("scheduler: failed to persist cover-refresh last-run time")
+		}
+	}
+
 	return true
 }
 
