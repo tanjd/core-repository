@@ -21,6 +21,7 @@ import {
 } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Badge } from "@/components/ui/badge";
 
 type Step = "details" | "verify-email";
 
@@ -53,6 +54,14 @@ export default function RegisterPage() {
 
   const [emailOtpCode, setEmailOtpCode] = useState("");
   const [emailDebugCode, setEmailDebugCode] = useState("");
+
+  // Invite-code banner state — see apps/bookshelf/docs/invite-code-spec.md.
+  // inviteCode is only carried forward to send-email-otp when validation
+  // confirmed it's still live; an invalid/revoked code is dropped rather
+  // than submitted, so the registration just proceeds as a normal signup.
+  const [inviteCode, setInviteCode] = useState("");
+  const [inviterName, setInviterName] = useState("");
+  const [inviteInvalid, setInviteInvalid] = useState(false);
 
   const [sendingEmailOtp, setSendingEmailOtp] = useState(false);
   const [verifyingEmailOtp, setVerifyingEmailOtp] = useState(false);
@@ -128,6 +137,32 @@ export default function RegisterPage() {
       .finally(() => setPhoneRequirementLoaded(true));
   }, []);
 
+  // ?invite=<code> from a member's shared link. Read via window.location on
+  // mount for the same reason as the verifyToken effect above (no SSR/
+  // hydration mismatch, no Suspense boundary). Both params can coexist —
+  // this reads independently of that one — but the invite check never
+  // blocks the form: an invalid/revoked code just falls back to a normal
+  // signup, per the spec's "brief notice, not a hard error".
+  const checkedInviteRef = useRef(false);
+  useEffect(() => {
+    if (checkedInviteRef.current) return;
+    checkedInviteRef.current = true;
+    const code = new URLSearchParams(window.location.search).get("invite");
+    if (!code) return;
+
+    api
+      .validateInviteCode(code)
+      .then(({ valid, inviter_name }) => {
+        if (valid) {
+          setInviteCode(code);
+          setInviterName(inviter_name);
+        } else {
+          setInviteInvalid(true);
+        }
+      })
+      .catch(() => setInviteInvalid(true));
+  }, []);
+
   // Sends (or resends) the verification email, handing the whole form to the
   // backend so either verification path can finish signup on its own.
   async function submitDetails() {
@@ -137,6 +172,7 @@ export default function RegisterPage() {
       email,
       password,
       phone: trimmedPhone ? toFullPhone(trimmedPhone) : undefined,
+      invite_code: inviteCode || undefined,
     });
     setEmailDebugCode(debug_code ?? "");
   }
@@ -244,6 +280,24 @@ export default function RegisterPage() {
               </CardDescription>
             </CardHeader>
             <CardContent>
+              {inviterName && (
+                <Badge
+                  variant="success"
+                  className="mb-4 w-full justify-center rounded-md py-2 text-center whitespace-normal"
+                >
+                  Invited by {inviterName} — your account will be approved
+                  automatically.
+                </Badge>
+              )}
+              {inviteInvalid && (
+                <Badge
+                  variant="secondary"
+                  className="mb-4 w-full justify-center rounded-md py-2 text-center whitespace-normal"
+                >
+                  This invite link is no longer valid — you can still register
+                  normally.
+                </Badge>
+              )}
               <form
                 onSubmit={handleDetailsSubmit}
                 className="flex flex-col gap-4"

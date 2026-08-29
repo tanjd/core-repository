@@ -2,8 +2,9 @@
 
 import { useEffect, useState, useRef } from "react";
 import { Loader2 } from "lucide-react";
+import { toast } from "sonner";
 import { api } from "@/lib/api";
-import type { User } from "@/lib/api";
+import type { User, InviteCode } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Pagination } from "@/components/ui/Pagination";
@@ -23,6 +24,10 @@ export default function AdminUsersPage() {
     Record<number, UserAction | undefined>
   >({});
 
+  const [inviteCodes, setInviteCodes] = useState<InviteCode[]>([]);
+  const [inviteCodesLoading, setInviteCodesLoading] = useState(true);
+  const [revokingId, setRevokingId] = useState<number | null>(null);
+
   const identifiedRef = useRef(false);
   useEffect(() => {
     if (!identifiedRef.current) {
@@ -39,7 +44,41 @@ export default function AdminUsersPage() {
       setCurrentUserId(userId);
     }
     loadUsers(1);
+    loadInviteCodes();
   }, []);
+
+  async function loadInviteCodes() {
+    setInviteCodesLoading(true);
+    try {
+      setInviteCodes(await api.adminListInviteCodes());
+    } catch (err) {
+      toast.error(
+        err instanceof Error ? err.message : "Could not load invite links",
+      );
+    } finally {
+      setInviteCodesLoading(false);
+    }
+  }
+
+  async function revokeInviteCode(inviteCode: InviteCode) {
+    if (
+      !confirm(
+        `Revoke ${inviteCode.inviter_name}'s invite link? Their next visit to their profile will issue a new one.`,
+      )
+    )
+      return;
+    setRevokingId(inviteCode.id);
+    try {
+      await api.adminRevokeInviteCode(inviteCode.id);
+      setInviteCodes((prev) => prev.filter((c) => c.id !== inviteCode.id));
+    } catch (err) {
+      toast.error(
+        err instanceof Error ? err.message : "Could not revoke invite link",
+      );
+    } finally {
+      setRevokingId(null);
+    }
+  }
 
   async function loadUsers(p: number) {
     setLoading(true);
@@ -117,6 +156,7 @@ export default function AdminUsersPage() {
               <th className="px-4 py-3 text-left font-medium">Role</th>
               <th className="px-4 py-3 text-left font-medium">Status</th>
               <th className="px-4 py-3 text-left font-medium">Joined</th>
+              <th className="px-4 py-3 text-left font-medium">Invited by</th>
               <th className="px-4 py-3 text-right font-medium">Actions</th>
             </tr>
           </thead>
@@ -152,6 +192,9 @@ export default function AdminUsersPage() {
                 </td>
                 <td className="px-4 py-3 text-muted-foreground">
                   {new Date(user.created_at).toLocaleDateString()}
+                </td>
+                <td className="px-4 py-3 text-muted-foreground">
+                  {user.invited_by?.name ?? "—"}
                 </td>
                 <td className="px-4 py-3">
                   <div className="flex gap-2 justify-end flex-wrap">
@@ -226,6 +269,69 @@ export default function AdminUsersPage() {
           />
         </div>
       )}
+
+      <section aria-label="Invite links" className="mt-8">
+        <h2 className="text-lg font-semibold mb-2">Invite links</h2>
+        <p className="text-sm text-muted-foreground mb-4">
+          Every member&apos;s personal invite link. Revoking one takes effect
+          immediately — the member&apos;s next profile visit lazily creates a
+          fresh one.
+        </p>
+        {inviteCodesLoading ? (
+          <p className="text-sm text-muted-foreground">Loading invite links…</p>
+        ) : inviteCodes.length === 0 ? (
+          <p className="text-sm text-muted-foreground">
+            No members have an invite link yet.
+          </p>
+        ) : (
+          <div className="rounded-md border overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b bg-muted/50">
+                  <th className="px-4 py-3 text-left font-medium">Member</th>
+                  <th className="px-4 py-3 text-left font-medium">Link</th>
+                  <th className="px-4 py-3 text-left font-medium">Created</th>
+                  <th className="px-4 py-3 text-right font-medium">Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {inviteCodes.map((inviteCode) => (
+                  <tr
+                    key={inviteCode.id}
+                    className="border-b last:border-0 hover:bg-muted/30"
+                  >
+                    <td className="px-4 py-3 font-medium">
+                      {inviteCode.inviter_name}
+                    </td>
+                    <td className="px-4 py-3 text-muted-foreground font-mono text-xs">
+                      {typeof window !== "undefined"
+                        ? `${window.location.origin}/register?invite=${inviteCode.code}`
+                        : inviteCode.code}
+                    </td>
+                    <td className="px-4 py-3 text-muted-foreground">
+                      {new Date(inviteCode.created_at).toLocaleDateString()}
+                    </td>
+                    <td className="px-4 py-3 text-right">
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        className="text-destructive hover:text-destructive hover:bg-destructive/10"
+                        disabled={revokingId === inviteCode.id}
+                        onClick={() => revokeInviteCode(inviteCode)}
+                      >
+                        {revokingId === inviteCode.id && (
+                          <Loader2 className="size-3.5 animate-spin" />
+                        )}
+                        Revoke
+                      </Button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </section>
     </div>
   );
 }

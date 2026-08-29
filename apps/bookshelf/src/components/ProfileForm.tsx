@@ -7,6 +7,7 @@ import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { api, emailLocalPart, validatePassword } from "@/lib/api";
 import { PasswordStrengthMeter } from "@/components/PasswordStrengthMeter";
+import { InviteLinkCard } from "@/components/InviteLinkCard";
 import type { User, VerificationStatus } from "@/lib/types";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -379,7 +380,7 @@ export function ProfileForm() {
         </TabsList>
 
         {/* Profile tab */}
-        <TabsContent value="profile" className="mt-4">
+        <TabsContent value="profile" className="mt-4 flex flex-col gap-4">
           <Card>
             <CardHeader>
               <CardTitle className="text-base">Personal information</CardTitle>
@@ -601,6 +602,11 @@ export function ProfileForm() {
               )}
             </CardContent>
           </Card>
+
+          {/* An unverified member hasn't proved their own identity yet, so
+              they can't hold an invite link — see requireEligibleInviter in
+              internal/handlers/invite_codes.go. */}
+          {user.verified && <InviteLinkCard />}
         </TabsContent>
 
         {/* Security tab */}

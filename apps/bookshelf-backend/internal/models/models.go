@@ -38,6 +38,13 @@ type User struct {
 	TelegramUsername          string `gorm:"column:telegram_username" json:"telegram_username,omitempty"`
 	WhatsAppUsername          string `gorm:"column:whatsapp_username" json:"whatsapp_username,omitempty"`
 	ContactNote               string `gorm:"column:contact_note" json:"contact_note,omitempty"`
+
+	// InvitedByID is a permanent record of which member's invite link this
+	// account registered through — survives regeneration or revocation of
+	// that link (see docs/invite-code-spec.md). Nil for accounts that
+	// registered without an invite code.
+	InvitedByID *uint `gorm:"column:invited_by_id" json:"invited_by_id,omitempty"`
+	InvitedBy   *User `gorm:"foreignKey:InvitedByID" json:"invited_by,omitempty"`
 }
 
 // RegistrationVerification holds a short-lived OTP code proving control of an
@@ -77,6 +84,11 @@ type PendingRegistrationData struct {
 	PendingEmail        string `gorm:"column:pending_email" json:"-"`
 	PendingPasswordHash string `gorm:"column:pending_password_hash" json:"-"`
 	PendingPhone        string `gorm:"column:pending_phone" json:"-"`
+	// PendingInviteCode carries a raw invite code across the 15-minute OTP
+	// window so verify-email-otp can re-validate it before creating the
+	// account — see docs/invite-code-spec.md. Empty for a registration
+	// started without one.
+	PendingInviteCode string `gorm:"column:pending_invite_code" json:"-"`
 }
 
 // AppSetting is a runtime-configurable key-value pair stored in the database.
@@ -192,6 +204,19 @@ type Recommendation struct {
 	RecommenderID uint      `gorm:"not null;uniqueIndex:idx_recommendations_book_recommender" json:"recommender_id"`
 	CreatedAt     time.Time `json:"created_at"`
 	Recommender   User      `json:"recommender,omitempty"`
+}
+
+// InviteCode is a member's permanent, multi-use invite link. See
+// docs/invite-code-spec.md. There is no ExpiresAt, UsedAt, or UsedByID —
+// who was invited by whom is tracked on User.InvitedByID instead, since that
+// survives regeneration or deletion of the code itself. The uniqueIndex on
+// InviterID enforces one code per member at the database level.
+type InviteCode struct {
+	ID        uint      `gorm:"primarykey" json:"id"`
+	Code      string    `gorm:"uniqueIndex;not null" json:"code"`
+	InviterID uint      `gorm:"uniqueIndex;not null" json:"inviter_id"`
+	Inviter   User      `json:"inviter,omitempty"`
+	CreatedAt time.Time `json:"created_at"`
 }
 
 // Notification is an in-app alert delivered to a user.

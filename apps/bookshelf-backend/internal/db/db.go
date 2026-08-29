@@ -135,6 +135,7 @@ func Seed(database *gorm.DB) {
 		{Key: "monthly_digest_new_books_limit", Value: "3"},
 		{Key: "monthly_digest_top_recommended_limit", Value: "3"},
 		{Key: "monthly_digest_interval", Value: "24h"},
+		{Key: "allow_invite_codes", Value: "true"},
 	}
 	for _, s := range defaults {
 		database.Where(models.AppSetting{Key: s.Key}).FirstOrCreate(&s)

@@ -86,6 +86,10 @@ type AuthHandler struct {
 	otpLimiter                *middleware.RateLimiter
 	forgotPasswordLimiter     *ratelimit.Limiter
 	resetPasswordLimiter      *ratelimit.Limiter
+	// inviteCodes is nil-safe — tests that construct AuthHandler without
+	// invite-code support keep working; when nil, any invite_code in the
+	// body is silently ignored. See docs/invite-code-spec.md.
+	inviteCodes repository.InviteCodeRepository
 }
 
 // NewAuthHandler creates a new AuthHandler.
@@ -102,6 +106,7 @@ func NewAuthHandler(
 	registerRateLimitBurst int,
 	registerSendRateLimitBurst int,
 	loginRateLimitAttempts int,
+	inviteCodes repository.InviteCodeRepository,
 ) *AuthHandler {
 	return &AuthHandler{
 		users:                     users,
@@ -152,6 +157,7 @@ func NewAuthHandler(
 		otpLimiter:            middleware.NewRateLimiter(rate.Every(5*time.Minute), 3),
 		forgotPasswordLimiter: ratelimit.New(passwordResetOTPRateLimitAttempts, passwordResetOTPRateLimitWindow),
 		resetPasswordLimiter:  ratelimit.New(passwordResetAttemptRateLimitAttempts, passwordResetAttemptRateLimitWindow),
+		inviteCodes:           inviteCodes,
 	}
 }
 

@@ -7,6 +7,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/tanjd/core-repository/apps/bookshelf-backend/internal/models"
+	"github.com/tanjd/core-repository/apps/bookshelf-backend/internal/repository"
 	"github.com/tanjd/core-repository/apps/bookshelf-backend/internal/repotest"
 	"github.com/tanjd/core-repository/apps/bookshelf-backend/internal/services"
 )
@@ -22,7 +23,7 @@ func newAdminHandlerWithCopiesAndLoans() (*AdminHandler, *repotest.AdminReposito
 	loans := repotest.NewLoanRequestRepository(copies, repotest.NewNotificationRepository(), repotest.NewUserRepository())
 	email := services.NewEmailService("", "", "", "", "", "", "", "http://localhost:3000")
 	registration := services.NewRegistrationWorkflow(admin, repotest.NewNotificationRepository(), repotest.NewBookRepository(), email)
-	return NewAdminHandler(admin, copies, loans, services.NewGoogleBooksKeyPool(nil), registration, nil), admin, copies, loans
+	return NewAdminHandler(admin, copies, loans, services.NewGoogleBooksKeyPool(nil), registration, nil, nil), admin, copies, loans
 }
 
 func TestAdminHandler_RequiresAdmin(t *testing.T) {
@@ -147,6 +148,31 @@ func TestUpdateUser_SuspensionChanges(t *testing.T) {
 	})
 }
 
+func TestUpdateUser_SuspensionRevokesInviteCode(t *testing.T) {
+	admin := repotest.NewAdminRepository()
+	copies := repotest.NewCopyRepository()
+	loans := repotest.NewLoanRequestRepository(copies, repotest.NewNotificationRepository(), repotest.NewUserRepository())
+	email := services.NewEmailService("", "", "", "", "", "", "", "http://localhost:3000")
+	registration := services.NewRegistrationWorkflow(admin, repotest.NewNotificationRepository(), repotest.NewBookRepository(), email)
+	inviteCodes := repotest.NewInviteCodeRepository(repotest.NewUserRepository())
+	h := NewAdminHandler(admin, copies, loans, services.NewGoogleBooksKeyPool(nil), registration, nil, inviteCodes)
+
+	require.NoError(t, admin.SaveUser(&models.User{ID: 1, Role: "admin"}))
+	require.NoError(t, admin.SaveUser(&models.User{ID: 2, Role: "user"}))
+	_, err := inviteCodes.FindOrCreateByInviter(2, "suspcode1")
+	require.NoError(t, err)
+
+	input := &updateAdminUserInput{ID: 2}
+	suspended := true
+	input.Body.Suspended = &suspended
+
+	_, err = h.updateUser(fakeAuthedCtx(t, 1, "admin"), input)
+
+	require.NoError(t, err)
+	_, findErr := inviteCodes.FindByCode("suspcode1")
+	assert.ErrorIs(t, findErr, repository.ErrNotFound)
+}
+
 func TestUpdateUser_PendingApprovalChanges(t *testing.T) {
 	h, admin := newAdminHandler()
 	require.NoError(t, admin.SaveUser(&models.User{ID: 1, Role: "admin"}))
@@ -182,7 +208,7 @@ func TestUpdateUser_ApprovalNotifiesUser(t *testing.T) {
 	notifs := repotest.NewNotificationRepository()
 	email := services.NewEmailService("", "", "", "", "", "", "", "http://localhost:3000")
 	registration := services.NewRegistrationWorkflow(admin, notifs, repotest.NewBookRepository(), email)
-	h := NewAdminHandler(admin, copies, loans, services.NewGoogleBooksKeyPool(nil), registration, nil)
+	h := NewAdminHandler(admin, copies, loans, services.NewGoogleBooksKeyPool(nil), registration, nil, nil)
 
 	require.NoError(t, admin.SaveUser(&models.User{ID: 1, Role: "admin"}))
 	require.NoError(t, admin.SaveUser(&models.User{ID: 2, Role: "user", PendingApproval: true}))
@@ -289,7 +315,7 @@ func TestDeleteUser(t *testing.T) {
 		email := services.NewEmailService("", "", "", "", "", "", "", "http://localhost:3000")
 		registration := services.NewRegistrationWorkflow(admin, repotest.NewNotificationRepository(), repotest.NewBookRepository(), email)
 		recommendations := repotest.NewRecommendationRepository(repotest.NewUserRepository())
-		h := NewAdminHandler(admin, copies, loans, services.NewGoogleBooksKeyPool(nil), registration, recommendations)
+		h := NewAdminHandler(admin, copies, loans, services.NewGoogleBooksKeyPool(nil), registration, recommendations, nil)
 
 		require.NoError(t, admin.SaveUser(&models.User{ID: 1, Role: "admin"}))
 		require.NoError(t, admin.SaveUser(&models.User{ID: 2, Role: "user"}))
@@ -300,6 +326,27 @@ func TestDeleteUser(t *testing.T) {
 
 		require.NoError(t, err)
 		assert.Equal(t, 0, recommendations.Count(), "the deleted user's recommendations must no longer contribute to any book's count")
+	})
+
+	t.Run("revokes the target's invite code before deleting them", func(t *testing.T) {
+		admin := repotest.NewAdminRepository()
+		copies := repotest.NewCopyRepository()
+		loans := repotest.NewLoanRequestRepository(copies, repotest.NewNotificationRepository(), repotest.NewUserRepository())
+		email := services.NewEmailService("", "", "", "", "", "", "", "http://localhost:3000")
+		registration := services.NewRegistrationWorkflow(admin, repotest.NewNotificationRepository(), repotest.NewBookRepository(), email)
+		inviteCodes := repotest.NewInviteCodeRepository(repotest.NewUserRepository())
+		h := NewAdminHandler(admin, copies, loans, services.NewGoogleBooksKeyPool(nil), registration, nil, inviteCodes)
+
+		require.NoError(t, admin.SaveUser(&models.User{ID: 1, Role: "admin"}))
+		require.NoError(t, admin.SaveUser(&models.User{ID: 2, Role: "user"}))
+		_, err := inviteCodes.FindOrCreateByInviter(2, "delcode1")
+		require.NoError(t, err)
+
+		_, err = h.deleteUser(fakeAuthedCtx(t, 1, "admin"), &adminUserIDInput{ID: 2})
+
+		require.NoError(t, err)
+		_, findErr := inviteCodes.FindByCode("delcode1")
+		assert.ErrorIs(t, findErr, repository.ErrNotFound)
 	})
 }
 

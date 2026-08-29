@@ -19,6 +19,7 @@ import type {
   DashboardStats,
   WishlistRequest,
   Recommendation,
+  InviteCode,
 } from "./types";
 
 export type {
@@ -40,6 +41,7 @@ export type {
   DashboardStats,
   WishlistRequest,
   Recommendation,
+  InviteCode,
 };
 
 // Mirrors internal/handlers/auth.go's minPasswordLength/maxPasswordLength —
@@ -342,6 +344,7 @@ export const api = {
     email: string;
     password: string;
     phone?: string;
+    invite_code?: string;
   }) =>
     request<{ debug_code?: string; debug_verify_link?: string }>(
       "/auth/register/send-email-otp",
@@ -429,6 +432,17 @@ export const api = {
     }),
   myVerificationStatus: () =>
     request<VerificationStatus>("/auth/me/verification-status"),
+
+  // Invite links — see apps/bookshelf/docs/invite-code-spec.md.
+  getInviteCode: () => request<{ code: string; url: string }>("/invite-code"),
+  regenerateInviteCode: () =>
+    request<{ code: string; url: string }>("/invite-code/regenerate", {
+      method: "POST",
+    }),
+  validateInviteCode: (code: string) =>
+    request<{ valid: boolean; inviter_name: string }>(
+      `/auth/invite/${encodeURIComponent(code)}`,
+    ),
 
   // Books
   getBooks: (params?: {
@@ -715,6 +729,9 @@ export const api = {
     }),
   adminExportSettings: () =>
     request<{ content: string }>("/admin/settings/export"),
+  adminListInviteCodes: () => request<InviteCode[]>("/admin/invite-codes"),
+  adminRevokeInviteCode: (id: number) =>
+    request<void>(`/admin/invite-codes/${id}`, { method: "DELETE" }),
 
   // Jobs
   adminGetJobs: () => request<JobStatus[]>("/admin/jobs"),

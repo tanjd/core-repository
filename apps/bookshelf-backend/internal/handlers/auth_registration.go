@@ -61,10 +61,11 @@ const (
 // magic-link token instead.
 type sendRegisterEmailOTPInput struct {
 	Body struct {
-		Name     string  `json:"name" required:"true" minLength:"1" doc:"Display name"`
-		Email    string  `json:"email" required:"true" format:"email" doc:"Email address to verify"`
-		Password string  `json:"password" required:"true" minLength:"12" doc:"Password (min 12 chars)"`
-		Phone    *string `json:"phone,omitempty" doc:"Contact phone number (optional — never verified, and never blocks registration; see verification_requires_phone, which gates borrowing rather than signup)"`
+		Name       string  `json:"name" required:"true" minLength:"1" doc:"Display name"`
+		Email      string  `json:"email" required:"true" format:"email" doc:"Email address to verify"`
+		Password   string  `json:"password" required:"true" minLength:"12" doc:"Password (min 12 chars)"`
+		Phone      *string `json:"phone,omitempty" doc:"Contact phone number (optional — never verified, and never blocks registration; see verification_requires_phone, which gates borrowing rather than signup)"`
+		InviteCode string  `json:"invite_code,omitempty" doc:"Invite code from a member's link — bypasses allow_registration and require_registration_approval when valid"`
 	}
 }
 
@@ -170,8 +171,17 @@ type setupInput struct {
 // already rejects disabled registration, duplicate emails, weak passwords
 // and over-rate callers before reaching it, so it isn't a new abuse surface.
 func (h *AuthHandler) sendRegisterEmailOTP(ctx context.Context, input *sendRegisterEmailOTPInput) (*sendRegisterEmailOTPOutput, error) {
-	if val, _ := h.admin.GetSetting("allow_registration"); val == "false" {
-		return nil, huma.Error403Forbidden("registration is currently disabled")
+	pendingInviteCode, err := h.validatePendingInviteCode(input.Body.InviteCode)
+	if err != nil {
+		return nil, err
+	}
+	// An invite code is the vouch that lets this signup skip the gate —
+	// see docs/invite-code-spec.md's "Registration flow changes". Without
+	// one, behavior is unchanged from before this feature existed.
+	if pendingInviteCode == "" {
+		if val, _ := h.admin.GetSetting("allow_registration"); val == "false" {
+			return nil, huma.Error403Forbidden("registration is currently disabled")
+		}
 	}
 	email := normalizeEmail(input.Body.Email)
 	if !h.emailOTPLimiter.Allow(email) {
@@ -205,6 +215,7 @@ func (h *AuthHandler) sendRegisterEmailOTP(ctx context.Context, input *sendRegis
 		PendingEmail:        strings.TrimSpace(input.Body.Email),
 		PendingPasswordHash: string(hash),
 		PendingPhone:        trimmedPhone(input.Body.Phone),
+		PendingInviteCode:   pendingInviteCode,
 	}
 	if err := h.registrationVerifications.Upsert(
 		registrationChannelEmail, email, code, time.Now().Add(registrationOTPExpiry), pending,
@@ -236,6 +247,23 @@ func (h *AuthHandler) sendRegisterEmailOTP(ctx context.Context, input *sendRegis
 		}
 	}
 	return out, nil
+}
+
+// validatePendingInviteCode checks a raw invite code submitted at
+// send-email-otp time, returning it unchanged (ready to park in
+// PendingInviteCode) if valid. Returns "" for an absent code — h.inviteCodes
+// being nil is treated the same as no code, so tests that construct
+// AuthHandler without invite-code support keep working. A present but
+// invalid/revoked code is a hard 400, not a silent fall-through to the
+// no-code path — see docs/invite-code-spec.md.
+func (h *AuthHandler) validatePendingInviteCode(code string) (string, error) {
+	if code == "" || h.inviteCodes == nil {
+		return "", nil
+	}
+	if _, err := h.inviteCodes.FindByCode(code); err != nil {
+		return "", huma.Error400BadRequest("invite code is invalid or has already been revoked")
+	}
+	return code, nil
 }
 
 // trimmedPhone flattens an optional phone field to a trimmed string —
@@ -281,11 +309,29 @@ func (h *AuthHandler) verifyRegisterEmailOTP(ctx context.Context, input *verifyR
 // the old /auth/register handler, minus the phone-verification branch: phone
 // is now a plain optional field, so PhoneVerified is always false here.
 func (h *AuthHandler) finalizeRegistration(ctx context.Context, pending models.PendingRegistrationData) (*registrationResult, error) {
-	// Re-checked, not just checked in sendRegisterEmailOTP: an admin can
-	// disable registration during the 15 minutes a code is live, and this is
-	// the call that actually creates the account.
-	if val, _ := h.admin.GetSetting("allow_registration"); val == "false" {
-		return nil, huma.Error403Forbidden("registration is currently disabled")
+	// Re-validated, not just checked in sendRegisterEmailOTP: the inviter may
+	// have regenerated or been suspended during the 15-minute OTP window —
+	// see docs/invite-code-spec.md's "Link lifecycle" step 6. A code parked
+	// at send time that's gone by now is a hard 400, same as never having
+	// had one plus allow_registration=false.
+	var invite *models.InviteCode
+	if pending.PendingInviteCode != "" && h.inviteCodes != nil {
+		var err error
+		invite, err = h.inviteCodes.FindByCode(pending.PendingInviteCode)
+		if err != nil {
+			return nil, huma.Error400BadRequest("invite link was revoked — please ask for a new one")
+		}
+	}
+
+	// Both allow_registration and require_registration_approval are
+	// bypassed when a valid invite is present at account-creation time — the
+	// invite is the vouch. Re-checked here, not just in sendRegisterEmailOTP:
+	// an admin can disable registration during the 15 minutes a code is
+	// live, and this is the call that actually creates the account.
+	if invite == nil {
+		if val, _ := h.admin.GetSetting("allow_registration"); val == "false" {
+			return nil, huma.Error403Forbidden("registration is currently disabled")
+		}
 	}
 
 	user := models.User{
@@ -297,11 +343,20 @@ func (h *AuthHandler) finalizeRegistration(ctx context.Context, pending models.P
 		EmailNotificationsEnabled: true,
 		MonthlyDigestEnabled:      true,
 	}
-	if val, _ := h.admin.GetSetting("require_registration_approval"); val == "true" {
-		user.PendingApproval = true
+	if invite == nil {
+		if val, _ := h.admin.GetSetting("require_registration_approval"); val == "true" {
+			user.PendingApproval = true
+		}
 	}
 	if err := h.users.Create(&user); err != nil {
 		return nil, huma.Error400BadRequest("email already registered")
+	}
+
+	if invite != nil {
+		user.InvitedByID = &invite.InviterID
+		// Best-effort — the account is live and correctly unapproved either
+		// way; a failure here only costs the "Invited by" attribution.
+		_ = h.users.Save(&user) //nolint:errcheck
 	}
 
 	// An account awaiting admin approval gets no session — the frontend shows

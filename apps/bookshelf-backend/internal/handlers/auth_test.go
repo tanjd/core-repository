@@ -28,7 +28,7 @@ func newAuthHandlerWithVerifications() (*AuthHandler, *repotest.UserRepository, 
 	copies := repotest.NewCopyRepository()
 	regVerifications := repotest.NewRegistrationVerificationRepository()
 	registration := services.NewRegistrationWorkflow(admin, repotest.NewNotificationRepository(), repotest.NewBookRepository(), noopEmail())
-	h := NewAuthHandler(users, admin, copies, regVerifications, testJWTSecret, "encryption-secret", noopEmail(), noopSMS(), registration, "dev", 20, 30, 5)
+	h := NewAuthHandler(users, admin, copies, regVerifications, testJWTSecret, "encryption-secret", noopEmail(), noopSMS(), registration, "dev", 20, 30, 5, nil)
 	return h, users, admin, regVerifications
 }
 
@@ -186,7 +186,7 @@ func TestRegisterViaEmailOTP(t *testing.T) {
 		regVerifications := repotest.NewRegistrationVerificationRepository()
 		notifs := repotest.NewNotificationRepository()
 		registration := services.NewRegistrationWorkflow(admin, notifs, repotest.NewBookRepository(), noopEmail())
-		h := NewAuthHandler(users, admin, copies, regVerifications, testJWTSecret, "encryption-secret", noopEmail(), noopSMS(), registration, "dev", 20, 30, 5)
+		h := NewAuthHandler(users, admin, copies, regVerifications, testJWTSecret, "encryption-secret", noopEmail(), noopSMS(), registration, "dev", 20, 30, 5, nil)
 		require.NoError(t, admin.UpsertSetting("require_registration_approval", "true"))
 		require.NoError(t, admin.SaveUser(&models.User{ID: 1, Name: "Site Admin", Email: "admin@example.com", Role: "admin"}))
 
@@ -208,6 +208,110 @@ func TestRegisterViaEmailOTP(t *testing.T) {
 		assert.Equal(t, "user_pending_approval", adminNotifs[0].Type)
 		require.NotNil(t, adminNotifs[0].PendingUserID)
 		assert.Equal(t, stored.ID, *adminNotifs[0].PendingUserID)
+	})
+}
+
+// newAuthHandlerWithInvites is newAuthHandlerWithVerifications plus a wired
+// InviteCodeRepository fake, for the invite-code registration-bypass tests
+// below. See docs/invite-code-spec.md.
+func newAuthHandlerWithInvites() (*AuthHandler, *repotest.UserRepository, *repotest.AdminRepository, *repotest.InviteCodeRepository) {
+	users := repotest.NewUserRepository()
+	admin := repotest.NewAdminRepository()
+	copies := repotest.NewCopyRepository()
+	regVerifications := repotest.NewRegistrationVerificationRepository()
+	inviteCodes := repotest.NewInviteCodeRepository(users)
+	registration := services.NewRegistrationWorkflow(admin, repotest.NewNotificationRepository(), repotest.NewBookRepository(), noopEmail())
+	h := NewAuthHandler(users, admin, copies, regVerifications, testJWTSecret, "encryption-secret", noopEmail(), noopSMS(), registration, "dev", 20, 30, 5, inviteCodes)
+	return h, users, admin, inviteCodes
+}
+
+// sendRegistrationWithInvite is sendRegistration plus an invite_code on the
+// body, returning the error (rather than requiring success) so callers can
+// exercise the invalid/revoked-code rejection paths.
+func sendRegistrationWithInvite(h *AuthHandler, email, inviteCode string) (string, error) {
+	in := &sendRegisterEmailOTPInput{}
+	in.Body.Name = "Invitee"
+	in.Body.Email = email
+	in.Body.Password = "Passw0rd1234"
+	in.Body.InviteCode = inviteCode
+	out, err := h.sendRegisterEmailOTP(context.Background(), in)
+	if err != nil {
+		return "", err
+	}
+	return out.Body.DebugCode, nil
+}
+
+func TestRegisterViaEmailOTP_WithInviteCode(t *testing.T) {
+	t.Run("valid code bypasses approval even when require_registration_approval is on", func(t *testing.T) {
+		h, users, admin, inviteCodes := newAuthHandlerWithInvites()
+		require.NoError(t, admin.UpsertSetting("require_registration_approval", "true"))
+		require.NoError(t, users.Save(&models.User{ID: 1, Name: "Inviter", Email: "inviter@example.com", Verified: true}))
+		_, err := inviteCodes.FindOrCreateByInviter(1, "invitecode1")
+		require.NoError(t, err)
+
+		code, err := sendRegistrationWithInvite(h, "invitee@example.com", "invitecode1")
+		require.NoError(t, err)
+		out, err := verifyRegistrationCode(h, "invitee@example.com", code)
+
+		require.NoError(t, err)
+		assert.Equal(t, "complete", out.Body.Status)
+		assert.False(t, out.Body.User.PendingApproval)
+		require.NotNil(t, out.Body.User.InvitedByID)
+		assert.Equal(t, uint(1), *out.Body.User.InvitedByID)
+	})
+
+	t.Run("valid code enables registration when allow_registration is off", func(t *testing.T) {
+		h, users, admin, inviteCodes := newAuthHandlerWithInvites()
+		require.NoError(t, users.Save(&models.User{ID: 1, Name: "Inviter", Email: "inviter2@example.com", Verified: true}))
+		_, err := inviteCodes.FindOrCreateByInviter(1, "invitecode2")
+		require.NoError(t, err)
+
+		code, err := sendRegistrationWithInvite(h, "invitee2@example.com", "invitecode2")
+		require.NoError(t, err)
+
+		require.NoError(t, admin.UpsertSetting("allow_registration", "false"))
+
+		out, err := verifyRegistrationCode(h, "invitee2@example.com", code)
+
+		require.NoError(t, err)
+		assert.Equal(t, "complete", out.Body.Status)
+		assert.False(t, out.Body.User.PendingApproval)
+	})
+
+	t.Run("no code and allow_registration off still 403s at send-email-otp", func(t *testing.T) {
+		h, _, admin, _ := newAuthHandlerWithInvites()
+		require.NoError(t, admin.UpsertSetting("allow_registration", "false"))
+
+		_, err := sendRegistrationWithInvite(h, "invitee3@example.com", "")
+
+		require.Error(t, err)
+		assertStatus(t, err, 403)
+	})
+
+	t.Run("an unknown code is rejected at send-email-otp", func(t *testing.T) {
+		h, _, _, _ := newAuthHandlerWithInvites()
+
+		_, err := sendRegistrationWithInvite(h, "invitee4@example.com", "nosuchcode")
+
+		require.Error(t, err)
+		assertStatus(t, err, 400)
+	})
+
+	t.Run("code revoked between send and verify is rejected at verify-email-otp", func(t *testing.T) {
+		h, users, _, inviteCodes := newAuthHandlerWithInvites()
+		require.NoError(t, users.Save(&models.User{ID: 1, Name: "Inviter", Email: "inviter5@example.com", Verified: true}))
+		_, err := inviteCodes.FindOrCreateByInviter(1, "invitecode5")
+		require.NoError(t, err)
+
+		code, err := sendRegistrationWithInvite(h, "invitee5@example.com", "invitecode5")
+		require.NoError(t, err)
+
+		require.NoError(t, inviteCodes.DeleteByInviter(1))
+
+		_, err = verifyRegistrationCode(h, "invitee5@example.com", code)
+
+		require.Error(t, err)
+		assertStatus(t, err, 400)
 	})
 }
 
@@ -1115,7 +1219,7 @@ func TestSendVerifyRegisterEmailOTP(t *testing.T) {
 		copies := repotest.NewCopyRepository()
 		regVerifications := repotest.NewRegistrationVerificationRepository()
 		registration := services.NewRegistrationWorkflow(admin, repotest.NewNotificationRepository(), repotest.NewBookRepository(), noopEmail())
-		h := NewAuthHandler(users, admin, copies, regVerifications, testJWTSecret, "encryption-secret", noopEmail(), noopSMS(), registration, "prd", 20, 30, 5)
+		h := NewAuthHandler(users, admin, copies, regVerifications, testJWTSecret, "encryption-secret", noopEmail(), noopSMS(), registration, "prd", 20, 30, 5, nil)
 
 		sendIn := &sendRegisterEmailOTPInput{}
 		sendIn.Body.Name = "Prod User"

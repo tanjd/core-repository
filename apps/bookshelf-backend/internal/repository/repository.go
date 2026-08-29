@@ -305,3 +305,32 @@ type TopRecommendedBook struct {
 	Book  models.Book
 	Count int64
 }
+
+// InviteCodeRepository handles persistence for InviteCode records — a
+// member's permanent, multi-use invite link. See docs/invite-code-spec.md.
+type InviteCodeRepository interface {
+	// FindByInviter returns inviterID's existing code, or ErrNotFound if they
+	// don't have one yet. Lets a caller distinguish "already has a code"
+	// from "about to create one" — needed by GET /invite-code's creation
+	// gate (see docs/invite-code-spec.md's allow_invite_codes semantics).
+	FindByInviter(inviterID uint) (*models.InviteCode, error)
+	// FindOrCreateByInviter returns inviterID's existing code, or inserts one
+	// using code if none exists yet. code is only used on the create path —
+	// the caller generates it before calling in, so a collision can be
+	// retried without this method knowing about generation at all.
+	FindOrCreateByInviter(inviterID uint, code string) (*models.InviteCode, error)
+	FindByCode(code string) (*models.InviteCode, error)
+	// Regenerate deletes inviterID's existing code (if any) and creates a new
+	// one with newCode, atomically — there is never a window where neither
+	// code exists.
+	Regenerate(inviterID uint, newCode string) (*models.InviteCode, error)
+	// DeleteByInviter removes inviterID's code. A no-op (nil error) if the
+	// member has none.
+	DeleteByInviter(inviterID uint) error
+	// DeleteByID removes a code by primary key. Returns ErrNotFound if no
+	// such row exists.
+	DeleteByID(id uint) error
+	// ListAll returns every invite code with its Inviter preloaded, newest
+	// first. Not paginated — bounded by community size.
+	ListAll() ([]models.InviteCode, error)
+}
