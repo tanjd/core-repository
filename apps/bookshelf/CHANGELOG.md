@@ -1,3 +1,17 @@
+## 0.27.0 (2026-08-29)
+
+### 🚀 Features
+
+- **bookshelf,bookshelf-backend,bookshelf-e2e:** add monthly digest ([#84](https://github.com/tanjd/core-repository/pull/84))
+
+### Database migrations
+
+Includes migration **000016** — automatic on startup; no manual SQL required.
+
+### ❤️ Thank You
+
+- Jeddy Tan @tanjd
+
 ## 0.26.0 (2026-08-28)
 
 ### 🚀 Features
