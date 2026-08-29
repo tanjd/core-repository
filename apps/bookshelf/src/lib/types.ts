@@ -16,6 +16,11 @@ export interface User {
   telegram_username?: string;
   whatsapp_username?: string;
   contact_note?: string;
+  // invited_by_id/invited_by: which member's invite link this account
+  // registered through, if any — see apps/bookshelf/docs/invite-code-spec.md.
+  // invited_by is preloaded on GET /admin/users only.
+  invited_by_id?: number;
+  invited_by?: User;
 }
 
 // PublicContact is the redacted view of a user shown to the other party in a
@@ -86,6 +91,16 @@ export interface Book {
 // apps/bookshelf/docs/book-recommendations-spec.md.
 export interface Recommendation {
   recommender_name: string;
+  created_at: string;
+}
+
+// InviteCode is one row in the admin invite-links table, returned by
+// GET /admin/invite-codes. See apps/bookshelf/docs/invite-code-spec.md.
+export interface InviteCode {
+  id: number;
+  code: string;
+  inviter_id: number;
+  inviter_name: string;
   created_at: string;
 }
 
