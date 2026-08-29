@@ -1,3 +1,13 @@
+## 0.29.0 (2026-08-29)
+
+### 🚀 Features
+
+- **bookshelf:** add show/hide toggle to all password fields ([#88](https://github.com/tanjd/core-repository/pull/88))
+
+### ❤️ Thank You
+
+- Jeddy Tan @tanjd
+
 ## 0.28.0 (2026-08-29)
 
 ### 🚀 Features
