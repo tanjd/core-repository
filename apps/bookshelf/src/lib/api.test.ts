@@ -1,4 +1,9 @@
-import { validatePassword, scorePasswordStrength, api } from "./api";
+import {
+  validatePassword,
+  scorePasswordStrength,
+  isCommonPassword,
+  api,
+} from "./api";
 
 describe("validatePassword", () => {
   it("accepts a password meeting all complexity rules", () => {
@@ -51,6 +56,20 @@ describe("validatePassword", () => {
 
   it("ignores disallowed entries shorter than 3 characters", () => {
     expect(validatePassword("Passw0rd1234", ["Jo"])).toBeNull();
+  });
+});
+
+describe("isCommonPassword", () => {
+  it("flags a password on the common-password denylist", () => {
+    expect(isCommonPassword("password")).toBe(true);
+  });
+
+  it("matches case-insensitively", () => {
+    expect(isCommonPassword("PASSWORD")).toBe(true);
+  });
+
+  it("does not flag a strong, uncommon password", () => {
+    expect(isCommonPassword("Ux7$kQp9mNv2")).toBe(false);
   });
 });
 

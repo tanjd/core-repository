@@ -160,6 +160,11 @@ export function validatePassword(
   return null;
 }
 
+/** Whether the password is pulled from the common-password denylist. */
+export function isCommonPassword(password: string): boolean {
+  return COMMON_PASSWORDS.has(password.toLowerCase());
+}
+
 /** Returns the portion of email before "@", for use as a validatePassword disallowed entry. */
 export function emailLocalPart(email: string): string {
   const at = email.indexOf("@");

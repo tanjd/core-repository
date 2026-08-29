@@ -203,11 +203,13 @@ export default function RegisterPage() {
       emailLocalPart(email),
     ]);
     if (passwordError) {
-      setError(passwordError);
+      // Checklist already shows which requirement is unmet — no prose error
+      // needed.
       return;
     }
     if (password !== confirmPassword) {
-      setError("Passwords do not match");
+      // Live match indicator already shows the mismatch; just block
+      // submission.
       return;
     }
 

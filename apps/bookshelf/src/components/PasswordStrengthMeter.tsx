@@ -3,6 +3,7 @@
 import { Check, X } from "lucide-react";
 import {
   MIN_PASSWORD_LENGTH,
+  isCommonPassword,
   scorePasswordStrength,
   type PasswordStrengthScore,
 } from "@/lib/api";
@@ -50,6 +51,10 @@ function requirementsFor(
     },
     { label: "At least one number", met: /[0-9]/.test(password) },
     { label: "Doesn't contain your name or email", met: !disallowedHit },
+    {
+      label: "Not a commonly used password",
+      met: !isCommonPassword(password),
+    },
   ];
 }
 
