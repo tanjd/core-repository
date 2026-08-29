@@ -1,228 +1,262 @@
 # Invite-code registration — spec
 
-**Status:** Proposed · **Scope:** `apps/bookshelf` + `apps/bookshelf-backend` ·
-**Depends on:** `User`, `AppSetting` (`require_registration_approval`, `allow_registration`),
-the email-magic-link registration flow (`docs/magic-link-registration-spec.md`)
+**Status:** Approved for build · **Scope:** `apps/bookshelf` + `apps/bookshelf-backend` ·
+**Depends on:** `User`, `AppSetting`, `RegistrationVerification`, `PendingRegistrationData`,
+`AuthHandler`, `AdminHandler`
 
-Let an existing member generate a shareable invite link. Anyone who registers through it skips
-the admin-approval queue entirely, regardless of the `require_registration_approval` setting.
-Registering without a valid invite code behaves exactly as it does today.
+A verified member has a personal invite link. Someone who registers via that link bypasses
+the admin approval gate — the inviter has vouched for them. It fills the gap between fully-open
+and fully-closed registration: an admin can keep `allow_registration = false` (no random signups)
+while still letting members bring in specific, known people frictionlessly.
 
 ## Why now
 
-`require_registration_approval` (added in #39) is all-or-nothing: every sign-up sits in the queue
-until an admin acts, even when the new member was personally invited by someone already using the
-app. An invite link lets a vouched-for signup skip that queue without turning approval off for
-everyone else.
+- `require_registration_approval` creates friction even for trusted community members; an admin
+  spending time approving someone a current member already vouched for is waste.
+- Some communities want closed registration (no anonymous signups) but still need a way to
+  onboard known members — invite links are the natural solution, with no new infrastructure.
+- Members already expect this pattern from consumer apps (Dropbox, Revolut, group-chat
+  apps) — the UX is a single shareable link, nothing more.
 
 ## Goals
 
-- A member can generate a shareable invite link from their own account (`POST /invites`). Anyone
-  who registers through it skips admin approval.
-- Registering without a code, or with one that's gone invalid, is unaffected by this feature:
-  still gated by `allow_registration` and `require_registration_approval` as today.
-- Admins can see every outstanding invite code across all members (creator, use count, expiry,
-  revoked state), with the ability to revoke one.
-- An invite code that's expired, revoked, or at its use cap fails registration with a clear error
-  — never a silent fallback to the normal approval-gated path.
+- Every verified, active member has one permanent invite link they can share.
+- Someone who registers via a valid invite link bypasses admin approval (`PendingApproval`
+  stays false) even if `require_registration_approval` is on.
+- Invite links also bypass `allow_registration = false` — this enables a "closed but
+  controlled" onboarding mode: admin turns off open registration, members hand out their
+  personal link as the sole entry point.
+- The link is multi-use — the same link works for every new member the inviter brings in.
+- A member can regenerate their link at any time (e.g., if they shared it too widely).
+- Admins can see every member's link and revoke any one of them from the Users admin page.
+- A global toggle is admin-configurable via the existing `AppSetting` mechanism.
 
 ## Non-goals (v1)
 
-- **Tagging members with a group/community label for future multi-instance bookkeeping.** An
-  earlier draft of this spec added a `Community` table, `User.CommunityID`, and matching admin UI
-  so members could be traced back to a group if this app were ever self-hosted separately for a
-  different group. Cut for now — that demand is still hypothetical (see `TODO.md`'s
-  "Someday/hold" multi-tenant entry), and carrying an admin-facing `Community` list with exactly
-  one row for an indefinite period isn't worth it. If a second group ever concretely needs to run
-  its own instance, add the label then, scoped to that need — `InviteCode.CreatedByID` already
-  gives precise who-invited-whom provenance to backfill from if that happens.
-- **Admin-created invite codes independent of a member.** Every code has a real `CreatedByID`.
-  There's no separate admin-only code type.
-- **Notifying the inviter when their code gets used.** Nice-to-have; not required here, and easy
-  to add later on top of the existing `Notification`/`EmailService` plumbing.
-- **A cap on how many outstanding invite codes a member can hold.** Considered and rejected —
-  members are already vetted (via approval or a prior invite) at this app's trusted, small-
-  community scale, and the admin oversight page already gives a human full visibility and revoke
-  over every code from every member. A cap would add config surface for an adversarial threat
-  model this app doesn't have.
-- **`max_uses`/`expires_at` configuration in the member-facing UI.** The fields exist on the
-  API/model (and the 30-day default expiry still applies) so they're available for future use,
-  but exposing per-code configuration to members is speculative complexity this feature doesn't
-  need yet — see "Invite generation" below.
+- **No per-member limit on signups via a link.** A member's link can create any number of
+  accounts. If abuse is suspected, the admin revokes the link.
+- **No expiry on invite links.** Links are permanent until revoked. The admin toggle
+  (`allow_invite_codes`) is the circuit-breaker; per-link expiry adds complexity with
+  little benefit at community scale.
+- **No admin-generated links on behalf of a member.** Admins can use their own link
+  (they're verified members), but cannot act as another member's inviter.
+- **No email delivery of the invite.** The member copies the link and shares it however
+  they like — the backend doesn't email it anywhere.
+- **No "invited by" attribution on the invitee's public profile.** The relationship is
+  tracked in `User.InvitedByID` for admin visibility, but there's no member-facing display.
+- **No invite-code bypass of email OTP verification.** The invitee still goes through the
+  normal email verification step. The link only removes the admin approval gate.
+- **No account expiry for the resulting signup.** Once an account is created via an invite
+  link, it lives on the same terms as any other account.
+- **No notification to the inviter when their link is used.** The inviter can see that
+  their link was used via the admin Users page; a push/email notification is deferred until
+  there is evidence members want it.
 
-## Data model
+## Who can create invite links
 
-New migration under `internal/db/migrations/`:
+Eligible creators: members who are verified (`Verified = true`), not suspended
+(`Suspended = false`), and not pending approval (`PendingApproval = false`). An unverified
+member cannot hold a link — they haven't proved their own identity yet. Admins qualify
+by virtue of being verified, non-suspended members with the `admin` role, same as any other
+eligible member.
 
-```go
-// InviteCode lets an existing member invite someone who skips admin
-// approval on registration.
-type InviteCode struct {
-    ID          uint       `gorm:"primarykey" json:"id"`
-    Code        string     `gorm:"uniqueIndex;not null" json:"code"`
-    CreatedByID uint       `gorm:"not null" json:"created_by_id"`
-    MaxUses     *int       `json:"max_uses,omitempty"` // nil = unlimited
-    UseCount    int        `gorm:"not null;default:0" json:"use_count"`
-    ExpiresAt   *time.Time `json:"expires_at,omitempty"`
-    Revoked     bool       `gorm:"not null;default:false" json:"revoked"`
-    CreatedAt   time.Time  `json:"created_at"`
-}
-```
+## Link lifecycle
 
-- `User` gains `InviteCodeID *uint` (nullable — exactly which code they registered through; `nil`
-  for approval-path, `/auth/setup`, and pre-migration users).
-- `PendingRegistrationData` (the parked row behind email verification — see
-  `magic-link-registration-spec.md`) gains `PendingInviteCode string`, following the same pattern
-  as its other `Pending*` fields: captured at the first registration step, never itself
-  serialized back to the client.
-- `ExpiresAt` defaults to **30 days from creation** whenever `POST /invites` omits it — a code
-  that bypasses admin approval shouldn't default to never expiring. A caller can still pass an
-  explicit far-future (or shorter) date to override the default; omitting the field just means
-  "use the default," not "forever." This matters more than it would otherwise because notifying
-  the inviter when their code gets used is an explicit non-goal — an unlimited, never-expiring
-  link that leaks (forwarded, screenshotted, bookmarked) would otherwise be a silent, permanent
-  hole in the approval gate.
+1. Member opens their profile page → "Invite a member" section. The backend lazily creates
+   their invite link on first access — subsequent visits always return the same link.
+2. `GET /invite-code` (auth required) returns `{code, url}`. The member copies
+   `{FRONTEND_ORIGIN}/register?invite={code}` and shares it however they like.
+3. Invitee opens the URL. The registration page calls `GET /auth/invite/{code}` (public,
+   no auth). If valid, a banner reads **"Invited by [Name] — your account will be approved
+   automatically."**
+4. Invitee fills in the registration form. `POST /auth/register/send-email-otp` body
+   includes `invite_code`; the backend validates the code exists (is not revoked) and parks
+   it in `PendingInviteCode` alongside the other pending fields.
+5. Invitee verifies their email (OTP code or magic link — unchanged from today).
+6. `POST /auth/register/verify-email-otp` re-validates the code (guarding against the
+   inviter revoking or regenerating during the OTP window), creates the account with
+   `PendingApproval = false` and `InvitedByID` set to the inviter's user ID.
+7. The new account is live immediately — the invitee is signed in with a JWT. No approval
+   queue.
+8. The invite link remains active. The same link works for the next invitee.
+9. If the member wants to invalidate the current link (e.g., they shared it too widely),
+   they click "Regenerate link" → `POST /invite-code/regenerate` issues a new code. The
+   old link stops working immediately.
 
-## Registration flow
+**Code format:** 8-character lowercase alphanumeric (`a3kf92mx`), generated via `crypto/rand`.
+36^8 ≈ 2.8 trillion combinations — effectively unguessable at community scale, short enough to
+look clean in a shared URL. Consistent with Discord server invite links (all link-based, never
+manually typed). A `uniqueIndex` on `code` handles the negligible collision probability.
 
-Both entry points into `verifyRegisterEmailOTP` → `finalizeRegistration`
-(`apps/bookshelf-backend/internal/handlers/auth.go`) already re-check `allow_registration` at
-finalize time in case an admin changed it during the 15-minute verification window; invite-code
-handling follows the same "check at send, re-check at finalize" shape:
+## Admin controls (AppSettings)
 
-- **`sendRegisterEmailOTP`** accepts an optional `invite_code` field. If present, resolve it and
-  reject with 400 if it's unknown, revoked, expired, or already at `MaxUses` — same style as this
-  handler's existing duplicate-email and weak-password checks. A valid code is stored on
-  `PendingRegistrationData.PendingInviteCode`.
-- **`finalizeRegistration`** re-resolves `PendingInviteCode` before creating the user (the code
-  could have been revoked, expired, or exhausted by someone else in the intervening 15 minutes).
-  - **Valid code:** set `user.InviteCodeID` from it, increment `InviteCode.UseCount`, and do
-    **not** set `PendingApproval` — even if `require_registration_approval` is `"true"`.
-    Invite-code registration always bypasses that gate; it does not bypass `allow_registration`
-    (an admin's global kill switch still wins).
-  - **No code, or it went stale:** unchanged from today — `require_registration_approval` applies
-    as it already does.
-- The check-then-increment on `UseCount` isn't wrapped in extra locking. This mirrors the app's
-  existing tolerance for narrow check-then-act races on low-traffic, self-hosted-scale admin
-  surfaces (e.g. `LoanRequestHandler.getRequestableCopy`'s availability check) — not worth new
-  transaction machinery for the volume this app actually sees. Accepted risk, named here rather
-  than silently ignored, matching this repo's habit of documenting known gaps (see
-  `apps/bookshelf-backend/CLAUDE.md`'s "Known gaps" section for the pattern).
-- **New public endpoint**, `GET /invites/{code}` (no auth): returns whether the code is currently
-  redeemable, and nothing else (no inviter identity, no use count) — just enough for the register
-  page to confirm "this invite is valid" before an account exists.
+| Key                  | Default  | Meaning                                                                                                                                                                                                                                                                                      |
+| -------------------- | -------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `allow_invite_codes` | `"true"` | Global toggle. When false, no new links can be generated and `GET /invite-code` returns 403 for members who don't yet have one. Existing links already in use (code parked in the 15-minute OTP window) are not invalidated — disabling mid-session doesn't break an in-flight registration. |
 
-## Invite generation ("invite a friend")
+`allow_invite_codes = false` is checked at link **access** only (creation and regeneration).
+Validity checks at registration time (`send-email-otp` and `verify-email-otp`) do not
+re-check this setting — a link that was legitimately issued remains valid while it exists.
 
-New `InviteHandler`, mounted alongside the other `internal/handlers/*.go` handlers:
+## Registration flow changes
 
-- `POST /invites` (authenticated, any member) — creates a code inheriting `CreatedByID` from the
-  caller, with optional `max_uses`/`expires_at` fields in the body (not surfaced in the v1 UI —
-  see "Non-goals"); `expires_at` defaults to 30 days out when omitted (see "Data model").
-- `GET /invites/mine` (authenticated) — the caller's own codes plus use counts, for the frontend's
-  "your invites" list and for the reuse check below.
-- `POST /invites/{id}/revoke` (authenticated — owner or admin) — flips `Revoked`.
+`PendingRegistrationData` gains one new field: `PendingInviteCode string` — the raw code
+string stored alongside the other pending fields for the 15-minute OTP window.
 
-Frontend: a new "Invite a friend" section on the profile page (`apps/bookshelf/src/app/(auth)`'s
-profile route), next to the existing contact/notification settings — not a new bottom-tab-bar
-destination, given the fixed 5-slot mobile nav budget documented in `apps/bookshelf/CLAUDE.md`.
-Tapping "Invite a friend" checks `GET /invites/mine` for an existing active code (not expired,
-revoked, or at its use cap) and reuses it if found; `POST /invites` is only called when there is
-no active code to show. This keeps a member at effectively one live link at a time rather than a
-new code minted on every tap — a simpler mental model, and it sidesteps needing any UI to manage
-a growing list of dead codes. The resulting `/register?invite=<code>` link is shared via
-`navigator.share()` on mobile (the OS share sheet — Messages, WhatsApp, etc.), falling back to a
-copy-to-clipboard button where the Web Share API isn't available. The section also lists the
-member's own codes with use count and a revoke button — expected to rarely hold more than one or
-two entries, given the reuse behavior above.
+**At `send-email-otp`:**
 
-The register page (`apps/bookshelf/src/app/(auth)/register/page.tsx`) resolves `?invite=` against
-`GET /invites/{code}` on page load, before the user has typed anything:
+- If `invite_code` is present in the body: look up the code via `FindByCode`. If not found
+  (revoked or never existed) → 400 "invite code is invalid or has already been revoked."
+  If valid → park in `PendingInviteCode`.
+- If `invite_code` is absent **and** `allow_registration = false` → 403, same as today.
+- If `invite_code` is absent → proceed as today (no behavior change for non-invite
+  registrations).
 
-- **Valid:** shows a confirmation banner ("You've been invited — skip the approval wait") rather
-  than a visible code field, and submits the code as part of registration.
-- **Invalid** (expired, revoked, unknown): shows a dismissible notice ("This invite link isn't
-  valid anymore — you can still sign up, but your account will need admin approval") and drops
-  the code from the submission entirely, falling through to today's normal registration instead
-  of surfacing a submit-time error after the user has filled out the whole form.
+**At `verify-email-otp`:**
 
-A code entered manually (no `?invite=` param) goes through a collapsed "Have an invite code?"
-toggle on the details step rather than a default-visible field — most registrants arrive via the
-link, not by typing a code, so the field shouldn't compete for attention with the rest of the
-form.
+- If `PendingInviteCode != ""`: re-validate the code (the inviter may have regenerated or
+  been suspended during the OTP window); if found → create the account with
+  `PendingApproval = false` and `InvitedByID` set, regardless of
+  `require_registration_approval`; if not found → 400.
+- If `PendingInviteCode == ""`: proceed as today.
 
-## Admin surfaces
-
-- New admin page (or a tab alongside an existing one) listing every outstanding `InviteCode`
-  across all members — creator, use count/limit, expiry, revoked state — with an admin-level
-  revoke action. Follows the existing Users/Backups/Jobs admin page conventions: a table plus row
-  actions, reusing this app's existing four-variant badge vocabulary for the code's state:
-  `success` (active), `outline` (expired), `secondary` (at its use cap), `destructive` (revoked).
-  Revoked gets the loudest treatment since it's the only state reflecting a deliberate action;
-  expiry and hitting the use cap are both benign natural-lifecycle outcomes.
+Neither `require_registration_approval` nor `allow_registration` is checked on the
+invite-code registration path — both gates are bypassed when a valid code is present at
+account-creation time.
 
 ## Backend changes
 
-| Area                                            | Change                                                                                    |
-| ----------------------------------------------- | ----------------------------------------------------------------------------------------- |
-| `models.go`                                     | New `InviteCode` struct; `User.InviteCodeID`; `PendingRegistrationData.PendingInviteCode` |
-| Migration                                       | New pair: create `invite_codes` table, add `invite_code_id` to `users`                    |
-| `sendRegisterEmailOTP` / `finalizeRegistration` | Validate + park invite code; bypass `PendingApproval` on redemption                       |
-| New public endpoint                             | `GET /invites/{code}` — validity only                                                     |
-| New `InviteHandler`                             | `POST /invites`, `GET /invites/mine`, `POST /invites/{id}/revoke`                         |
-| `AdminHandler`                                  | Cross-member invite-code listing/revoke                                                   |
-| `repository` layer                              | `InviteCodeRepository`, following the existing repository interface pattern               |
+| Area                              | Change                                                                                                                                                             |
+| --------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `InviteCode` model                | New struct in `models.go` (see below)                                                                                                                              |
+| `User` model                      | New `InvitedByID *uint` field — permanent record of who invited this member, even after the code is regenerated or revoked                                         |
+| `PendingRegistrationData`         | New `PendingInviteCode string` column (embedded in `RegistrationVerification`)                                                                                     |
+| Migrations                        | `000017_create_invite_codes.{up,down}.sql`, `000018_add_pending_invite_code.{up,down}.sql`, `000019_add_invited_by_id.{up,down}.sql`                               |
+| `InviteCodeRepository`            | New interface + GORM impl: `FindOrCreateByInviter`, `FindByCode`, `Regenerate`, `DeleteByInviter`, `ListAll`, `DeleteByID`                                         |
+| `GET /invite-code`                | Auth required (verified, non-suspended, non-pending). Idempotent get-or-create. Returns `{code, url}`. 403 if `allow_invite_codes = false` and no code exists yet. |
+| `POST /invite-code/regenerate`    | Auth required. Revokes current code and issues a new one. Returns `{code, url}`. 403 if `allow_invite_codes = false`.                                              |
+| `GET /auth/invite/{code}`         | **Public, no auth.** Returns `{valid bool, inviter_name string}`. Does not modify anything. `inviter_name` is empty when `valid` is false.                         |
+| `GET /admin/invite-codes`         | Admin. Lists every member who has a code: inviter name, code, created\_at. Not paginated — one row per member, bounded by community size.                          |
+| `DELETE /admin/invite-codes/{id}` | Admin. Revokes a member's code by its ID. The member's next `GET /invite-code` will lazily issue a new one.                                                        |
+| AppSettings (seeded)              | `allow_invite_codes`                                                                                                                                               |
+| `send-email-otp` body             | New optional `invite_code string` field                                                                                                                            |
+| `verify-email-otp`                | Re-validates `PendingInviteCode`; bypasses approval gate; sets `InvitedByID` on the new user                                                                       |
+| `deleteUser` (admin)              | Revokes the deleted member's invite code so a removed member can't continue bringing in new signups                                                                |
+| `suspendUser` (admin)             | Revokes the suspended member's invite code for the same reason                                                                                                     |
+
+**`InviteCode` model:**
+
+```go
+type InviteCode struct {
+    ID        uint      `gorm:"primarykey" json:"id"`
+    Code      string    `gorm:"uniqueIndex;not null" json:"code"`
+    InviterID uint      `gorm:"uniqueIndex;not null" json:"inviter_id"`
+    Inviter   User      `json:"inviter,omitempty"`
+    CreatedAt time.Time `json:"created_at"`
+}
+```
+
+The `uniqueIndex` on `InviterID` enforces one code per member at the database level.
+There is no `ExpiresAt`, `UsedAt`, or `UsedByID` — the link is permanent and multi-use.
+Who was invited by whom is tracked in `User.InvitedByID`, not on the code itself.
+
+**New handler file:** `internal/handlers/invite_codes.go` — keeps invite-code logic out of
+the already large `auth.go`. Route registration in `cmd/server/main.go`.
 
 ## Frontend changes
 
-| Area                                  | Change                                                                              |
-| ------------------------------------- | ----------------------------------------------------------------------------------- |
-| Register page                         | Reads `?invite=`, confirms validity, submits the code with registration             |
-| Profile page                          | New "Invite a friend" section: generate a link, list own codes + use counts, revoke |
-| New admin page                        | Invite-code oversight table with revoke                                             |
-| `src/lib/api.ts` / `src/lib/types.ts` | New types/calls for `InviteCode` and the invite endpoints                           |
+| Area                                                   | Change                                                                                                                                                                                                                                                                       |
+| ------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Profile page                                           | New "Invite a member" section: shows the member's invite link with a copy button and a "Regenerate link" action. On first load, `GET /invite-code` lazily creates the code. If `allow_invite_codes = false` and no code exists, shows "Invite links are currently disabled." |
+| Registration page (`src/app/(auth)/register/page.tsx`) | Reads `?invite=` on mount; calls `GET /auth/invite/{code}`; if valid shows "Invited by [Name] — your account will be approved automatically"; passes `invite_code` in the `send-email-otp` request                                                                           |
+| Admin Users page (`src/app/admin/users/page.tsx`)      | New "Invite links" section: table of all member codes (inviter name, created\_at); revoke button per row calling `DELETE /admin/invite-codes/{id}`                                                                                                                           |
+
+The registration page banner appears only if `?invite=` is present **and** the code is
+valid (`valid: true` from the public endpoint). An invalid or revoked code shows a brief
+notice ("This invite link is no longer valid — you can still register normally") rather
+than a hard error, since open registration may still be on.
 
 ## Testing
 
-- **Backend:** invite-code validation (valid, expired, revoked, at-cap, unknown) at both
-  `sendRegisterEmailOTP` and `finalizeRegistration`; approval bypass on successful redemption;
-  fallback to today's approval-gated behavior with no code; `UseCount` increments; revoke
-  endpoint against owner, non-owner, and admin callers; `POST /invites` applies the 30-day
-  default `ExpiresAt` when the field is omitted and respects an explicit override when it's
-  provided.
-- **E2E (`apps/bookshelf-e2e`):** register via a generated invite link end-to-end (skips the
-  pending-approval screen); register with an expired/revoked code surfaces the right error;
-  register with no code still hits the approval gate when `require_registration_approval` is on.
-  The last case also closes an existing coverage gap — admin approval itself has no e2e coverage
-  today.
+**Backend (TDD — write tests first):**
+
+- `InviteCodeRepository`: `FindOrCreateByInviter` creates on first call and returns the
+  same row on subsequent calls; `Regenerate` changes the code and invalidates the old one;
+  `DeleteByInviter` removes the row; `ListAll` includes all members with codes.
+- `GET /invite-code`: creates code on first call; returns same code on subsequent calls;
+  403 when `allow_invite_codes = false` and no code exists; returns existing code even
+  when `allow_invite_codes = false` (creation-only gate).
+- `POST /invite-code/regenerate`: returns a new code; old code returns `{valid: false}`
+  from the public endpoint; 403 when `allow_invite_codes = false`.
+- `GET /auth/invite/{code}`: valid code → `{valid: true, inviter_name}`; revoked code →
+  `{valid: false}`; unknown code → `{valid: false}`.
+- Registration with invite code: valid code bypasses approval even with
+  `require_registration_approval = true`; valid code enables registration with
+  `allow_registration = false`; revoked code at `send-email-otp` → 400; code revoked
+  between send and verify → 400 at `verify-email-otp`; no code + `allow_registration
+= false` → 403, as today. Resulting user has `invited_by_id` set.
+- Admin endpoints: list returns one row per member; admin can revoke any code; revoked
+  member's next `GET /invite-code` creates a fresh code.
+- `deleteUser`: removes the member's invite code; `suspendUser`: same.
+
+**E2E (`apps/bookshelf-e2e`):**
+
+- Full invite flow: logged-in member copies their invite link → opens it in an anonymous
+  context → registration page shows the "Invited by" banner → registers → account is
+  immediately active (no pending approval), confirmed via `GET /auth/me` and the admin
+  Users page.
+- Same flow with `require_registration_approval = true` to confirm the bypass holds.
+- Member regenerates link → old URL shows "no longer valid" notice; new URL shows the
+  banner again.
+- Admin revokes a code via the Users page → that URL returns `{valid: false}`.
 
 ## Resolved decisions
 
-- **`Community`/group tagging cut from this spec.** See the "Non-goals" entry above — deferred
-  until a second self-hosted group is an actual, not hypothetical, need.
-- **Invite codes are member-generated, not admin-only.** The ask was specifically an "invite a
-  friend" flow; admins get oversight/revoke over codes but don't hand-author them.
-- **"Invite a friend" reuses an existing active code rather than minting a new one on every tap.**
-  Keeps a member at effectively one live link at a time — a simpler mental model than a
-  Discord-style "every share is a new code" pattern, and it avoids needing UI to manage a growing
-  list of mostly-dead codes.
-- **No `max_uses`/`expires_at` configuration in the v1 member-facing UI.** The API/model support
-  it and the 30-day default still applies, but exposing per-code config to members is speculative
-  complexity this feature doesn't need yet — see "Non-goals".
-- **Per-code configurable `MaxUses`/`ExpiresAt`, not a fixed policy — but `ExpiresAt` defaults to
-  30 days, never unlimited.** Matches this app's existing per-item configurability conventions
-  (`WishlistRequest`, backup retention) rather than a single global invite policy, while avoiding
-  an approval-bypassing link that silently lives forever if a member never revokes it — especially
-  since redemption notifications to the inviter are out of scope (see "Non-goals").
-- **Check-then-increment `UseCount` with no added locking.** Accepted risk at this app's actual
-  self-hosted scale — see "Registration flow" above.
+- **Invite links bypass `allow_registration = false`:** This is the primary use case — a
+  community that wants closed registration with controlled onboarding. If neither open
+  registration nor invite links should work, the admin disables both
+  (`allow_registration = false`, `allow_invite_codes = false`).
+- **Invite links bypass `require_registration_approval`:** The whole point is to skip the
+  approval queue for a vouched-for signup. A valid invite is the vouch; requiring further
+  admin approval would negate it.
+- **`allow_invite_codes` gates creation, not use:** Disabling invite codes prevents members
+  from getting or regenerating links, but does not invalidate links already in circulation
+  — the invitee who received a link yesterday shouldn't lose access because the admin
+  flipped a toggle today.
+- **One permanent multi-use link per member:** The commercial model (Dropbox, Revolut,
+  Discord) — clicking "Invite others to join" returns the same link every time. No code
+  list to manage, no status badges, no expiry. Abuse (link shared publicly) is handled by
+  admin revocation, not by per-code complexity.
+- **`InvitedByID` on `User`, not on `InviteCode`:** Tracking who invited whom on the code
+  would lose the relationship as soon as the code is regenerated or the inviter deleted.
+  A column on `User` is permanent and survives all code lifecycle events.
+- **`allow_invite_codes = false` blocks get/regenerate, not use:** When the feature is
+  disabled, members who already have a link can still see it (it still works for
+  registration). Only creating or rotating a link is blocked. This mirrors the behaviour
+  used for `allow_registration` vs. in-flight OTP sessions.
+- **`deleteUser` and `suspendUser` revoke the member's code:** A removed or suspended
+  community member should not continue bringing in new signups via an outstanding link.
+  The revoke happens atomically alongside the user state change.
+- **Public `GET /auth/invite/{code}` reveals the inviter's full name:** Deliberate UX
+  choice (the banner is meaningless without a name), balanced by 36^8 ≈ 2.8 trillion
+  combinations making guessing impractical at community scale.
+- **New handler file `invite_codes.go`:** `auth.go` is already at its cognitive-complexity
+  ceiling and invite-code concerns (link CRUD, admin visibility) are distinct from auth.
+  Same rationale as the `unsubscribe.go` split in the monthly-digest plan.
 
 ## Implementation order
 
-1. `InviteCode` model + migration (new `invite_codes` table, `invite_code_id` column on `users`)
-   — smallest independently-shippable slice.
-2. Invite-code validation and redemption in the registration flow (`sendRegisterEmailOTP`,
-   `finalizeRegistration`) + the public `GET /invites/{code}` lookup.
-3. `InviteHandler` (create/list-mine/revoke) + the profile page's "Invite a friend" UI.
-4. Register page invite-link handling (`?invite=` param, validity display).
-5. Admin invite-code oversight page.
+1. **Data layer** — `InviteCode` model, all three migrations, `InviteCodeRepository`
+   interface + GORM impl, `PendingInviteCode` column on `RegistrationVerification`,
+   `InvitedByID` on `User`, AppSettings seeded. No endpoints; tests confirm the repo layer.
+2. **API** — `GET /invite-code`, `POST /invite-code/regenerate`, `GET /auth/invite/{code}`,
+   admin `GET/DELETE /admin/invite-codes`. Manually testable via curl or the admin panel.
+3. **Registration integration** — `send-email-otp` parks the code; `verify-email-otp`
+   re-validates, bypasses the two gates, and sets `InvitedByID`.
+4. **Frontend** — registration `?invite=` banner; profile "Invite a member" card;
+   admin Users page invite links table.
+
+## Housekeeping
+
+`apps/bookshelf/TODO.md` lists "Invite-code registration" under "Next — approved, not yet
+built." Remove it from that list once this ships.

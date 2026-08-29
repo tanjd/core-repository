@@ -19,6 +19,7 @@ type appConfigFile struct {
 	VerificationRequiresPhone   string `yaml:"verification_requires_phone,omitempty"`
 	VerificationMinBooksShared  string `yaml:"verification_min_books_shared,omitempty"`
 	CoverRefreshInterval        string `yaml:"cover_refresh_interval,omitempty"`
+	AllowInviteCodes            string `yaml:"allow_invite_codes,omitempty"`
 }
 
 var knownYAMLKeys = map[string]struct{}{
@@ -30,6 +31,7 @@ var knownYAMLKeys = map[string]struct{}{
 	"verification_requires_phone":   {},
 	"verification_min_books_shared": {},
 	"cover_refresh_interval":        {},
+	"allow_invite_codes":            {},
 }
 
 // LoadYAMLConfig parses a bookshelf.yaml file and returns a flat key→value map
@@ -97,6 +99,9 @@ func flattenYAMLConfig(cfg appConfigFile) map[string]string {
 	if cfg.CoverRefreshInterval != "" {
 		kv["cover_refresh_interval"] = cfg.CoverRefreshInterval
 	}
+	if cfg.AllowInviteCodes != "" {
+		kv["allow_invite_codes"] = cfg.AllowInviteCodes
+	}
 	return kv
 }
 
@@ -117,6 +122,7 @@ func settingsToYAML(settings []models.AppSetting) ([]byte, error) {
 		VerificationRequiresPhone:   m["verification_requires_phone"],
 		VerificationMinBooksShared:  m["verification_min_books_shared"],
 		CoverRefreshInterval:        m["cover_refresh_interval"],
+		AllowInviteCodes:            m["allow_invite_codes"],
 	}
 	return yaml.Marshal(cfg)
 }

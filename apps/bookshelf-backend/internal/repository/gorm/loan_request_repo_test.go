@@ -28,6 +28,7 @@ func openTestDB(t *testing.T) *gorm.DB {
 		&models.User{}, &models.Book{}, &models.Copy{},
 		&models.LoanRequest{}, &models.Notification{}, &models.WaitlistEntry{},
 		&models.Announcement{}, &models.WishlistRequest{}, &models.Recommendation{},
+		&models.InviteCode{},
 	))
 	return db
 }
