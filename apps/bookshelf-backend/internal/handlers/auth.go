@@ -457,6 +457,7 @@ type updateMeBody struct {
 	Email                     *string `json:"email,omitempty" format:"email" doc:"New email address"`
 	GoogleBooksAPIKey         *string `json:"google_books_api_key,omitempty" doc:"Your Google Books API key. Set to empty string to remove."`
 	EmailNotificationsEnabled *bool   `json:"email_notifications_enabled,omitempty" doc:"Whether to receive non-transactional notification emails (loan requests, wishlist matches). Account/security emails are unaffected."`
+	MonthlyDigestEnabled      *bool   `json:"monthly_digest_enabled,omitempty" doc:"Whether to receive the monthly community digest email (new books, top recommended)."`
 	TelegramUsername          *string `json:"telegram_username,omitempty" maxLength:"100" doc:"Telegram username, for other members to reach you. Set to empty string to remove."`
 	WhatsAppUsername          *string `json:"whatsapp_username,omitempty" maxLength:"100" doc:"WhatsApp username, for other members to reach you. Set to empty string to remove."`
 	ContactNote               *string `json:"contact_note,omitempty" maxLength:"500" doc:"Free-text note on the best way/times to arrange pickup, shown to the other party once a loan request is accepted. Set to empty string to remove."`
@@ -850,6 +851,7 @@ func (h *AuthHandler) finalizeRegistration(ctx context.Context, pending models.P
 		Password:                  pending.PendingPasswordHash,
 		Verified:                  true,
 		EmailNotificationsEnabled: true,
+		MonthlyDigestEnabled:      true,
 	}
 	if val, _ := h.admin.GetSetting("require_registration_approval"); val == "true" {
 		user.PendingApproval = true
@@ -1209,6 +1211,9 @@ func applyContactPrefsUpdate(user *models.User, body updateMeBody) {
 	if body.EmailNotificationsEnabled != nil {
 		user.EmailNotificationsEnabled = *body.EmailNotificationsEnabled
 	}
+	if body.MonthlyDigestEnabled != nil {
+		user.MonthlyDigestEnabled = *body.MonthlyDigestEnabled
+	}
 	if body.TelegramUsername != nil {
 		user.TelegramUsername = *body.TelegramUsername
 	}
@@ -1397,6 +1402,7 @@ func (h *AuthHandler) setup(_ context.Context, input *setupInput) (*authOutput, 
 		Role:                      "admin",
 		Verified:                  true,
 		EmailNotificationsEnabled: true,
+		MonthlyDigestEnabled:      true,
 	}
 	if err := h.users.CreateAdminIfNoneExists(&user); err != nil {
 		if errors.Is(err, repository.ErrConflict) {

@@ -34,7 +34,15 @@ testing setup `apps/bookshelf-backend/docker-compose.example.yml` still document
 
 ## Someday / hold — don't build until there's proven demand
 
-- **SSO** — only makes sense after the multi-tenant rewrite above; a single-community app
-  with email/password + OTP doesn't need it.
-- Book ratings/reviews, digest email, genre/tag browsing — nice-to-haves, revisit once
+- **SSO** — only makes sense after a real multi-tenant rewrite (per-community data isolation);
+  a single-database app with email/password + OTP doesn't need it.
+- Book ratings/reviews, genre/tag browsing — nice-to-haves, revisit once
   there's enough real activity to know if they matter.
+
+## Next — approved, not yet built
+
+- **Monthly digest email** — new books, top recommended, and that month's shipped features,
+  opt-out by default with a one-click unsubscribe link, capped against the 300/day SMTP
+  budget. See `docs/monthly-digest-spec.md`.
+- **Invite-code registration** — a member-generated invite link that skips admin approval for a
+  vouched-for signup. See `docs/invite-code-spec.md`.

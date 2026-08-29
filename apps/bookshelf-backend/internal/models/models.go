@@ -31,9 +31,10 @@ type User struct {
 	// Announcement.Active below: GORM's Create() treats a zero-valued bool
 	// field carrying a "default" tag as unset and substitutes the DB
 	// default, silently turning an explicit false into true. register/setup
-	// below explicitly set this true; the migration's SQL-level DEFAULT 1
+	// below explicitly set these true; the migration's SQL-level DEFAULT 1
 	// is a safety net for direct inserts that bypass application code.
 	EmailNotificationsEnabled bool   `gorm:"column:email_notifications_enabled;not null" json:"email_notifications_enabled"`
+	MonthlyDigestEnabled      bool   `gorm:"column:monthly_digest_enabled;not null" json:"monthly_digest_enabled"`
 	TelegramUsername          string `gorm:"column:telegram_username" json:"telegram_username,omitempty"`
 	WhatsAppUsername          string `gorm:"column:whatsapp_username" json:"whatsapp_username,omitempty"`
 	ContactNote               string `gorm:"column:contact_note" json:"contact_note,omitempty"`

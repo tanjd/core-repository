@@ -1,0 +1,1 @@
+ALTER TABLE users ADD COLUMN monthly_digest_enabled BOOLEAN NOT NULL DEFAULT 1;

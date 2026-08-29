@@ -384,6 +384,7 @@ export const api = {
     email?: string;
     google_books_api_key?: string;
     email_notifications_enabled?: boolean;
+    monthly_digest_enabled?: boolean;
     telegram_username?: string;
     whatsapp_username?: string;
     contact_note?: string;

@@ -1279,3 +1279,69 @@ func TestSendVerifyRegisterPhoneOTP(t *testing.T) {
 		assertStatus(t, err, 429)
 	})
 }
+
+func TestMonthlyDigestEnabled(t *testing.T) {
+	t.Run("defaults to true for a newly registered user", func(t *testing.T) {
+		h, users, _ := newAuthHandler()
+		code := sendRegistration(t, h, "Ada Lovelace", "ada@example.com", "Passw0rd1234", nil)
+		_, err := verifyRegistrationCode(h, "ada@example.com", code)
+		require.NoError(t, err)
+
+		stored, err := users.FindByEmail("ada@example.com")
+		require.NoError(t, err)
+		assert.True(t, stored.MonthlyDigestEnabled, "monthly digest defaults to on for new users")
+	})
+
+	t.Run("defaults to true for the setup admin", func(t *testing.T) {
+		h, users, _ := newAuthHandler()
+		input := &setupInput{}
+		input.Body.Name = "Root Admin"
+		input.Body.Email = "admin@example.com"
+		input.Body.Password = "Passw0rd1234"
+		_, err := h.setup(context.Background(), input)
+		require.NoError(t, err)
+
+		stored, err := users.FindByEmail("admin@example.com")
+		require.NoError(t, err)
+		assert.True(t, stored.MonthlyDigestEnabled, "monthly digest defaults to on for setup admin")
+	})
+
+	t.Run("can be disabled and re-enabled via PATCH /auth/me", func(t *testing.T) {
+		h, users, _ := newAuthHandler()
+		user := &models.User{Name: "Ada", Email: "ada@example.com", Password: "x", MonthlyDigestEnabled: true}
+		require.NoError(t, users.Create(user))
+
+		disabled := false
+		input := &updateMeInput{}
+		input.Body.MonthlyDigestEnabled = &disabled
+		out, err := h.updateMe(fakeAuthedCtx(t, user.ID, "user"), input)
+
+		require.NoError(t, err)
+		assert.False(t, out.Body.MonthlyDigestEnabled)
+
+		reloaded, err := users.FindByID(user.ID)
+		require.NoError(t, err)
+		assert.False(t, reloaded.MonthlyDigestEnabled)
+
+		enabled := true
+		input2 := &updateMeInput{}
+		input2.Body.MonthlyDigestEnabled = &enabled
+		out2, err := h.updateMe(fakeAuthedCtx(t, user.ID, "user"), input2)
+
+		require.NoError(t, err)
+		assert.True(t, out2.Body.MonthlyDigestEnabled)
+	})
+
+	t.Run("nil MonthlyDigestEnabled in PATCH body leaves the flag unchanged", func(t *testing.T) {
+		h, users, _ := newAuthHandler()
+		user := &models.User{Name: "Ada", Email: "ada@example.com", Password: "x", MonthlyDigestEnabled: false}
+		require.NoError(t, users.Create(user))
+
+		input := &updateMeInput{}
+		// MonthlyDigestEnabled intentionally omitted (nil)
+		out, err := h.updateMe(fakeAuthedCtx(t, user.ID, "user"), input)
+
+		require.NoError(t, err)
+		assert.False(t, out.Body.MonthlyDigestEnabled, "omitting the field must not reset it to true")
+	})
+}
