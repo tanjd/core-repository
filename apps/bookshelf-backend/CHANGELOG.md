@@ -1,3 +1,17 @@
+## 0.20.0 (2026-08-29)
+
+### 🚀 Features
+
+- **bookshelf,bookshelf-backend,bookshelf-e2e:** add invite-code registration ([#85](https://github.com/tanjd/core-repository/pull/85))
+
+### Database migrations
+
+Includes migration **000017**, **000018**, **000019** — automatic on startup; no manual SQL required.
+
+### ❤️ Thank You
+
+- Jeddy Tan @tanjd
+
 ## 0.19.0 (2026-08-29)
 
 ### 🚀 Features
