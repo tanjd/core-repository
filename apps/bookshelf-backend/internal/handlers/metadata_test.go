@@ -1,6 +1,8 @@
 package handlers
 
 import (
+	"context"
+	"errors"
 	"net/http"
 	"testing"
 
@@ -83,4 +85,39 @@ func TestGoogleBooksStatusError(t *testing.T) {
 			assert.EqualError(t, googleBooksStatusError(tt.status), tt.want)
 		})
 	}
+}
+
+func TestRunFetchSources(t *testing.T) {
+	ok := func(items ...BookMetadataResult) func() ([]BookMetadataResult, error) {
+		return func() ([]BookMetadataResult, error) { return items, nil }
+	}
+	fail := func() ([]BookMetadataResult, error) { return nil, errors.New("boom") }
+
+	t.Run("all sources succeed with no results", func(t *testing.T) {
+		results, hadError := runFetchSources(context.Background(), "q", []fetchSource{
+			{"a", ok()},
+			{"b", ok()},
+		})
+		assert.Empty(t, results)
+		assert.False(t, hadError)
+	})
+
+	t.Run("a source errors and results end up empty", func(t *testing.T) {
+		results, hadError := runFetchSources(context.Background(), "q", []fetchSource{
+			{"a", fail},
+			{"b", ok()},
+		})
+		assert.Empty(t, results)
+		assert.True(t, hadError)
+	})
+
+	t.Run("a source errors but another returns results", func(t *testing.T) {
+		want := BookMetadataResult{Title: "found"}
+		results, hadError := runFetchSources(context.Background(), "q", []fetchSource{
+			{"a", fail},
+			{"b", ok(want)},
+		})
+		assert.Equal(t, []BookMetadataResult{want}, results)
+		assert.True(t, hadError)
+	})
 }

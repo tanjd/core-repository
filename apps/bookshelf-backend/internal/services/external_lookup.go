@@ -148,7 +148,11 @@ func doGoogleBooksRequest(ctx context.Context, client *http.Client, reqURL, apiK
 // volume ID — the precise, no-ambiguity path used when the book already has
 // a GoogleBooksID on record.
 func lookupGoogleBooksData(ctx context.Context, client *http.Client, volumeID, apiKey string) (externalBookData, string, error) {
-	reqURL := "https://www.googleapis.com/books/v1/volumes/" + url.PathEscape(volumeID) + "?alt=json"
+	// fields restricts the response to just what toExternalBookData reads —
+	// see https://developers.google.com/books/docs/v1/performance, "Using
+	// partial response" — instead of the full volume resource (which also
+	// carries authors, categories, saleInfo, etc. we never look at).
+	reqURL := "https://www.googleapis.com/books/v1/volumes/" + url.PathEscape(volumeID) + "?alt=json&fields=" + url.QueryEscape("volumeInfo(description,imageLinks)")
 	var parsed struct {
 		VolumeInfo googleBooksVolumeInfo `json:"volumeInfo"`
 	}
@@ -166,7 +170,10 @@ func lookupGoogleBooksData(ctx context.Context, client *http.Client, volumeID, a
 // or description either. Takes the first search result, same as how
 // createBook's original metadata search would have surfaced one.
 func lookupGoogleBooksByISBN(ctx context.Context, client *http.Client, isbn, apiKey string) (externalBookData, string, error) {
-	reqURL := "https://www.googleapis.com/books/v1/volumes?q=isbn:" + url.QueryEscape(isbn)
+	// Same partial-response restriction as lookupGoogleBooksData, scoped to
+	// the search response's items array.
+	reqURL := "https://www.googleapis.com/books/v1/volumes?q=isbn:" + url.QueryEscape(isbn) +
+		"&fields=" + url.QueryEscape("items(volumeInfo(description,imageLinks))")
 	var parsed struct {
 		Items []struct {
 			VolumeInfo googleBooksVolumeInfo `json:"volumeInfo"`
