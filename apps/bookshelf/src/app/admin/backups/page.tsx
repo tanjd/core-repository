@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState, useCallback, useRef } from "react";
-import { RefreshCw, Download, Trash2, Info } from "lucide-react";
+import { RefreshCw, Download, Trash2, Info, MoreVertical } from "lucide-react";
 import { toast } from "sonner";
 import { api, downloadBackup } from "@/lib/api";
 import type { JobStatus, BackupInfo } from "@/lib/types";
@@ -9,6 +9,13 @@ import { timeAgo } from "@/lib/timeFormat";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import {
   Dialog,
   DialogContent,
@@ -333,28 +340,37 @@ export default function AdminBackupsPage() {
                   >
                     {timeAgo(b.created_at)}
                   </td>
-                  <td className="px-4 py-3">
-                    <div className="flex gap-2 justify-end">
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={() => handleDownload(b)}
-                        disabled={downloadingFile === b.filename}
-                      >
-                        <Download className="size-3" />
-                        {downloadingFile === b.filename
-                          ? "Downloading…"
-                          : "Download"}
-                      </Button>
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        className="text-destructive hover:text-destructive hover:bg-destructive/10"
-                        onClick={() => setDeleteTarget(b)}
-                      >
-                        <Trash2 className="size-3" /> Delete
-                      </Button>
-                    </div>
+                  <td className="px-4 py-3 text-right">
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button
+                          size="icon-sm"
+                          variant="ghost"
+                          disabled={downloadingFile === b.filename}
+                          aria-label={`Actions for ${b.filename}`}
+                        >
+                          <MoreVertical className="size-4" />
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent>
+                        <DropdownMenuItem
+                          onClick={() => handleDownload(b)}
+                          disabled={downloadingFile === b.filename}
+                        >
+                          <Download className="size-3.5" />
+                          {downloadingFile === b.filename
+                            ? "Downloading…"
+                            : "Download"}
+                        </DropdownMenuItem>
+                        <DropdownMenuSeparator />
+                        <DropdownMenuItem
+                          variant="destructive"
+                          onClick={() => setDeleteTarget(b)}
+                        >
+                          <Trash2 className="size-3.5" /> Delete
+                        </DropdownMenuItem>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
                   </td>
                 </tr>
               ))

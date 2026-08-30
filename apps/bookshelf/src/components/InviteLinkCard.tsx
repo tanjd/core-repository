@@ -74,7 +74,7 @@ export function InviteLinkCard() {
   }
 
   return (
-    <Card>
+    <Card id="invite-a-member" className="scroll-mt-20">
       <CardHeader>
         <CardTitle className="text-base">Invite a member</CardTitle>
         <CardDescription>
