@@ -37,7 +37,7 @@ test("primary nav: desktop links, mobile tab bar/Share popover, and Profile menu
   // Desktop nav, at this project's default (wide) viewport.
   await expect(page.getByRole("link", { name: "Catalog" })).toBeVisible();
   await expect(page.getByRole("link", { name: "My Books" })).toBeVisible();
-  await expect(page.getByRole("link", { name: "My Requests" })).toBeVisible();
+  await expect(page.getByRole("link", { name: "Loans" })).toBeVisible();
   await expect(page.getByRole("link", { name: "Wishlist" })).toBeVisible();
   await expect(
     page.getByRole("button", { name: /^Notifications/ }),
@@ -60,7 +60,7 @@ test("primary nav: desktop links, mobile tab bar/Share popover, and Profile menu
     page.getByRole("link", { name: "Books", exact: true }),
   ).toBeVisible();
   await expect(
-    page.getByRole("link", { name: "Requests", exact: true }),
+    page.getByRole("link", { name: "Loans", exact: true }),
   ).toBeVisible();
   const wishlistTab = page.getByRole("link", { name: "Wishlist" });
   await expect(wishlistTab).toBeVisible();

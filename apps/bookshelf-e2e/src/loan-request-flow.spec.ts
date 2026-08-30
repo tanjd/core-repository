@@ -144,12 +144,18 @@ test.describe("loan request flow", () => {
 
     await expect(
       page.getByText(
-        "Request approved — check My Requests for the owner's contact info",
+        "Request approved — check Loans for the owner's contact info",
       ),
     ).toBeVisible();
 
-    await page.goto("/my-requests");
-    await expect(page.getByText("accepted", { exact: true })).toBeVisible();
+    await page.goto("/loans");
+    // Scoped to the table: the same row also renders in a mobile card
+    // (CSS-hidden, not removed, at this desktop-only project's viewport —
+    // see apps/bookshelf/CLAUDE.md's "Cards over dense tables on narrow
+    // screens"), so an unscoped getByText would be a strict-mode violation.
+    await expect(
+      page.getByRole("table").getByText("accepted", { exact: true }),
+    ).toBeVisible();
   });
 
   test("a second session sees a way to act on a copy that's pending someone else's request, and is notified once it opens back up", async ({
@@ -238,7 +244,7 @@ test.describe("loan request flow", () => {
 
     // Borrower requests via the UI (rather than a raw API call) so this
     // test doesn't need its own apiLogin — the session from this login also
-    // covers the later "view My Requests" step below.
+    // covers the later "view Loans" step below.
     await login(page, borrowerEmail, E2E_TEST_USER_PASSWORD);
     await page.goto(`/catalog/${bookId}`);
     await page.getByRole("button", { name: "Request to Borrow" }).click();
@@ -280,8 +286,11 @@ test.describe("loan request flow", () => {
       `set return date failed: ${await dateRes.text()}`,
     ).toBeTruthy();
 
-    await page.goto("/my-requests");
-    await expect(page.getByText("Overdue", { exact: true })).toBeVisible();
+    await page.goto("/loans");
+    // Scoped to the table — see the similar comment earlier in this file.
+    await expect(
+      page.getByRole("table").getByText("Overdue", { exact: true }),
+    ).toBeVisible();
 
     const contextOwner = await browser.newContext();
     const ownerPage = await contextOwner.newPage();
@@ -290,7 +299,11 @@ test.describe("loan request flow", () => {
     await expect(ownerPage.getByText(/overdue since/i)).toBeVisible();
 
     await ownerPage.goto(`/my-books/${copyId}/requests`);
-    await expect(ownerPage.getByText("Overdue", { exact: true })).toBeVisible();
+    // Scoped to the desktop table — the mobile card list renders the same
+    // "Overdue" badge alongside it (CSS-hidden, not DOM-absent).
+    await expect(
+      ownerPage.getByRole("table").getByText("Overdue", { exact: true }),
+    ).toBeVisible();
 
     await contextOwner.close();
   });
@@ -337,8 +350,12 @@ test.describe("loan request flow", () => {
 
     await ownerPage.locator("#accept-return-date").fill(ownerProposedDate);
     await ownerPage.getByRole("button", { name: "Accept Request" }).click();
+    // Scoped to the desktop table: the mobile card list renders the same
+    // "accepted" text alongside it (CSS-hidden, not DOM-absent — see
+    // apps/bookshelf/CLAUDE.md's "Cards over dense tables on narrow
+    // screens"), so a bare page-wide getByText is a strict-mode violation.
     await expect(
-      ownerPage.getByText("accepted", { exact: true }),
+      ownerPage.getByRole("table").getByText("accepted", { exact: true }),
     ).toBeVisible();
 
     const listRes = await request.get(
@@ -399,17 +416,21 @@ test.describe("loan request flow", () => {
     );
     expect(acceptRes.ok()).toBeTruthy();
 
-    await page.goto("/my-requests");
+    await page.goto("/loans");
     // Scoped to this test's own row: borrowerEmail is shared across every
     // test in this file (see the header comment), so by this 8th test
-    // /my-requests already has other "accepted" rows from earlier tests —
-    // a bare page-wide getByText("accepted") is a strict-mode violation.
+    // /loans' Borrowing tab already has other "accepted" rows from earlier
+    // tests — a bare page-wide getByText("accepted") is a strict-mode
+    // violation.
     const row = page.getByRole("row", { name: bookTitle });
     await expect(row.getByText("accepted", { exact: true })).toBeVisible();
     await row.getByText(bookTitle).click();
-    await expect(page.getByText("@e2e_owner")).toBeVisible();
+    // Scoped to the desktop table — expanded contact detail is rendered
+    // twice (table expand-row + mobile card, per BorrowingTab.tsx).
+    const table = page.getByRole("table");
+    await expect(table.getByRole("link", { name: "@e2e_owner" })).toBeVisible();
     await expect(
-      page.getByText("meet at the front desk on Saturdays"),
+      table.getByText("meet at the front desk on Saturdays"),
     ).toBeVisible();
   });
 
@@ -565,7 +586,7 @@ test.describe("loan request flow", () => {
       .toISOString()
       .slice(0, 10);
 
-    await page.goto("/my-requests");
+    await page.goto("/loans");
     const row = page.getByRole("row", { name: bookTitle });
     await row.getByRole("button", { name: "Edit return date" }).click();
     await page.locator("#edit-return-date").fill(newDate);
@@ -582,7 +603,8 @@ test.describe("loan request flow", () => {
     await expect(ownerPage.getByText("Return date changed")).toBeVisible();
 
     await ownerPage.goto(`/my-books/${copyId}/requests`);
-    await expect(ownerPage.getByText(/Amended by .+/)).toBeVisible();
+    const ownerRow = ownerPage.getByRole("row", { name: /Borrower/ });
+    await expect(ownerRow.getByText(/Amended by .+/)).toBeVisible();
 
     await contextOwner.close();
   });
@@ -645,7 +667,7 @@ test.describe("loan request flow", () => {
     await page.goto("/notifications");
     await expect(page.getByText("Return date changed")).toBeVisible();
 
-    await page.goto("/my-requests");
+    await page.goto("/loans");
     const row = page.getByRole("row", { name: bookTitle });
     await expect(row.getByText(/Amended by .+/)).toBeVisible();
 
@@ -701,5 +723,91 @@ test.describe("loan request flow", () => {
       },
     );
     expect(dateRes.status()).toBe(400);
+  });
+
+  test("the owner's Loans → Lending tab splits a still-accepted loan into Current and a returned one into History", async ({
+    page,
+    request,
+  }, testInfo) => {
+    test.skip(
+      testInfo.project.name === MOBILE_PROJECT,
+      "not viewport-dependent — see the header comment",
+    );
+    const currentTitle = `E2E Lending Current ${Date.now()}`;
+    const historyTitle = `E2E Lending History ${Date.now()}`;
+    const { copyId: currentCopyId } = await createBookAndCopy(
+      request,
+      ownerToken,
+      { title: currentTitle },
+    );
+    const { copyId: historyCopyId } = await createBookAndCopy(
+      request,
+      ownerToken,
+      { title: historyTitle },
+    );
+
+    const borrowerLogin = await apiLogin(
+      request,
+      borrowerEmail,
+      E2E_TEST_USER_PASSWORD,
+    );
+    const tomorrow = new Date(Date.now() + 24 * 60 * 60 * 1000)
+      .toISOString()
+      .slice(0, 10);
+
+    async function requestAndAccept(copyId: number): Promise<number> {
+      const createRes = await request.post(`${BACKEND_URL}/loan-requests`, {
+        headers: { Authorization: `Bearer ${borrowerLogin.token}` },
+        data: { copy_id: copyId, expected_return_date: tomorrow },
+      });
+      expect(
+        createRes.ok(),
+        `create request failed: ${await createRes.text()}`,
+      ).toBeTruthy();
+      const created = await createRes.json();
+
+      const acceptRes = await request.patch(
+        `${BACKEND_URL}/loan-requests/${created.id}`,
+        {
+          headers: { Authorization: `Bearer ${ownerToken}` },
+          data: { status: "accepted" },
+        },
+      );
+      expect(acceptRes.ok()).toBeTruthy();
+      return created.id as number;
+    }
+
+    await requestAndAccept(currentCopyId);
+    const historyRequestId = await requestAndAccept(historyCopyId);
+
+    const returnRes = await request.patch(
+      `${BACKEND_URL}/loan-requests/${historyRequestId}`,
+      {
+        headers: { Authorization: `Bearer ${ownerToken}` },
+        data: { status: "returned" },
+      },
+    );
+    expect(returnRes.ok()).toBeTruthy();
+
+    await login(page, ownerEmail, E2E_TEST_USER_PASSWORD);
+    await page.goto("/loans");
+    await page.getByRole("tab", { name: "Lending" }).click();
+
+    // Current (default) shows the still-accepted loan, not the returned one.
+    await expect(page.getByRole("row", { name: currentTitle })).toBeVisible();
+    await expect(page.getByRole("row", { name: historyTitle })).toHaveCount(0);
+
+    // History shows the returned loan, not the still-accepted one. The
+    // Current/History filter is a SegmentedControl (plain buttons), not a
+    // Tabs primitive — only the outer Borrowing/Lending split uses role="tab".
+    await page.getByRole("button", { name: "History", exact: true }).click();
+    await expect(page.getByRole("row", { name: historyTitle })).toBeVisible();
+    await expect(page.getByRole("row", { name: currentTitle })).toHaveCount(0);
+
+    // No action buttons anywhere on this read-only tab.
+    await expect(page.getByRole("button", { name: /accept/i })).toHaveCount(0);
+    await expect(
+      page.getByRole("button", { name: "Mark as Returned" }),
+    ).toHaveCount(0);
   });
 });

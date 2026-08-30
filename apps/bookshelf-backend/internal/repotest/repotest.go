@@ -934,6 +934,56 @@ func (r *LoanRequestRepository) ListByBorrowerIDPaginated(borrowerID uint, statu
 	}, nil
 }
 
+// ListByOwnerID returns loan requests against copies ownerID owns, newest
+// first, with Copy and Borrower associations populated (see hydrate).
+// Unlike ListByBorrowerID, ownerID isn't a direct field on LoanRequest — it's
+// reached through the hydrated Copy — so every request is hydrated before
+// filtering, not after.
+func (r *LoanRequestRepository) ListByOwnerID(ownerID uint) ([]models.LoanRequest, error) {
+	r.mu.Lock()
+	all := make([]models.LoanRequest, 0, len(r.byID))
+	for _, lr := range r.byID {
+		all = append(all, *lr)
+	}
+	r.mu.Unlock()
+	for i := range all {
+		r.hydrate(&all[i])
+	}
+	out := []models.LoanRequest{}
+	for _, lr := range all {
+		if lr.Copy.OwnerID == ownerID {
+			out = append(out, lr)
+		}
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].RequestedAt.After(out[j].RequestedAt) })
+	return out, nil
+}
+
+// ListByOwnerIDPaginated returns a page of loan requests against copies
+// ownerID owns, optionally filtered to the given statuses.
+func (r *LoanRequestRepository) ListByOwnerIDPaginated(ownerID uint, statuses []string, page, pageSize int) (*repository.PaginatedResult[models.LoanRequest], error) {
+	all, _ := r.ListByOwnerID(ownerID)
+	if len(statuses) > 0 {
+		set := map[string]bool{}
+		for _, s := range statuses {
+			set[s] = true
+		}
+		filtered := make([]models.LoanRequest, 0, len(all))
+		for _, lr := range all {
+			if set[lr.Status] {
+				filtered = append(filtered, lr)
+			}
+		}
+		all = filtered
+	}
+	start, end := paginationBounds(len(all), page, pageSize)
+	items := append([]models.LoanRequest{}, all[start:end]...)
+	return &repository.PaginatedResult[models.LoanRequest]{
+		Items: items, Total: int64(len(all)), Page: page, PageSize: pageSize,
+		TotalPages: totalPages(len(all), pageSize),
+	}, nil
+}
+
 // ListActiveByBorrowerID returns borrowerID's accepted loan requests,
 // mimicking the GORM implementation's due-date-ascending order.
 func (r *LoanRequestRepository) ListActiveByBorrowerID(borrowerID uint) ([]models.LoanRequest, error) {

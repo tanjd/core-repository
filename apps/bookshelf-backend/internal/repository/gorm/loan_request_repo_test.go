@@ -178,6 +178,65 @@ func TestLoanRequestRepository_ListByBorrowerIDPaginated_FiltersByStatus(t *test
 	})
 }
 
+func TestLoanRequestRepository_ListByOwnerIDPaginated_FiltersByStatus(t *testing.T) {
+	db := openTestDB(t)
+	copies := NewCopyRepository(db)
+	loanReqs := NewLoanRequestRepository(db)
+
+	owner := models.User{Name: "Owner", Email: "owner-loip@example.com"}
+	require.NoError(t, db.Create(&owner).Error)
+	otherOwner := models.User{Name: "Other Owner", Email: "other-owner-loip@example.com"}
+	require.NoError(t, db.Create(&otherOwner).Error)
+	borrower := models.User{Name: "Borrower", Email: "borrower-loip@example.com"}
+	require.NoError(t, db.Create(&borrower).Error)
+	book := models.Book{Title: "Some Book", Author: "Someone"}
+	require.NoError(t, db.Create(&book).Error)
+
+	statuses := []string{"pending", "accepted", "rejected", "cancelled", "returned"}
+	for _, status := range statuses {
+		bookCopy := models.Copy{BookID: book.ID, OwnerID: owner.ID, Status: "available"}
+		require.NoError(t, copies.Create(&bookCopy))
+		require.NoError(t, loanReqs.Create(&models.LoanRequest{CopyID: bookCopy.ID, BorrowerID: borrower.ID, Status: status}))
+	}
+	// A copy owned by someone else, borrowed by the same borrower — must not
+	// leak into owner's ListByOwnerIDPaginated results. This is the actual
+	// regression coverage for the join: a wrong/unqualified join clause could
+	// either leak this row into owner's results or drop otherOwner's own row.
+	otherCopy := models.Copy{BookID: book.ID, OwnerID: otherOwner.ID, Status: "available"}
+	require.NoError(t, copies.Create(&otherCopy))
+	require.NoError(t, loanReqs.Create(&models.LoanRequest{CopyID: otherCopy.ID, BorrowerID: borrower.ID, Status: "pending"}))
+
+	t.Run("nil statuses returns every status for owner's copies only", func(t *testing.T) {
+		result, err := loanReqs.ListByOwnerIDPaginated(owner.ID, nil, 1, 20)
+		require.NoError(t, err)
+		assert.Equal(t, int64(5), result.Total)
+		assert.Len(t, result.Items, 5)
+	})
+
+	t.Run("current view returns only pending and accepted", func(t *testing.T) {
+		result, err := loanReqs.ListByOwnerIDPaginated(owner.ID, []string{"pending", "accepted"}, 1, 20)
+		require.NoError(t, err)
+		assert.Equal(t, int64(2), result.Total)
+		for _, item := range result.Items {
+			assert.Contains(t, []string{"pending", "accepted"}, item.Status)
+		}
+	})
+
+	t.Run("history view returns only returned, rejected, and cancelled", func(t *testing.T) {
+		result, err := loanReqs.ListByOwnerIDPaginated(owner.ID, []string{"returned", "rejected", "cancelled"}, 1, 20)
+		require.NoError(t, err)
+		assert.Equal(t, int64(3), result.Total)
+	})
+
+	t.Run("a different owner sees only their own single copy's request", func(t *testing.T) {
+		result, err := loanReqs.ListByOwnerIDPaginated(otherOwner.ID, []string{"pending", "accepted"}, 1, 20)
+		require.NoError(t, err)
+		assert.Equal(t, int64(1), result.Total)
+		require.Len(t, result.Items, 1)
+		assert.Equal(t, otherCopy.ID, result.Items[0].CopyID)
+	})
+}
+
 func TestLoanRequestRepository_ListActiveByBorrowerID(t *testing.T) {
 	db := openTestDB(t)
 	copies := NewCopyRepository(db)

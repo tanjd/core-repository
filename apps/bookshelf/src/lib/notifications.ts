@@ -75,7 +75,7 @@ export async function notificationDestination(
       try {
         const lr = await api.getLoanRequest(n.loan_request_id);
         return currentUserId === lr.borrower_id
-          ? "/my-requests"
+          ? "/loans"
           : `/my-books/${lr.copy_id}/requests`;
       } catch {
         // fall through to the borrower-oriented default below
@@ -84,5 +84,5 @@ export async function notificationDestination(
   }
   if (n.type === "waitlist_available") return "/catalog";
   if (n.type === "copy_transferred_in") return "/my-books";
-  return "/my-requests";
+  return "/loans";
 }

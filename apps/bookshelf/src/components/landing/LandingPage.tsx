@@ -64,7 +64,11 @@ const steps = [
   },
 ];
 
-export function LandingPage() {
+export function LandingPage({
+  isAuthenticated = false,
+}: {
+  isAuthenticated?: boolean;
+}) {
   const [totalBooks, setTotalBooks] = useState<number | null>(null);
 
   useEffect(() => {
@@ -91,14 +95,22 @@ export function LandingPage() {
           neighbours.
         </p>
         <div className="flex flex-wrap items-center justify-center gap-3">
-          <Link href="/register">
-            <Button size="lg">Join the community</Button>
-          </Link>
-          <Link href="/login">
-            <Button size="lg" variant="outline">
-              Sign in
-            </Button>
-          </Link>
+          {isAuthenticated ? (
+            <Link href="/catalog">
+              <Button size="lg">Go to catalog</Button>
+            </Link>
+          ) : (
+            <>
+              <Link href="/register">
+                <Button size="lg">Join the community</Button>
+              </Link>
+              <Link href="/login">
+                <Button size="lg" variant="outline">
+                  Sign in
+                </Button>
+              </Link>
+            </>
+          )}
         </div>
         {totalBooks !== null && totalBooks > 0 && (
           <p className="text-sm text-muted-foreground">
@@ -219,9 +231,11 @@ export function LandingPage() {
           Ready to see what the community&apos;s got on the shelf?
         </p>
         <div className="flex flex-wrap items-center justify-center gap-3">
-          <Link href="/register">
-            <Button size="lg">Join the community</Button>
-          </Link>
+          {!isAuthenticated && (
+            <Link href="/register">
+              <Button size="lg">Join the community</Button>
+            </Link>
+          )}
           <Link
             href="/about#who-is-it-for"
             className="text-sm text-primary underline-offset-2 hover:underline"
