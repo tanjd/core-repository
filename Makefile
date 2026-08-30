@@ -1,6 +1,6 @@
 MAKEFLAGS += --no-print-directory
 
-.PHONY: help setup setup-ci install-deps install-dev-tools install-goimports install-rtk verify affected new-bot docker-build golangci-verify nx-reset upgrade-nx
+.PHONY: help setup setup-ci install-deps install-dev-tools install-goimports install-rtk verify affected new-bot docker-build golangci-verify nx-reset upgrade-nx prune-devcontainer-cache
 
 .DEFAULT_GOAL := help
 
@@ -61,3 +61,17 @@ golangci-verify: ## Confirm golangci-lint actually loaded .golangci.yaml (not si
 upgrade-nx: ## Upgrade the monorepo's Nx version
 	npx nx migrate latest
 	npx nx migrate --run-migrations
+
+prune-devcontainer-cache: ## Reclaim disk from stale entries in the persistent devcontainer caches (pnpm store, Go build cache, old Playwright browser versions)
+	pnpm store prune
+	go clean -cache
+	@browsers_dir="$${PLAYWRIGHT_BROWSERS_PATH:-$$HOME/.cache/ms-playwright}"; \
+	keep=$$(pnpm exec playwright install chromium --dry-run 2>/dev/null | grep 'Install location:' | awk '{print $$NF}' | xargs -n1 basename); \
+	for dir in "$$browsers_dir"/*/; do \
+		[ -d "$$dir" ] || continue; \
+		name=$$(basename "$$dir"); \
+		if ! printf '%s\n' "$$keep" | grep -qxF "$$name"; then \
+			echo "Removing stale Playwright browser: $$name"; \
+			rm -rf "$$dir"; \
+		fi; \
+	done

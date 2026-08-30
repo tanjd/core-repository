@@ -1,13 +1,20 @@
 "use client";
 
 import { useEffect, useState, useRef } from "react";
-import { Loader2 } from "lucide-react";
+import { Loader2, MoreVertical } from "lucide-react";
 import { toast } from "sonner";
 import { api } from "@/lib/api";
 import type { User, InviteCode } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Pagination } from "@/components/ui/Pagination";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 
 const PAGE_SIZE = 20;
 
@@ -196,64 +203,54 @@ export default function AdminUsersPage() {
                 <td className="px-4 py-3 text-muted-foreground">
                   {user.invited_by?.name ?? "—"}
                 </td>
-                <td className="px-4 py-3">
-                  <div className="flex gap-2 justify-end flex-wrap">
-                    {user.id !== currentUserId &&
-                      (() => {
-                        const busyAction = actionLoading[user.id];
-                        const isBusy = busyAction !== undefined;
-                        return (
-                          <>
+                <td className="px-4 py-3 text-right">
+                  {user.id !== currentUserId &&
+                    (() => {
+                      const busyAction = actionLoading[user.id];
+                      const isBusy = busyAction !== undefined;
+                      return (
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <Button
+                              size="icon-sm"
+                              variant="ghost"
+                              disabled={isBusy}
+                              aria-label={`Actions for ${user.name}`}
+                            >
+                              {isBusy ? (
+                                <Loader2 className="size-3.5 animate-spin" />
+                              ) : (
+                                <MoreVertical className="size-4" />
+                              )}
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent>
                             {user.pending_approval && (
-                              <Button
-                                size="sm"
-                                disabled={isBusy}
+                              <DropdownMenuItem
                                 onClick={() => toggleApproval(user)}
                               >
-                                {busyAction === "approve" && (
-                                  <Loader2 className="size-3.5 animate-spin" />
-                                )}
                                 Approve
-                              </Button>
+                              </DropdownMenuItem>
                             )}
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              disabled={isBusy}
-                              onClick={() => toggleRole(user)}
-                            >
-                              {busyAction === "role" && (
-                                <Loader2 className="size-3.5 animate-spin" />
-                              )}
+                            <DropdownMenuItem onClick={() => toggleRole(user)}>
                               {user.role === "admin" ? "Demote" : "Promote"}
-                            </Button>
-                            <Button
-                              size="sm"
-                              variant={user.suspended ? "outline" : "secondary"}
-                              disabled={isBusy}
+                            </DropdownMenuItem>
+                            <DropdownMenuItem
                               onClick={() => toggleSuspended(user)}
                             >
-                              {busyAction === "suspend" && (
-                                <Loader2 className="size-3.5 animate-spin" />
-                              )}
                               {user.suspended ? "Unsuspend" : "Suspend"}
-                            </Button>
-                            <Button
-                              size="sm"
-                              variant="ghost"
-                              className="text-destructive hover:text-destructive hover:bg-destructive/10"
-                              disabled={isBusy}
+                            </DropdownMenuItem>
+                            <DropdownMenuSeparator />
+                            <DropdownMenuItem
+                              variant="destructive"
                               onClick={() => deleteUser(user)}
                             >
-                              {busyAction === "delete" && (
-                                <Loader2 className="size-3.5 animate-spin" />
-                              )}
                               Delete
-                            </Button>
-                          </>
-                        );
-                      })()}
-                  </div>
+                            </DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                      );
+                    })()}
                 </td>
               </tr>
             ))}

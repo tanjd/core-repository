@@ -136,6 +136,11 @@ func (r *AdminRepository) GetDashboardStats() (*repository.DashboardStats, error
 		Count(&stats.OverdueCount).Error; err != nil {
 		return nil, err
 	}
+	if err := r.db.Model(&models.User{}).
+		Where("pending_approval = ?", true).
+		Count(&stats.PendingApprovalCount).Error; err != nil {
+		return nil, err
+	}
 
 	stats.MostBorrowedBooks = []repository.BookBorrowStat{}
 	if err := r.db.Table("loan_requests").

@@ -214,15 +214,16 @@ type LenderStat struct {
 
 // DashboardStats aggregates the counts and rankings shown on the admin dashboard.
 type DashboardStats struct {
-	TotalBooks        int64            `json:"total_books"`
-	TotalCopies       int64            `json:"total_copies"`
-	AvailableCopies   int64            `json:"available_copies"`
-	LoanedCopies      int64            `json:"loaned_copies"`
-	TotalUsers        int64            `json:"total_users"`
-	SignupsThisWeek   int64            `json:"signups_this_week"`
-	OverdueCount      int64            `json:"overdue_count"`
-	MostBorrowedBooks []BookBorrowStat `json:"most_borrowed_books"`
-	ActiveLenders     []LenderStat     `json:"active_lenders"`
+	TotalBooks           int64            `json:"total_books"`
+	TotalCopies          int64            `json:"total_copies"`
+	AvailableCopies      int64            `json:"available_copies"`
+	LoanedCopies         int64            `json:"loaned_copies"`
+	TotalUsers           int64            `json:"total_users"`
+	SignupsThisWeek      int64            `json:"signups_this_week"`
+	OverdueCount         int64            `json:"overdue_count"`
+	PendingApprovalCount int64            `json:"pending_approval_count"`
+	MostBorrowedBooks    []BookBorrowStat `json:"most_borrowed_books"`
+	ActiveLenders        []LenderStat     `json:"active_lenders"`
 }
 
 // WaitlistRepository handles persistence for WaitlistEntry records.

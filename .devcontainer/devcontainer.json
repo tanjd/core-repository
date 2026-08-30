@@ -4,7 +4,10 @@
   "workspaceFolder": "/workspace",
   "service": "core-repository-devcontainer",
   "containerEnv": {
-    "NX_DAEMON": "true"
+    "NX_DAEMON": "true",
+    "PLAYWRIGHT_BROWSERS_PATH": "/workspace/.cache/ms-playwright",
+    "GOMODCACHE": "/workspace/.cache/go-mod",
+    "GOCACHE": "/workspace/.cache/go-build"
   },
   "remoteEnv": {
     "CI": "${localEnv:CI}"
