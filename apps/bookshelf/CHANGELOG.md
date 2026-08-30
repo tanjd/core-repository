@@ -1,3 +1,13 @@
+## 0.30.0 (2026-08-30)
+
+### 🚀 Features
+
+- **bookshelf:** add 30s resend cooldown to registration verify step ([#89](https://github.com/tanjd/core-repository/pull/89))
+
+### ❤️ Thank You
+
+- Jeddy Tan @tanjd
+
 ## 0.29.0 (2026-08-29)
 
 ### 🚀 Features
