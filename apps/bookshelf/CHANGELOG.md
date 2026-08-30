@@ -1,3 +1,13 @@
+## 0.33.0 (2026-08-30)
+
+### 🚀 Features
+
+- **bookshelf,bookshelf-backend:** improve admin UX and invite-link discoverability ([#93](https://github.com/tanjd/core-repository/pull/93))
+
+### ❤️ Thank You
+
+- Jeddy Tan @tanjd
+
 ## 0.32.0 (2026-08-30)
 
 ### 🚀 Features
