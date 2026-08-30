@@ -1,3 +1,13 @@
+## 0.31.0 (2026-08-30)
+
+### 🚀 Features
+
+- **bookshelf:** add live confirm-password match indicator ([#87](https://github.com/tanjd/core-repository/pull/87), [#90](https://github.com/tanjd/core-repository/issues/90))
+
+### ❤️ Thank You
+
+- Jeddy Tan @tanjd
+
 ## 0.30.0 (2026-08-30)
 
 ### 🚀 Features
