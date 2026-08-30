@@ -244,9 +244,41 @@ func (r *AdminRepository) ListUsers() ([]models.User, error) {
 	return out, nil
 }
 
-// ListUsersPaginated returns a page of users ordered by ID.
-func (r *AdminRepository) ListUsersPaginated(page, pageSize int) (*repository.PaginatedResult[models.User], error) {
-	all, _ := r.ListUsers()
+// matchesUserFilter reports whether u satisfies every non-empty dimension of
+// filter — mirrors the GORM implementation's LIKE/equality semantics
+// (case-insensitive substring match on Search, exact match on Role/Status).
+func matchesUserFilter(u models.User, filter repository.UserListFilter) bool {
+	if search := strings.ToLower(strings.TrimSpace(filter.Search)); search != "" &&
+		!strings.Contains(strings.ToLower(u.Name), search) &&
+		!strings.Contains(strings.ToLower(u.Email), search) {
+		return false
+	}
+	if filter.Role != "" && u.Role != filter.Role {
+		return false
+	}
+	switch filter.Status {
+	case "verified":
+		return u.Verified
+	case "unverified":
+		return !u.Verified
+	case "pending_approval":
+		return u.PendingApproval
+	case "suspended":
+		return u.Suspended
+	default:
+		return true
+	}
+}
+
+// ListUsersPaginated returns a page of users ordered by ID, narrowed by filter.
+func (r *AdminRepository) ListUsersPaginated(page, pageSize int, filter repository.UserListFilter) (*repository.PaginatedResult[models.User], error) {
+	unfiltered, _ := r.ListUsers()
+	all := make([]models.User, 0, len(unfiltered))
+	for _, u := range unfiltered {
+		if matchesUserFilter(u, filter) {
+			all = append(all, u)
+		}
+	}
 	start, end := paginationBounds(len(all), page, pageSize)
 	items := append([]models.User{}, all[start:end]...)
 	return &repository.PaginatedResult[models.User]{

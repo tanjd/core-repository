@@ -381,6 +381,7 @@ export function ProfileForm() {
           <TabsTrigger value="profile">Profile</TabsTrigger>
           <TabsTrigger value="security">Security</TabsTrigger>
           <TabsTrigger value="integrations">Integrations</TabsTrigger>
+          <TabsTrigger value="invite">Invite</TabsTrigger>
         </TabsList>
 
         {/* Profile tab */}
@@ -606,11 +607,6 @@ export function ProfileForm() {
               )}
             </CardContent>
           </Card>
-
-          {/* An unverified member hasn't proved their own identity yet, so
-              they can't hold an invite link — see requireEligibleInviter in
-              internal/handlers/invite_codes.go. */}
-          {user.verified && <InviteLinkCard />}
         </TabsContent>
 
         {/* Security tab */}
@@ -953,6 +949,19 @@ export function ProfileForm() {
               )}
             </CardContent>
           </Card>
+        </TabsContent>
+
+        {/* Invite tab. An unverified member hasn't proved their own identity
+            yet, so they can't hold an invite link — see requireEligibleInviter
+            in internal/handlers/invite_codes.go. */}
+        <TabsContent value="invite" className="mt-4">
+          {user.verified ? (
+            <InviteLinkCard />
+          ) : (
+            <p className="text-sm text-muted-foreground">
+              Verify your account to get your invite link.
+            </p>
+          )}
         </TabsContent>
       </Tabs>
     </div>

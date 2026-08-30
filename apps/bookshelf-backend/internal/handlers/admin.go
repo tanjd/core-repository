@@ -50,8 +50,11 @@ func NewAdminHandler(admin repository.AdminRepository, copies repository.CopyRep
 // --- Input / Output types ---
 
 type adminUsersInput struct {
-	Page     int `query:"page" minimum:"1" doc:"Page number (default 1)"`
-	PageSize int `query:"page_size" minimum:"1" maximum:"100" doc:"Items per page (default 50)"`
+	Page     int    `query:"page" minimum:"1" doc:"Page number (default 1)"`
+	PageSize int    `query:"page_size" minimum:"1" maximum:"100" doc:"Items per page (default 50)"`
+	Search   string `query:"search" doc:"Filter by name or email (case-insensitive substring match)"`
+	Role     string `query:"role" enum:"user,admin" doc:"Filter by role"`
+	Status   string `query:"status" enum:"verified,unverified,pending_approval,suspended" doc:"Filter by status"`
 }
 
 type adminUsersOutput struct {
@@ -216,7 +219,11 @@ func (h *AdminHandler) listUsers(ctx context.Context, input *adminUsersInput) (*
 	if pageSize < 1 {
 		pageSize = 50
 	}
-	result, err := h.admin.ListUsersPaginated(page, pageSize)
+	result, err := h.admin.ListUsersPaginated(page, pageSize, repository.UserListFilter{
+		Search: input.Search,
+		Role:   input.Role,
+		Status: input.Status,
+	})
 	if err != nil {
 		return nil, huma.Error500InternalServerError("could not list users")
 	}

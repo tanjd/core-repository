@@ -113,6 +113,7 @@ test.describe("invite-code registration", () => {
     // Inviter fetches their link from their own profile page.
     await login(page, inviterEmail, E2E_TEST_USER_PASSWORD);
     await page.goto("/profile");
+    await page.getByRole("tab", { name: "Invite" }).click();
     const linkInput = page.locator("input[readonly]");
     await expect(linkInput).toBeVisible({ timeout: 10_000 });
     const inviteUrl = await linkInput.inputValue();
@@ -204,6 +205,7 @@ test.describe("invite-code registration", () => {
 
     await login(page, inviterEmail, E2E_TEST_USER_PASSWORD);
     await page.goto("/profile");
+    await page.getByRole("tab", { name: "Invite" }).click();
     const linkInput = page.locator("input[readonly]");
     await expect(linkInput).toBeVisible({ timeout: 10_000 });
     const oldCode = codeFromInviteUrl(await linkInput.inputValue());
@@ -218,13 +220,12 @@ test.describe("invite-code registration", () => {
     expect((await validateInviteCode(request, oldCode)).valid).toBe(false);
     expect((await validateInviteCode(request, newCode)).valid).toBe(true);
 
-    // Admin revokes the new code from the Users page.
+    // Admin revokes the new code from its own Invites page (under
+    // Users & Access — split out of the Users page so it's not buried
+    // behind the whole member table).
     await login(page, E2E_ADMIN_EMAIL, E2E_ADMIN_PASSWORD);
-    await page.goto("/admin/users");
-    const inviteLinksSection = page.getByRole("region", {
-      name: "Invite links",
-    });
-    const row = inviteLinksSection.getByRole("row", {
+    await page.goto("/admin/invites");
+    const row = page.getByRole("row", {
       name: new RegExp(inviterName),
     });
     await expect(row).toBeVisible({ timeout: 10_000 });

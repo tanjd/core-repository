@@ -17,8 +17,9 @@ import { Input } from "@/components/ui/input";
 // The exact detail string InviteCodeHandler returns when allow_invite_codes
 // is off and the caller has no code yet — see
 // internal/handlers/invite_codes.go's getInviteCode. Matched on to show the
-// admin-disabled message rather than a generic failure.
-const DISABLED_DETAIL = "invite links are currently disabled";
+// admin-disabled message rather than a generic failure. Exported so Footer's
+// one-tap "Invite" copy action can recognize the same disabled state.
+export const DISABLED_DETAIL = "invite links are currently disabled";
 
 // "Invite a member" card for the profile page's Profile tab. Lazily creates
 // the caller's invite link on first load (GET /invite-code is idempotent

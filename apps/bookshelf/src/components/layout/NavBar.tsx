@@ -3,13 +3,16 @@
 import { useEffect, useState, useRef, type ReactNode } from "react";
 import Link from "next/link";
 import { useRouter, usePathname } from "next/navigation";
-import { BookOpen, ChevronDown, LogOut } from "lucide-react";
+import { BookOpen, ChevronDown, LogOut, UserPlus } from "lucide-react";
+import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { NotificationBell } from "@/components/NotificationBell";
 import { useUpgradeNotice } from "@/hooks/useUpgradeNotice";
 import { BottomTabBar } from "@/components/layout/BottomTabBar";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { primaryNavItems, profileNavItem } from "@/components/layout/navItems";
+import { DISABLED_DETAIL } from "@/components/InviteLinkCard";
+import { api } from "@/lib/api";
 import {
   Popover,
   PopoverContent,
@@ -25,8 +28,8 @@ function navLinkClass(active: boolean) {
 }
 
 // Shared by the desktop and mobile headers: tap the trigger for a popover
-// with the Profile/Admin link followed by Logout (Facebook-style), rather
-// than Logout being its own always-visible control.
+// with the Profile/Admin link, an "Invite" quick action, and Logout
+// (Facebook-style), rather than Logout being its own always-visible control.
 function ProfileMenu({
   profileItem,
   onLogout,
@@ -36,6 +39,32 @@ function ProfileMenu({
   onLogout: () => void;
   trigger: ReactNode;
 }) {
+  const [copying, setCopying] = useState(false);
+
+  // One-tap copy, no navigation — same idempotent get-or-create call
+  // InviteLinkCard uses on /profile, which stays the place to see/regenerate
+  // the link. This menu is reachable from every page without scrolling,
+  // unlike the footer link this replaced.
+  async function copyInviteLink() {
+    if (copying) return;
+    setCopying(true);
+    try {
+      const { url } = await api.getInviteCode();
+      await navigator.clipboard.writeText(url);
+      toast.success("Invite link copied — share it to bring someone in");
+    } catch (err) {
+      if (err instanceof Error && err.message === DISABLED_DETAIL) {
+        toast.error("Invite links are currently disabled by the admin");
+      } else {
+        toast.error(
+          err instanceof Error ? err.message : "Could not copy invite link",
+        );
+      }
+    } finally {
+      setCopying(false);
+    }
+  }
+
   return (
     <Popover>
       <PopoverTrigger asChild>{trigger}</PopoverTrigger>
@@ -52,6 +81,15 @@ function ProfileMenu({
           <profileItem.icon className="size-4" />
           {profileItem.label}
         </Link>
+        <button
+          type="button"
+          onClick={copyInviteLink}
+          disabled={copying}
+          className="flex w-full items-center gap-2 rounded-md px-3 py-2 text-sm hover:bg-accent disabled:opacity-60"
+        >
+          <UserPlus className="size-4" />
+          Invite
+        </button>
         <button
           onClick={onLogout}
           className="flex w-full items-center gap-2 rounded-md px-3 py-2 text-sm hover:bg-accent"

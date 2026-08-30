@@ -11,6 +11,7 @@ const adminLinks = [
   { href: "/admin/dashboard", label: "Dashboard" },
   { href: "/admin/profile", label: "Profile" },
   { href: "/admin/users", label: "Users" },
+  { href: "/admin/invites", label: "Invites" },
   { href: "/admin/settings", label: "Settings" },
   { href: "/admin/announcements", label: "Announcements" },
   { href: "/admin/jobs", label: "Jobs" },
@@ -34,6 +35,7 @@ const navGroups = [
     label: "Users & Access",
     links: [
       { href: "/admin/users", label: "Users" },
+      { href: "/admin/invites", label: "Invites" },
       { href: "/admin/settings", label: "Settings" },
     ],
   },
@@ -101,9 +103,12 @@ export default function AdminLayout({
         <div className="md:flex md:items-start md:gap-8">
           {/* Desktop: grouped sidebar */}
           <aside className="hidden md:flex md:w-56 md:shrink-0 md:flex-col">
-            {navGroups.map((group) => (
-              <div key={group.label} className="mb-5">
-                <p className="mb-1.5 px-2.5 text-xs font-semibold tracking-wide text-muted-foreground uppercase">
+            {navGroups.map((group, i) => (
+              <div
+                key={group.label}
+                className={cn("mb-5", i > 0 && "border-t pt-4")}
+              >
+                <p className="mb-2 px-2.5 text-[11px] font-semibold tracking-wider text-muted-foreground/60 uppercase">
                   {group.label}
                 </p>
                 {group.links.map((link) => (

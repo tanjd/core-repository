@@ -705,10 +705,19 @@ export const api = {
 
   // Admin
   adminGetDashboardStats: () => request<DashboardStats>("/admin/dashboard"),
-  adminListUsers: (params?: { page?: number; page_size?: number }) => {
+  adminListUsers: (params?: {
+    page?: number;
+    page_size?: number;
+    search?: string;
+    role?: "user" | "admin";
+    status?: "verified" | "unverified" | "pending_approval" | "suspended";
+  }) => {
     const p: Record<string, string> = {};
     if (params?.page) p.page = String(params.page);
     if (params?.page_size) p.page_size = String(params.page_size);
+    if (params?.search?.trim()) p.search = params.search.trim();
+    if (params?.role) p.role = params.role;
+    if (params?.status) p.status = params.status;
     const qs = new URLSearchParams(p).toString();
     return request<PaginatedResult<User>>(`/admin/users${qs ? "?" + qs : ""}`);
   },
