@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"net/http"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -41,6 +42,45 @@ func TestGoogleBooksQueryFor(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			assert.Equal(t, tt.want, googleBooksQueryFor(tt.q))
+		})
+	}
+}
+
+func TestGoogleBooksStatusError(t *testing.T) {
+	tests := []struct {
+		name   string
+		status int
+		want   string
+	}{
+		{
+			name:   "429 is classified as rate limit",
+			status: http.StatusTooManyRequests,
+			want:   "google books rate limit exceeded (status 429)",
+		},
+		{
+			name:   "401 is classified as a rejected key",
+			status: http.StatusUnauthorized,
+			want:   "google books rejected the API key (status 401)",
+		},
+		{
+			name:   "403 is classified as a rejected key",
+			status: http.StatusForbidden,
+			want:   "google books rejected the API key (status 403)",
+		},
+		{
+			name:   "503 is classified as service unavailable",
+			status: http.StatusServiceUnavailable,
+			want:   "google books service unavailable, try again shortly (status 503)",
+		},
+		{
+			name:   "unrecognized status falls back to a generic message",
+			status: http.StatusTeapot,
+			want:   "google books returned unexpected status 418",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.EqualError(t, googleBooksStatusError(tt.status), tt.want)
 		})
 	}
 }

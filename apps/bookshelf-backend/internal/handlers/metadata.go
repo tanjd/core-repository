@@ -170,7 +170,7 @@ func fetchAllSources(ctx context.Context, q, apiKey string, pool *services.Googl
 		defer wg.Done()
 		items, err := fn()
 		if err != nil {
-			zerolog.Ctx(ctx).Warn().Err(err).Msg(name + " search failed")
+			zerolog.Ctx(ctx).Warn().Err(err).Str("query", q).Msg(name + " search failed")
 			return
 		}
 		mu.Lock()
@@ -309,20 +309,52 @@ func fetchOpenLibrary(ctx context.Context, q string) ([]BookMetadataResult, erro
 }
 
 // validateGoogleBooksAPIKey makes a minimal test call to verify the key is accepted by Google Books.
-func validateGoogleBooksAPIKey(key string) error {
+func validateGoogleBooksAPIKey(ctx context.Context, key string) error {
 	apiURL := fmt.Sprintf(
 		"https://www.googleapis.com/books/v1/volumes?q=test&key=%s&maxResults=1",
 		url.QueryEscape(key),
 	)
 	resp, err := metadataClient.Get(apiURL) //nolint:noctx,gosec
 	if err != nil {
+		zerolog.Ctx(ctx).Warn().Err(err).Msg("google books key test: could not reach API")
 		return fmt.Errorf("could not reach Google Books API: %w", err)
 	}
 	defer resp.Body.Close() //nolint:errcheck
 	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("google Books API rejected the key (status %d)", resp.StatusCode)
+		zerolog.Ctx(ctx).Warn().Int("status", resp.StatusCode).Str("response_body", readBodySnippet(resp)).Msg("google books key test failed")
+		return googleBooksStatusError(resp.StatusCode)
 	}
 	return nil
+}
+
+// googleBooksStatusError classifies a non-200 Google Books response into a
+// clear, user-facing message. 5xx means Google's service is transiently
+// unavailable — distinct from a rejected key (401/403) or rate limiting
+// (429), which a flat "rejected the key" message would otherwise conflate.
+func googleBooksStatusError(status int) error {
+	switch {
+	case status == http.StatusTooManyRequests:
+		return fmt.Errorf("google books rate limit exceeded (status %d)", status)
+	case status == http.StatusUnauthorized || status == http.StatusForbidden:
+		return fmt.Errorf("google books rejected the API key (status %d)", status)
+	case status >= 500:
+		return fmt.Errorf("google books service unavailable, try again shortly (status %d)", status)
+	default:
+		return fmt.Errorf("google books returned unexpected status %d", status)
+	}
+}
+
+// readBodySnippet reads a bounded prefix of resp's body for logging, so a
+// non-200 failure is diagnosable from Google's own error response without
+// risking an unbounded read. Empty on any read failure — logging is
+// best-effort and must never mask the real error.
+func readBodySnippet(resp *http.Response) string {
+	const maxSnippet = 500
+	body, err := io.ReadAll(io.LimitReader(resp.Body, maxSnippet))
+	if err != nil {
+		return ""
+	}
+	return strings.TrimSpace(string(body))
 }
 
 type googleBooksIndustryIdentifier struct {
@@ -429,7 +461,8 @@ func fetchGoogleBooks(ctx context.Context, q, apiKey string, pool *services.Goog
 		if resp.StatusCode == http.StatusTooManyRequests && pool != nil {
 			pool.MarkRateLimited(apiKey)
 		}
-		return nil, fmt.Errorf("google books returned %d", resp.StatusCode)
+		zerolog.Ctx(ctx).Warn().Int("status", resp.StatusCode).Str("response_body", readBodySnippet(resp)).Msg("google books search request failed")
+		return nil, googleBooksStatusError(resp.StatusCode)
 	}
 
 	body, err := io.ReadAll(resp.Body)
