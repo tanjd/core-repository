@@ -58,6 +58,18 @@ build scripts" warning. pnpm 11 moved this (and `overrides`) out of
 `package.json`'s `pnpm` field entirely — that field no longer exists;
 `pnpm-workspace.yaml` is now the only place for non-registry pnpm config.
 
+`.devcontainer/devcontainer.json` must stay valid strict JSON — no `//`/`/* */` comments,
+even though the devcontainer spec itself allows JSONC. `ci.yml`, `release.yml`, and
+`publish.yml` all read `pnpmVersion` out of it with a plain `jq -r` step, which chokes on
+comments (`jq: parse error: Invalid numeric literal...`) and breaks every workflow that
+parses the file — put any explanatory notes about its contents here in CLAUDE.md instead.
+`containerEnv` also sets `PLAYWRIGHT_BROWSERS_PATH`/`GOMODCACHE`/`GOCACHE` under
+`/workspace` so those caches survive a container rebuild instead of re-downloading
+Playwright's browser binaries or recompiling Go packages from scratch (mirrors pnpm's own
+store, which already resolves under `/workspace/.pnpm-store` for the same reason; covered
+by `.gitignore`'s unrooted `.cache/` rule) — `make prune-devcontainer-cache` reclaims stale
+entries from these caches.
+
 Lower-level, for anything not covered above:
 
 ```bash

@@ -5,13 +5,6 @@
   "service": "core-repository-devcontainer",
   "containerEnv": {
     "NX_DAEMON": "true",
-    // Redirect caches that would otherwise live under the container's ephemeral
-    // filesystem (~/.cache, /go/pkg/mod) into the bind-mounted /workspace, so they
-    // survive a container rebuild instead of re-downloading (Playwright's ~650MB
-    // of browser binaries) or recompiling (goimports via go install) from scratch
-    // every time. Mirrors pnpm's own store, which already resolves under
-    // /workspace/.pnpm-store for the same reason. Covered by .gitignore's
-    // unrooted `.cache/` rule.
     "PLAYWRIGHT_BROWSERS_PATH": "/workspace/.cache/ms-playwright",
     "GOMODCACHE": "/workspace/.cache/go-mod",
     "GOCACHE": "/workspace/.cache/go-build"
