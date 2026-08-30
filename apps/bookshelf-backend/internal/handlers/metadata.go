@@ -125,14 +125,18 @@ func (h *MetadataHandler) searchMetadata(ctx context.Context, input *searchMetad
 	}
 
 	queriedISBN := normalizeISBN(q)
-	results := fetchAllSources(ctx, q, apiKey, h.googleBooksKeyPool)
+	results, hadError := fetchAllSources(ctx, q, apiKey, h.googleBooksKeyPool)
 	if queriedISBN != "" {
-		results = append(results, expandSiblingEditions(ctx, results, apiKey, h.googleBooksKeyPool)...)
+		siblingResults, siblingHadError := expandSiblingEditions(ctx, results, apiKey, h.googleBooksKeyPool)
+		results = append(results, siblingResults...)
+		hadError = hadError || siblingHadError
 	}
 
 	consolidated := consolidateResults(results)
 	consolidated = promoteQueriedEdition(consolidated, queriedISBN)
-	h.cache.Set(cacheKey, consolidated)
+	if !hadError {
+		h.cache.Set(cacheKey, consolidated)
+	}
 	return &searchMetadataOutput{Body: consolidated}, nil
 }
 
@@ -158,39 +162,52 @@ func (h *MetadataHandler) resolveGoogleBooksAPIKey(ctx context.Context) string {
 	return decrypted
 }
 
-// fetchAllSources queries Open Library, Google Books (if apiKey is set), and
-// BookBrainz concurrently, merging all results. A per-source failure is
-// logged and otherwise ignored.
-func fetchAllSources(ctx context.Context, q, apiKey string, pool *services.GoogleBooksKeyPool) []BookMetadataResult {
+// fetchSource is one named source runFetchSources can run concurrently.
+type fetchSource struct {
+	name string
+	fn   func() ([]BookMetadataResult, error)
+}
+
+// runFetchSources runs each of sources concurrently, merging all results. A
+// per-source failure is logged and otherwise ignored for the merged results,
+// but reported back via hadError so a caller (searchMetadata) can tell "a
+// source errored" apart from "every source genuinely found nothing" — the
+// former must not be cached as a search result.
+func runFetchSources(ctx context.Context, q string, sources []fetchSource) (results []BookMetadataResult, hadError bool) {
 	var mu sync.Mutex
-	var results []BookMetadataResult
 	var wg sync.WaitGroup
 
-	fetch := func(name string, fn func() ([]BookMetadataResult, error)) {
-		defer wg.Done()
-		items, err := fn()
-		if err != nil {
-			zerolog.Ctx(ctx).Warn().Err(err).Str("query", q).Msg(name + " search failed")
-			return
-		}
-		mu.Lock()
-		results = append(results, items...)
-		mu.Unlock()
-	}
-
-	wg.Add(1)
-	go fetch("open library", func() ([]BookMetadataResult, error) { return fetchOpenLibrary(ctx, q) })
-
-	if apiKey != "" {
+	for _, s := range sources {
 		wg.Add(1)
-		go fetch("google books", func() ([]BookMetadataResult, error) { return fetchGoogleBooks(ctx, q, apiKey, pool) })
+		go func(s fetchSource) {
+			defer wg.Done()
+			items, err := s.fn()
+			mu.Lock()
+			defer mu.Unlock()
+			if err != nil {
+				zerolog.Ctx(ctx).Warn().Err(err).Str("query", q).Msg(s.name + " search failed")
+				hadError = true
+				return
+			}
+			results = append(results, items...)
+		}(s)
 	}
-
-	wg.Add(1)
-	go fetch("bookbrainz", func() ([]BookMetadataResult, error) { return fetchBookBrainz(ctx, q) })
 
 	wg.Wait()
-	return results
+	return results, hadError
+}
+
+// fetchAllSources queries Open Library, Google Books (if apiKey is set), and
+// BookBrainz concurrently, merging all results.
+func fetchAllSources(ctx context.Context, q, apiKey string, pool *services.GoogleBooksKeyPool) ([]BookMetadataResult, bool) {
+	sources := []fetchSource{
+		{"open library", func() ([]BookMetadataResult, error) { return fetchOpenLibrary(ctx, q) }},
+		{"bookbrainz", func() ([]BookMetadataResult, error) { return fetchBookBrainz(ctx, q) }},
+	}
+	if apiKey != "" {
+		sources = append(sources, fetchSource{"google books", func() ([]BookMetadataResult, error) { return fetchGoogleBooks(ctx, q, apiKey, pool) }})
+	}
+	return runFetchSources(ctx, q, sources)
 }
 
 // expandSiblingEditions re-queries all sources by title+author when the
@@ -199,12 +216,12 @@ func fetchAllSources(ctx context.Context, q, apiKey string, pool *services.Googl
 // printing, hardcover vs. paperback, different territory) carry different
 // ISBNs and never enter the result set otherwise, so consolidateResults'
 // dedup/enrich/bucket pipeline (see docs/metadata-search.md) never gets a
-// chance to see them as the same work. Returns nil if the ISBN hit(s) didn't
-// carry a usable Title/Author to search by.
-func expandSiblingEditions(ctx context.Context, isbnResults []BookMetadataResult, apiKey string, pool *services.GoogleBooksKeyPool) []BookMetadataResult {
+// chance to see them as the same work. Returns (nil, false) if the ISBN
+// hit(s) didn't carry a usable Title/Author to search by.
+func expandSiblingEditions(ctx context.Context, isbnResults []BookMetadataResult, apiKey string, pool *services.GoogleBooksKeyPool) ([]BookMetadataResult, bool) {
 	title, author := bestTitleAuthorForExpansion(isbnResults)
 	if title == "" || author == "" {
-		return nil
+		return nil, false
 	}
 	return fetchAllSources(ctx, title+" "+author, apiKey, pool)
 }
