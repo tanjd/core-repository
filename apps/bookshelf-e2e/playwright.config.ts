@@ -16,6 +16,12 @@ const E2E_ENCRYPTION_SECRET = "e2e-encryption-secret-do-not-use-in-production";
  */
 export default defineConfig({
   ...nxE2EPreset(__filename, { testDir: "./src" }),
+  // nxE2EPreset caps CI at workers: 1 (serial). Override to 2: the suite's
+  // rate limiters are already bumped well beyond what 2 workers can exhaust
+  // (REGISTER_RATE_LIMIT_BURST: 200, LOGIN_RATE_LIMIT_ATTEMPTS: 200), and
+  // tests are isolated enough (each registers its own user or uses the shared
+  // admin storageState) to run in parallel safely.
+  workers: process.env.CI ? 2 : undefined,
   use: {
     baseURL,
     trace: "on-first-retry",
@@ -32,9 +38,8 @@ export default defineConfig({
    * source of flakiness in this suite, see apps/bookshelf-e2e/CLAUDE.md's
    * "Frontend runs a production build" section for the history. A
    * production build has no on-demand compilation, so that whole class of
-   * flake doesn't happen — it costs a build up front (see this entry's
-   * `timeout`) in exchange for not racing every navigation in every spec
-   * run after.
+   * flake doesn't happen. The build itself runs as the Nx pre-step
+   * `bookshelf-e2e:e2e-build` (cached); webServer only runs `next start`.
    *
    * Both commands invoke the underlying tool directly (`go run`, `next
    * build`/`next start`) rather than going through `nx run
@@ -96,22 +101,15 @@ export default defineConfig({
       },
     },
     {
-      // Runs generate-changelog's underlying command directly first: this build
-      // bypasses Nx (see above), so it wouldn't otherwise pick up bookshelf's
-      // `build`/`test`/`lint` -> `generate-changelog` dependsOn wiring and
-      // src/lib/changelog.generated.ts (gitignored; imported by NotificationBell,
-      // which every page renders via NavBar) would be missing whenever this
-      // suite runs without bookshelf's own Nx targets also running first — e.g.
-      // nx affected on a bookshelf-backend-only change.
-      command:
-        "pnpm exec tsx apps/bookshelf/scripts/generate-changelog.ts && pnpm exec next build apps/bookshelf --webpack && pnpm exec next start apps/bookshelf --port 3000",
+      // `next build` runs as the Nx pre-step bookshelf-e2e:e2e-build (cached
+      // against apps/bookshelf source inputs — see project.json). webServer
+      // only starts the already-built app, so Playwright's default 60s
+      // timeout is more than enough (`next start` boots in under 2s once the
+      // .next directory exists).
+      command: "pnpm exec next start apps/bookshelf --port 3000",
       url: "http://localhost:3000",
       reuseExistingServer: !process.env.CI,
       cwd: workspaceRoot,
-      // Playwright's webServer default timeout (60s) covers next dev's
-      // near-instant boot but not a production build first — bump it so a
-      // cold `next build` doesn't get killed mid-build on a slower CI runner.
-      timeout: 180_000,
     },
   ],
   projects: [

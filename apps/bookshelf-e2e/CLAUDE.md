@@ -22,23 +22,27 @@ post-submit `router.push` transitions) faster than each fix could be written, be
 hard navigation or client-side transition was a fresh place for the same underlying race to show
 up. Building the frontend once via `next build` and serving it with `next start` removes on-demand
 compilation entirely, so specs use plain `page.goto()` + default-timeout assertions — no
-retry/reload helpers, no bumped timeouts. The trade-off is a build (~30s+) at `webServer` startup
-instead of `next dev`'s near-instant boot (see `playwright.config.ts`'s `timeout` on that entry).
+retry/reload helpers, no bumped timeouts.
 
-## Frontend webServer regenerates the changelog itself
+## The build runs as an Nx pre-step, not inside webServer
 
-The frontend `webServer` command in `playwright.config.ts` runs `generate-changelog`'s underlying
-script (`pnpm exec tsx apps/bookshelf/scripts/generate-changelog.ts`) before `next build`. This
-looks redundant next to `apps/bookshelf/project.json` declaring `generate-changelog` as a
-`dependsOn` of `build`/`test`/`lint` — it isn't: this suite's build bypasses Nx entirely (see
-"Both commands invoke the underlying tool directly" above), so it never picks up that `dependsOn`
-wiring. Without the explicit call, `src/lib/changelog.generated.ts` (gitignored, imported by
-`NotificationBell.tsx` which every page renders via `NavBar`) only exists if something else in the
-same CI job happened to run one of bookshelf's own Nx targets first — true for most PRs, but not
-for a bookshelf-backend-only change, where `nx affected -t lint test` never touches the `bookshelf`
-project. That gap broke CI the first time a backend-only PR shipped after `NotificationBell.tsx`
-started importing the generated file (PR #86) — don't remove the explicit call as
-"already handled by Nx."
+`next build` runs as the Nx target `bookshelf-e2e:e2e-build` (defined in `project.json`), which
+`bookshelf-e2e:e2e` lists as a `dependsOn`. The `e2e-build` target is Nx-cached against
+`apps/bookshelf` source inputs — on a cache hit (e.g. a bookshelf-backend-only change where no
+frontend source changed) it restores the `.next` directory instantly, and `playwright.config.ts`'s
+`webServer` entry only runs `next start apps/bookshelf --port 3000` (boots in under 2s).
+Previously the build lived inside the `webServer` command, making it invisible to Nx and forcing a
+fresh 30–90s `next build` on every CI run regardless of whether the frontend changed.
+
+`e2e-build` still runs `generate-changelog`'s underlying script before `next build`. This looks
+redundant next to `apps/bookshelf/project.json` declaring `generate-changelog` as a `dependsOn`
+of `build`/`test`/`lint` — it isn't: `e2e-build` doesn't chain through `bookshelf:build`, so it
+never picks up that `dependsOn` wiring. Without the explicit call,
+`src/lib/changelog.generated.ts` (gitignored, imported by `NotificationBell.tsx` which every page
+renders via `NavBar`) would be missing whenever this suite runs without bookshelf's own Nx targets
+also running first — e.g. `nx affected` on a bookshelf-backend-only change. That gap broke CI the
+first time a backend-only PR shipped after `NotificationBell.tsx` started importing the generated
+file (PR #86) — don't remove it as "already handled by Nx."
 
 ## Use this suite instead of ad hoc scripts
 
@@ -110,29 +114,41 @@ alone hasn't proven the mobile layout works — check both when a UI change touc
 
 `src/auth.setup.ts` is a Playwright "setup" project (`playwright.config.ts`'s `projects` array —
 `chromium` and `Mobile Chrome` both declare `dependencies: ["setup"]`) that runs once both
-webServers report healthy. It
-`POST`s directly to `http://localhost:8000/auth/setup` to create the first admin account
-(`E2E_ADMIN_EMAIL`/`E2E_ADMIN_PASSWORD`/`E2E_ADMIN_NAME`, in `src/test-users.ts` — kept out of
-`auth.setup.ts` itself since Playwright disallows importing one test file from another) — the
-one `auth.go` endpoint that issues a working account without an email-OTP round trip. It
-tolerates a 403 ("setup already complete") so re-runs against a `reuseExistingServer` backend in
-local dev (where the DB isn't wiped) stay idempotent.
+webServers report healthy. It:
 
-Specs that need to be logged in should import those constants and log in through the UI via
-`login()` (`src/auth-helpers.ts`) rather than re-deriving credentials or re-typing the
-goto/fill/click sequence.
+1. `POST`s directly to `http://localhost:8000/auth/setup` to create the first admin account
+   (`E2E_ADMIN_EMAIL`/`E2E_ADMIN_PASSWORD`/`E2E_ADMIN_NAME`, in `src/test-users.ts` — kept out of
+   `auth.setup.ts` itself since Playwright disallows importing one test file from another) — the
+   one `auth.go` endpoint that issues a working account without an email-OTP round trip. Tolerates
+   a 403 ("setup already complete") so re-runs against a `reuseExistingServer` backend in local dev
+   (where the DB isn't wiped) stay idempotent.
+2. Logs in through the UI and saves the resulting browser state (localStorage JWT) to
+   `.auth/admin.json`. Specs that use admin auth only as a precondition (not testing the login form
+   itself) load this via `test.use({ storageState: ".auth/admin.json" })` — see
+   `book-cover-fallback.spec.ts` and `monthly-digest-jobs.spec.ts`. This skips the bcrypt
+   round-trip (≈150ms + DB) on every test that would otherwise call `login()`. The file is
+   regenerated on every suite run, so it never goes stale.
 
-A spec that registers its own one-off test user (rather than logging in as the seeded admin)
-should use `E2E_TEST_USER_PASSWORD` from `test-users.ts` for it, instead of inventing a fresh
-password literal — that way anyone poking at a leftover test user later doesn't need to go dig
-through spec files to find its password. Only fall back to a spec-local literal when the test
-itself needs a second, distinct password (e.g. `password-reset-magic-link.spec.ts`'s `newPassword`,
-which has to differ from the original to prove the reset actually took effect). There's no shared `storageState` yet — add one (save it from
-`auth.setup.ts`, load it via a project's `use.storageState`) once a spec needs an authenticated
-session but isn't itself exercising the login UI (unlike `login.spec.ts` and the
-reset-then-login check in `password-reset-magic-link.spec.ts`, both of which need the real form);
-`book-cover-fallback.spec.ts` is the current candidate, but one spec isn't worth the added
-machinery yet.
+**Choosing between `storageState` and `login()`:**
+
+| Scenario | Use |
+| --- | --- |
+| Spec navigates as admin, doesn't test the login form | `test.use({ storageState: ".auth/admin.json" })` + `page.goto(target)` directly |
+| Spec tests the login UI itself (`login.spec.ts`, `password-reset-magic-link.spec.ts`) | `login()` from `auth-helpers.ts` — no `storageState` |
+| Spec registers its own per-test user and logs in as them | `registerTestUser()` + `login()` — no admin storageState |
+
+For specs in the first category, start the test with `page.goto(target)` instead of calling
+`login()` — the storageState puts the admin JWT in localStorage before the page loads.
+If the test needs to read the token from localStorage (e.g. to pass it as an `Authorization`
+header), add `await page.goto("/catalog")` first so the evaluate happens on the app's origin
+(storageState starts the page at `about:blank`).
+
+A spec that registers its own one-off test user should use `E2E_TEST_USER_PASSWORD` from
+`test-users.ts` for it, instead of inventing a fresh password literal — that way anyone poking at
+a leftover test user later doesn't need to go dig through spec files to find its password. Only
+fall back to a spec-local literal when the test itself needs a second, distinct password (e.g.
+`password-reset-magic-link.spec.ts`'s `newPassword`, which has to differ from the original to
+prove the reset actually took effect).
 
 ## Coverage
 
@@ -158,3 +174,8 @@ so a normal devcontainer session shouldn't need it manually.
 backend-only change triggers it too (there's no source-level import to infer that dependency
 from, since Playwright drives the backend over HTTP rather than importing it — same reasoning as
 `apps/food-maps-e2e`'s `implicitDependencies`).
+
+CI runs with `workers: 2` (overriding `nxE2EPreset`'s default of 1). The suite's rate limiters
+are bumped in the e2e backend env to well above what two parallel workers can exhaust
+(`REGISTER_RATE_LIMIT_BURST: 200`, `LOGIN_RATE_LIMIT_ATTEMPTS: 200`), and each spec is isolated
+enough (own registered user, or the shared admin storageState) to run in parallel safely.

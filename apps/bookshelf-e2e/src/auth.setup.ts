@@ -11,7 +11,15 @@ import {
 // without an email-OTP round trip. Tolerates "setup already complete" (403)
 // so this stays idempotent against a `reuseExistingServer` backend in local
 // dev, where the e2e DB isn't wiped between runs.
-setup("seed admin account", async ({ request }) => {
+//
+// After seeding, logs in through the UI and saves the resulting browser
+// state (localStorage JWT + cookies) to .auth/admin.json. Specs that need
+// admin auth but aren't testing the login flow itself load this via
+// `test.use({ storageState: ".auth/admin.json" })` to skip the bcrypt
+// round-trip — see book-cover-fallback.spec.ts and monthly-digest-jobs.spec.ts.
+// The file is regenerated on every run (this setup always executes before any
+// browser project), so it never goes stale.
+setup("seed admin account", async ({ request, page }) => {
   const response = await request.post("http://localhost:8000/auth/setup", {
     data: {
       name: E2E_ADMIN_NAME,
@@ -20,11 +28,16 @@ setup("seed admin account", async ({ request }) => {
     },
   });
 
-  if (response.ok() || response.status() === 403) {
-    return;
+  if (!response.ok() && response.status() !== 403) {
+    throw new Error(
+      `failed to seed e2e admin account: ${response.status()} ${await response.text()}`,
+    );
   }
 
-  throw new Error(
-    `failed to seed e2e admin account: ${response.status()} ${await response.text()}`,
-  );
+  await page.goto("/login");
+  await page.getByLabel("Email").fill(E2E_ADMIN_EMAIL);
+  await page.getByLabel("Password", { exact: true }).fill(E2E_ADMIN_PASSWORD);
+  await page.getByRole("button", { name: "Sign in" }).click();
+  await page.waitForURL("/catalog");
+  await page.context().storageState({ path: ".auth/admin.json" });
 });

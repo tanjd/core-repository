@@ -1,0 +1,3 @@
+# Admin auth state written by auth.setup.ts — regenerated on every run,
+# contains a short-lived e2e-only JWT, never committed.
+.auth/

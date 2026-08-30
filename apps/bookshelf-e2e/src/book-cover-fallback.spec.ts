@@ -1,6 +1,9 @@
 import { test, expect } from "@playwright/test";
-import { E2E_ADMIN_EMAIL, E2E_ADMIN_PASSWORD } from "./test-users";
-import { login } from "./auth-helpers";
+
+// Admin auth is pre-loaded from .auth/admin.json (written by auth.setup.ts)
+// rather than navigating through the login form — skips the bcrypt round-trip
+// on every run without testing the login UI (that's login.spec.ts's job).
+test.use({ storageState: ".auth/admin.json" });
 
 // Covers the generated book-cover fallback (BookCover/BookCoverFallback in
 // apps/bookshelf/src/components/BookCover.tsx) end-to-end against the real
@@ -11,8 +14,9 @@ import { login } from "./auth-helpers";
 test("a book with no cover renders a generated cover fallback across the catalog", async ({
   page,
 }) => {
-  await login(page, E2E_ADMIN_EMAIL, E2E_ADMIN_PASSWORD);
-
+  // storageState loads admin auth but starts at about:blank; navigate first
+  // so localStorage is accessible from the app's origin.
+  await page.goto("/catalog");
   const token = await page.evaluate(() =>
     localStorage.getItem("bookshelf_token"),
   );

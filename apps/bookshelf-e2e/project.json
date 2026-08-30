@@ -9,5 +9,30 @@
   "projectType": "application",
   "sourceRoot": "apps/bookshelf-e2e/src",
   "tags": [],
-  "targets": {}
+  "targets": {
+    "e2e-build": {
+      "executor": "nx:run-commands",
+      "cache": true,
+      "inputs": [
+        { "externalDependencies": ["next"] },
+        "{workspaceRoot}/apps/bookshelf/src/**/*",
+        "{workspaceRoot}/apps/bookshelf/public/**/*",
+        "{workspaceRoot}/apps/bookshelf/next.config.ts",
+        "{workspaceRoot}/apps/bookshelf/tailwind.config.ts",
+        "{workspaceRoot}/apps/bookshelf/postcss.config.mjs",
+        "{workspaceRoot}/apps/bookshelf/tsconfig.json",
+        "{workspaceRoot}/apps/bookshelf/CHANGELOG.md",
+        "{workspaceRoot}/apps/bookshelf/package.json",
+        "{workspaceRoot}/tsconfig.base.json"
+      ],
+      "outputs": ["{workspaceRoot}/apps/bookshelf/.next"],
+      "options": {
+        "command": "pnpm exec tsx apps/bookshelf/scripts/generate-changelog.ts && pnpm exec next build apps/bookshelf --webpack",
+        "cwd": "{workspaceRoot}"
+      }
+    },
+    "e2e": {
+      "dependsOn": ["e2e-build"]
+    }
+  }
 }
