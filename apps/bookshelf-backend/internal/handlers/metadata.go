@@ -309,9 +309,12 @@ func fetchOpenLibrary(ctx context.Context, q string) ([]BookMetadataResult, erro
 }
 
 // validateGoogleBooksAPIKey makes a minimal test call to verify the key is accepted by Google Books.
+// fields=kind trims the response to Google Books' partial-response minimum
+// (https://developers.google.com/books/docs/v1/performance) since only the
+// status code matters here, never the body.
 func validateGoogleBooksAPIKey(ctx context.Context, key string) error {
 	apiURL := fmt.Sprintf(
-		"https://www.googleapis.com/books/v1/volumes?q=test&key=%s&maxResults=1",
+		"https://www.googleapis.com/books/v1/volumes?q=test&key=%s&maxResults=1&fields=kind",
 		url.QueryEscape(key),
 	)
 	resp, err := metadataClient.Get(apiURL) //nolint:noctx,gosec
@@ -446,10 +449,18 @@ func googleBooksQueryFor(q string) string {
 func fetchGoogleBooks(ctx context.Context, q, apiKey string, pool *services.GoogleBooksKeyPool) ([]BookMetadataResult, error) {
 	query := googleBooksQueryFor(q)
 	zerolog.Ctx(ctx).Debug().Str("query", query).Msg("searching Google Books")
+	// fields restricts the response to exactly what googleVolumeToResult
+	// reads, per Google's partial-response guidance
+	// (https://developers.google.com/books/docs/v1/performance) — cuts
+	// payload size on a maxResults=10 search, where the fields we skip
+	// (saleInfo, accessInfo, searchInfo, etc.) otherwise dominate the
+	// response.
+	const googleBooksFields = "items(id,volumeInfo(title,authors,publisher,publishedDate,description,pageCount,language,industryIdentifiers,imageLinks))"
 	apiURL := fmt.Sprintf(
-		"https://www.googleapis.com/books/v1/volumes?q=%s&key=%s&maxResults=10",
+		"https://www.googleapis.com/books/v1/volumes?q=%s&key=%s&maxResults=10&fields=%s",
 		url.QueryEscape(query),
 		url.QueryEscape(apiKey),
+		url.QueryEscape(googleBooksFields),
 	)
 	resp, err := metadataClient.Get(apiURL) //nolint:noctx,gosec
 	if err != nil {
