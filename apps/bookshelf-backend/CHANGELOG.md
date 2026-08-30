@@ -1,3 +1,13 @@
+## 0.22.1 (2026-08-30)
+
+### 🩹 Fixes
+
+- **bookshelf-backend:** classify and log Google Books failure statuses ([#94](https://github.com/tanjd/core-repository/pull/94))
+
+### ❤️ Thank You
+
+- Jeddy Tan @tanjd
+
 ## 0.22.0 (2026-08-30)
 
 ### 🚀 Features
