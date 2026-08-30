@@ -109,37 +109,45 @@ export default function AdminDashboardPage() {
 
   return (
     <div className="flex flex-col gap-6">
-      <div className="flex items-center justify-end -mb-2">
-        <Button variant="ghost" size="sm" onClick={loadStats}>
-          <RefreshCw className="size-3.5" /> Refresh
-        </Button>
-      </div>
+      {/* Refresh sits inline with the stat grid's top edge (a tight gap-1
+          instead of the page's usual gap-6) so the grid's first row of text
+          starts at roughly the same height as the sidebar's first nav item
+          and the plain info line other admin pages (e.g. Users' "N users")
+          open with — a standalone toolbar row previously pushed the grid
+          down further than any sibling admin page's content. */}
+      <div className="flex flex-col gap-1">
+        <div className="flex items-center justify-end">
+          <Button variant="ghost" size="sm" onClick={loadStats}>
+            <RefreshCw className="size-3.5" /> Refresh
+          </Button>
+        </div>
 
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4">
-        <StatCard
-          icon={BookOpen}
-          label="Books"
-          value={stats.total_books}
-          detail={`${stats.total_copies} cop${stats.total_copies === 1 ? "y" : "ies"}`}
-        />
-        <StatCard
-          icon={Library}
-          label="Available copies"
-          value={stats.available_copies}
-          detail={`${stats.loaned_copies} loaned out`}
-        />
-        <StatCard icon={Users} label="Members" value={stats.total_users} />
-        <StatCard
-          icon={UserPlus}
-          label="Signups this week"
-          value={stats.signups_this_week}
-        />
-        <StatCard
-          icon={AlertTriangle}
-          label="Overdue loans"
-          value={stats.overdue_count}
-          warn
-        />
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4">
+          <StatCard
+            icon={BookOpen}
+            label="Books"
+            value={stats.total_books}
+            detail={`${stats.total_copies} cop${stats.total_copies === 1 ? "y" : "ies"}`}
+          />
+          <StatCard
+            icon={Library}
+            label="Available copies"
+            value={stats.available_copies}
+            detail={`${stats.loaned_copies} loaned out`}
+          />
+          <StatCard icon={Users} label="Members" value={stats.total_users} />
+          <StatCard
+            icon={UserPlus}
+            label="Signups this week"
+            value={stats.signups_this_week}
+          />
+          <StatCard
+            icon={AlertTriangle}
+            label="Overdue loans"
+            value={stats.overdue_count}
+            warn
+          />
+        </div>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">

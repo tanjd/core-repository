@@ -181,10 +181,21 @@ type AnnouncementRepository interface {
 	ListPaginated(page, pageSize int) (*PaginatedResult[models.Announcement], error)
 }
 
+// UserListFilter narrows ListUsersPaginated's results. Zero-valued fields
+// (empty string) apply no filter on that dimension — Status's four values
+// mirror the badges the admin Users table already renders (verified,
+// unverified, pending_approval, suspended); Search matches a case-insensitive
+// substring of name OR email.
+type UserListFilter struct {
+	Search string
+	Role   string
+	Status string
+}
+
 // AdminRepository handles admin-level data access for user management and app settings.
 type AdminRepository interface {
 	ListUsers() ([]models.User, error)
-	ListUsersPaginated(page, pageSize int) (*PaginatedResult[models.User], error)
+	ListUsersPaginated(page, pageSize int, filter UserListFilter) (*PaginatedResult[models.User], error)
 	ListByRole(role string) ([]models.User, error)
 	FindUserByID(id uint) (*models.User, error)
 	SaveUser(user *models.User) error

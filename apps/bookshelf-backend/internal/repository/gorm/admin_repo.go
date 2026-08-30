@@ -2,6 +2,7 @@ package gorm
 
 import (
 	"errors"
+	"strings"
 	"time"
 
 	"gorm.io/gorm"
@@ -32,16 +33,37 @@ func (r *AdminRepository) ListUsers() ([]models.User, error) {
 	return users, nil
 }
 
-func (r *AdminRepository) ListUsersPaginated(page, pageSize int) (*repository.PaginatedResult[models.User], error) {
+func (r *AdminRepository) ListUsersPaginated(page, pageSize int, filter repository.UserListFilter) (*repository.PaginatedResult[models.User], error) {
+	query := r.db.Model(&models.User{})
+	// SQLite's LIKE is case-insensitive for ASCII by default (no COLLATE
+	// NOCASE needed), matching what an admin typing a name/email expects.
+	if s := strings.TrimSpace(filter.Search); s != "" {
+		like := "%" + s + "%"
+		query = query.Where("name LIKE ? OR email LIKE ?", like, like)
+	}
+	if filter.Role != "" {
+		query = query.Where("role = ?", filter.Role)
+	}
+	switch filter.Status {
+	case "verified":
+		query = query.Where("verified = ?", true)
+	case "unverified":
+		query = query.Where("verified = ?", false)
+	case "pending_approval":
+		query = query.Where("pending_approval = ?", true)
+	case "suspended":
+		query = query.Where("suspended = ?", true)
+	}
+
 	var total int64
-	if err := r.db.Model(&models.User{}).Count(&total).Error; err != nil {
+	if err := query.Count(&total).Error; err != nil {
 		return nil, err
 	}
 	var users []models.User
 	offset := (page - 1) * pageSize
 	// Preload InvitedBy so the admin Users table can show an "Invited by"
 	// column without a second request per row — see docs/invite-code-spec.md.
-	if err := r.db.Preload("InvitedBy").Order("created_at asc").Offset(offset).Limit(pageSize).Find(&users).Error; err != nil {
+	if err := query.Preload("InvitedBy").Order("created_at asc").Offset(offset).Limit(pageSize).Find(&users).Error; err != nil {
 		return nil, err
 	}
 	totalPages := int((total + int64(pageSize) - 1) / int64(pageSize))
