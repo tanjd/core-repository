@@ -12,6 +12,7 @@ import {
 } from "@/lib/api";
 import { PasswordStrengthMeter } from "@/components/PasswordStrengthMeter";
 import { PasswordInput } from "@/components/PasswordInput";
+import { PasswordMatchIndicator } from "@/components/PasswordMatchIndicator";
 import {
   Card,
   CardHeader,
@@ -202,11 +203,13 @@ export default function RegisterPage() {
       emailLocalPart(email),
     ]);
     if (passwordError) {
-      setError(passwordError);
+      // Checklist already shows which requirement is unmet — no prose error
+      // needed.
       return;
     }
     if (password !== confirmPassword) {
-      setError("Passwords do not match");
+      // Live match indicator already shows the mismatch; just block
+      // submission.
       return;
     }
 
@@ -380,6 +383,10 @@ export default function RegisterPage() {
                     value={confirmPassword}
                     onChange={(e) => setConfirmPassword(e.target.value)}
                     placeholder="Re-enter your password"
+                  />
+                  <PasswordMatchIndicator
+                    password={password}
+                    confirm={confirmPassword}
                   />
                 </div>
                 <div className="flex flex-col gap-1.5">

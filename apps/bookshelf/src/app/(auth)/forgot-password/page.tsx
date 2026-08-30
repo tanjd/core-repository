@@ -7,6 +7,7 @@ import { toast } from "sonner";
 import { api, emailLocalPart, validatePassword } from "@/lib/api";
 import { PasswordStrengthMeter } from "@/components/PasswordStrengthMeter";
 import { PasswordInput } from "@/components/PasswordInput";
+import { PasswordMatchIndicator } from "@/components/PasswordMatchIndicator";
 import {
   Card,
   CardHeader,
@@ -94,11 +95,13 @@ export default function ForgotPasswordPage() {
       emailLocalPart(email),
     ]);
     if (passwordError) {
-      setError(passwordError);
+      // Checklist already shows which requirement is unmet — no prose error
+      // needed.
       return;
     }
     if (newPassword !== confirmPassword) {
-      setError("Passwords do not match");
+      // Live match indicator already shows the mismatch; just block
+      // submission.
       return;
     }
     setResetting(true);
@@ -246,6 +249,10 @@ export default function ForgotPasswordPage() {
                     value={confirmPassword}
                     onChange={(e) => setConfirmPassword(e.target.value)}
                     placeholder="Re-enter your new password"
+                  />
+                  <PasswordMatchIndicator
+                    password={newPassword}
+                    confirm={confirmPassword}
                   />
                 </div>
                 {error && <p className="text-sm text-destructive">{error}</p>}
