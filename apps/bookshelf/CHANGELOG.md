@@ -1,3 +1,13 @@
+## 0.34.0 (2026-08-30)
+
+### 🚀 Features
+
+- **bookshelf:** replace my-requests with unified loans page ([#96](https://github.com/tanjd/core-repository/pull/96))
+
+### ❤️ Thank You
+
+- Jeddy Tan @tanjd
+
 ## 0.33.0 (2026-08-30)
 
 ### 🚀 Features

@@ -1,3 +1,17 @@
+## 0.22.2 (2026-08-30)
+
+### 🚀 Features
+
+- **bookshelf:** replace my-requests with unified loans page ([#96](https://github.com/tanjd/core-repository/pull/96))
+
+### 🔥 Performance
+
+- **bookshelf-backend:** request partial responses from Google Books ([#95](https://github.com/tanjd/core-repository/pull/95))
+
+### ❤️ Thank You
+
+- Jeddy Tan @tanjd
+
 ## 0.22.1 (2026-08-30)
 
 ### 🩹 Fixes
