@@ -1,3 +1,13 @@
+## 0.32.0 (2026-08-30)
+
+### 🚀 Features
+
+- **bookshelf,bookshelf-backend,bookshelf-e2e:** redesign admin UX ([#92](https://github.com/tanjd/core-repository/pull/92))
+
+### ❤️ Thank You
+
+- Jeddy Tan @tanjd
+
 ## 0.31.0 (2026-08-30)
 
 ### 🚀 Features
