@@ -66,6 +66,12 @@ export default function RegisterPage() {
 
   const [sendingEmailOtp, setSendingEmailOtp] = useState(false);
   const [verifyingEmailOtp, setVerifyingEmailOtp] = useState(false);
+  // Debounces "Resend code" on the verify-email step so a user who doesn't
+  // see the email within a few seconds can't flood their inbox (or trip the
+  // backend rate limit silently) by tapping it repeatedly. Ticks down once
+  // per second via a one-shot setTimeout re-armed on every change, rather
+  // than setInterval, so there's nothing to leak on unmount.
+  const [resendCooldown, setResendCooldown] = useState(0);
   // The magic-link path renders its own full-card state rather than the
   // details form, since there's nothing for the user to do while it runs and
   // nothing to fall back to: the form's state lives in whichever tab started
@@ -164,6 +170,16 @@ export default function RegisterPage() {
       .catch(() => setInviteInvalid(true));
   }, []);
 
+  useEffect(() => {
+    if (resendCooldown <= 0) return;
+    const id = setTimeout(() => setResendCooldown((s) => s - 1), 1000);
+    return () => clearTimeout(id);
+  }, [resendCooldown]);
+
+  function startResendCooldown() {
+    setResendCooldown(30);
+  }
+
   // Sends (or resends) the verification email, handing the whole form to the
   // backend so either verification path can finish signup on its own.
   async function submitDetails() {
@@ -198,6 +214,7 @@ export default function RegisterPage() {
     try {
       await submitDetails();
       setStep("verify-email");
+      startResendCooldown();
     } catch (err) {
       setError(
         err instanceof Error ? err.message : "Could not send verification code",
@@ -212,6 +229,7 @@ export default function RegisterPage() {
     try {
       await submitDetails();
       toast.success("Verification code sent");
+      startResendCooldown();
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Failed to resend code");
     } finally {
@@ -470,11 +488,15 @@ export default function RegisterPage() {
                   </button>
                   <button
                     type="button"
-                    className="text-primary hover:underline disabled:opacity-50"
-                    disabled={sendingEmailOtp}
+                    className="text-primary hover:underline disabled:opacity-50 disabled:cursor-not-allowed"
+                    disabled={sendingEmailOtp || resendCooldown > 0}
                     onClick={handleResendEmailOTP}
                   >
-                    {sendingEmailOtp ? "Sending…" : "Resend code"}
+                    {resendCooldown > 0
+                      ? `Resend in 0:${String(resendCooldown).padStart(2, "0")}`
+                      : sendingEmailOtp
+                        ? "Sending…"
+                        : "Resend code"}
                   </button>
                 </div>
               </form>
