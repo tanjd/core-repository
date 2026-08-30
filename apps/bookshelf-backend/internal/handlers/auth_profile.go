@@ -299,7 +299,7 @@ func (h *AuthHandler) testGoogleBooksKey(ctx context.Context, input *testGoogleB
 	}
 
 	out := &testGoogleBooksKeyOutput{}
-	if err := validateGoogleBooksAPIKey(key); err != nil {
+	if err := validateGoogleBooksAPIKey(ctx, key); err != nil {
 		out.Body.OK = false
 		out.Body.Message = err.Error()
 	} else {

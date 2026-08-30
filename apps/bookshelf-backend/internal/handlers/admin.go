@@ -531,7 +531,8 @@ func (h *AdminHandler) getMetadataStatus(ctx context.Context, _ *struct{}) (*met
 				if resp.StatusCode < 400 {
 					s.Reachable = true
 				} else {
-					s.Error = "HTTP " + http.StatusText(resp.StatusCode)
+					zerolog.Ctx(ctx).Warn().Str("provider", p.name).Int("status", resp.StatusCode).Msg("metadata probe failed")
+					s.Error = probeFailureMessage(p.name, resp.StatusCode)
 				}
 			}
 		}(i, p)
@@ -539,6 +540,17 @@ func (h *AdminHandler) getMetadataStatus(ctx context.Context, _ *struct{}) (*met
 	wg.Wait()
 
 	return &metadataStatusOutput{Body: statuses}, nil
+}
+
+// probeFailureMessage returns the user-facing error message for a non-2xx metadata
+// probe response. Google Books gets its richer status classification (rate limit vs.
+// rejected key vs. transient 5xx, see googleBooksStatusError); other providers fall
+// back to a generic "HTTP <StatusText>".
+func probeFailureMessage(providerName string, status int) string {
+	if providerName == "google_books" {
+		return googleBooksStatusError(status).Error()
+	}
+	return "HTTP " + http.StatusText(status)
 }
 
 // adminError maps middleware sentinel errors to appropriate huma errors.
