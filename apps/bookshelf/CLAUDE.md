@@ -68,7 +68,7 @@ of the desktop view. Concretely:
   an extra tap. `src/components/layout/navItems.ts`'s `primaryNavItems` is the single source of
   truth for both this and the desktop `NavBar` — add/rename/remove a destination there once.
   - The tab bar is a **fixed 5-slot grid** (`grid-cols-5`), Instagram-style: four `Link` tabs
-    (Catalog, My Books, My Requests, Wishlist — the `primaryNavItems` entries with `mobileTab:
+    (Catalog, My Books, Loans, Wishlist — the `primaryNavItems` entries with `mobileTab:
 true`, the default) plus a centered, raised **"Share"** button between the first two and last
     two. "Share" is a `Popover` (not a `Link`) offering "Scan ISBN" (`/share/scan`) and "Search"
     (`/share`) — both are ways to add a book, so they share one entry point rather than each

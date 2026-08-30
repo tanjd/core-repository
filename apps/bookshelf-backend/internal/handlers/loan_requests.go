@@ -156,6 +156,15 @@ func (h *LoanRequestHandler) RegisterRoutes(api huma.API) {
 	}, h.listMine)
 
 	huma.Register(api, huma.Operation{
+		OperationID: "list-my-lending-requests",
+		Method:      "GET",
+		Path:        "/loan-requests/mine/lending",
+		Tags:        []string{"loan-requests"},
+		Summary:     "List loan requests against copies owned by the authenticated user (paginated)",
+		Security:    []map[string][]string{{"bearer": {}}},
+	}, h.listMineLending)
+
+	huma.Register(api, huma.Operation{
 		OperationID: "list-my-active-loans",
 		Method:      "GET",
 		Path:        "/loan-requests/mine/active",
@@ -301,6 +310,40 @@ func (h *LoanRequestHandler) listMine(ctx context.Context, input *listMineInput)
 	result, err := h.loanReqs.ListByBorrowerIDPaginated(callerID, statusesForView(input.View), page, pageSize)
 	if err != nil {
 		return nil, huma.Error500InternalServerError("could not fetch loan requests")
+	}
+
+	bodies := make([]getLoanRequestBody, len(result.Items))
+	for i, lr := range result.Items {
+		bodies[i] = toGetLoanRequestBody(lr)
+	}
+
+	var out listMineOutput
+	out.Body.Items = bodies
+	out.Body.Total = result.Total
+	out.Body.Page = result.Page
+	out.Body.PageSize = result.PageSize
+	out.Body.TotalPages = result.TotalPages
+	return &out, nil
+}
+
+func (h *LoanRequestHandler) listMineLending(ctx context.Context, input *listMineInput) (*listMineOutput, error) {
+	callerID, err := middleware.GetRequiredUserID(ctx)
+	if err != nil {
+		return nil, huma.Error401Unauthorized("authentication required")
+	}
+
+	page := input.Page
+	if page < 1 {
+		page = 1
+	}
+	pageSize := input.PageSize
+	if pageSize < 1 {
+		pageSize = 20
+	}
+
+	result, err := h.loanReqs.ListByOwnerIDPaginated(callerID, statusesForView(input.View), page, pageSize)
+	if err != nil {
+		return nil, huma.Error500InternalServerError("could not fetch lending history")
 	}
 
 	bodies := make([]getLoanRequestBody, len(result.Items))

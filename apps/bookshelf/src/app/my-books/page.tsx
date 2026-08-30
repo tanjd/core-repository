@@ -14,6 +14,7 @@ import {
   Search,
   SlidersHorizontal,
   X,
+  MoreVertical,
 } from "lucide-react";
 import { api, downloadMyCopiesExport } from "@/lib/api";
 import type {
@@ -49,6 +50,11 @@ import {
   DialogFooter,
   DialogDescription,
 } from "@/components/ui/dialog";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
 
 type Condition = "good" | "fair" | "worn";
 
@@ -170,6 +176,7 @@ export default function MyBooksPage() {
   const [deleteSubmitting, setDeleteSubmitting] = useState(false);
 
   // Export dialog
+  const [moreMenuOpen, setMoreMenuOpen] = useState(false);
   const [exportOpen, setExportOpen] = useState(false);
   const [exportFormat, setExportFormat] =
     useState<MyCopiesExportFormat>("json");
@@ -501,24 +508,39 @@ export default function MyBooksPage() {
           </p>
         </div>
         <div className="flex items-center gap-2">
-          <Button
-            variant="outline"
-            onClick={() => {
-              resetImportDialog();
-              setImportOpen(true);
-            }}
-          >
-            <Upload className="size-4" />
-            Import
-          </Button>
-          <Button
-            variant="outline"
-            disabled={totalCopies === 0}
-            onClick={() => setExportOpen(true)}
-          >
-            <Download className="size-4" />
-            Export
-          </Button>
+          <Popover open={moreMenuOpen} onOpenChange={setMoreMenuOpen}>
+            <PopoverTrigger asChild>
+              <Button size="icon" variant="ghost" aria-label="More actions">
+                <MoreVertical className="size-4" />
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent align="end" className="w-48 p-1">
+              <button
+                type="button"
+                className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-sm hover:bg-accent"
+                onClick={() => {
+                  resetImportDialog();
+                  setImportOpen(true);
+                  setMoreMenuOpen(false);
+                }}
+              >
+                <Upload className="size-4" />
+                Import books
+              </button>
+              <button
+                type="button"
+                disabled={totalCopies === 0}
+                className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-sm hover:bg-accent disabled:opacity-50 disabled:pointer-events-none"
+                onClick={() => {
+                  setExportOpen(true);
+                  setMoreMenuOpen(false);
+                }}
+              >
+                <Download className="size-4" />
+                Export books
+              </button>
+            </PopoverContent>
+          </Popover>
           <Link href="/share">
             <Button>
               <Plus className="size-4" />

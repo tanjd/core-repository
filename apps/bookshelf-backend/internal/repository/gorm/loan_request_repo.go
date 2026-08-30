@@ -128,6 +128,38 @@ func (r *LoanRequestRepository) ListByBorrowerIDPaginated(borrowerID uint, statu
 	}, nil
 }
 
+// ListByOwnerIDPaginated returns a page of loan requests against copies
+// ownerID owns, optionally filtered to the given statuses. owner_id lives on
+// Copy, not LoanRequest, so this joins through copies — both copies and
+// loan_requests have a status column, so every status filter must be
+// qualified as loan_requests.status to avoid an ambiguous-column error.
+func (r *LoanRequestRepository) ListByOwnerIDPaginated(ownerID uint, statuses []string, page, pageSize int) (*repository.PaginatedResult[models.LoanRequest], error) {
+	countQuery := r.db.Model(&models.LoanRequest{}).
+		Joins("JOIN copies ON copies.id = loan_requests.copy_id").
+		Where("copies.owner_id = ?", ownerID)
+	selectQuery := r.db.Preload("Copy.Book").Preload("Copy.Owner").Preload("Borrower").
+		Joins("JOIN copies ON copies.id = loan_requests.copy_id").
+		Where("copies.owner_id = ?", ownerID)
+	if len(statuses) > 0 {
+		countQuery = countQuery.Where("loan_requests.status IN ?", statuses)
+		selectQuery = selectQuery.Where("loan_requests.status IN ?", statuses)
+	}
+
+	var total int64
+	if err := countQuery.Count(&total).Error; err != nil {
+		return nil, err
+	}
+	var requests []models.LoanRequest
+	offset := (page - 1) * pageSize
+	if err := selectQuery.Order("requested_at DESC").Offset(offset).Limit(pageSize).Find(&requests).Error; err != nil {
+		return nil, err
+	}
+	totalPages := int((total + int64(pageSize) - 1) / int64(pageSize))
+	return &repository.PaginatedResult[models.LoanRequest]{
+		Items: requests, Total: total, Page: page, PageSize: pageSize, TotalPages: totalPages,
+	}, nil
+}
+
 // ListActiveByBorrowerID returns borrowerID's accepted (currently-held) loan
 // requests, due-soonest first.
 func (r *LoanRequestRepository) ListActiveByBorrowerID(borrowerID uint) ([]models.LoanRequest, error) {

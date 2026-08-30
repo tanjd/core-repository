@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef } from "react";
 import { toast } from "sonner";
-import { Search, Plus, Link2, X } from "lucide-react";
+import { Search, Heart, ListFilter, Link2, X } from "lucide-react";
 import { api } from "@/lib/api";
 import type {
   BookMetadataResult,
@@ -115,7 +115,13 @@ export default function WishlistPage() {
   }
 
   const [createOpen, setCreateOpen] = useState(false);
+  const [createQuery, setCreateQuery] = useState("");
   const [linkTarget, setLinkTarget] = useState<WishlistRequest | null>(null);
+
+  function openCreateDialog(prefill = "") {
+    setCreateQuery(prefill);
+    setCreateOpen(true);
+  }
 
   const requests = result?.items ?? [];
   const totalPages = result?.total_pages ?? 1;
@@ -131,20 +137,20 @@ export default function WishlistPage() {
             Books the community wants but nobody&apos;s added yet
           </p>
         </div>
-        <Button onClick={() => setCreateOpen(true)}>
-          <Plus className="size-4" />
-          Add to wishlist
+        <Button onClick={() => openCreateDialog()}>
+          <Heart className="size-4" />
+          Request a Book
         </Button>
       </div>
 
-      <div className="relative max-w-xl">
-        <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground pointer-events-none" />
+      <div className="relative max-w-sm">
+        <ListFilter className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground pointer-events-none" />
         <Input
           type="search"
-          placeholder="Search by title, author…"
+          placeholder="Filter requests…"
           value={search}
           onChange={(e) => setSearch(e.target.value)}
-          className="pl-9 h-10"
+          className="pl-9 h-9 bg-muted/30 border-muted-foreground/20"
         />
       </div>
 
@@ -157,13 +163,24 @@ export default function WishlistPage() {
           ))}
         </div>
       ) : requests.length === 0 ? (
-        <div className="flex flex-col items-center justify-center py-16 text-center gap-2">
-          <p className="text-muted-foreground">
-            {search
-              ? "No matches for your search."
-              : "The wishlist is empty right now."}
-          </p>
-        </div>
+        search.trim() ? (
+          <div className="flex flex-col items-center justify-center py-16 text-center gap-3">
+            <p className="text-muted-foreground">
+              No existing requests match &ldquo;{search.trim()}&rdquo;.
+            </p>
+            <p className="text-sm text-muted-foreground">Want to request it?</p>
+            <Button size="sm" onClick={() => openCreateDialog(search.trim())}>
+              <Heart className="size-4" />
+              Request &ldquo;{search.trim()}&rdquo;
+            </Button>
+          </div>
+        ) : (
+          <div className="flex flex-col items-center justify-center py-16 text-center gap-2">
+            <p className="text-muted-foreground">
+              The wishlist is empty right now.
+            </p>
+          </div>
+        )
       ) : (
         <>
           <div>
@@ -196,6 +213,7 @@ export default function WishlistPage() {
         open={createOpen}
         onOpenChange={setCreateOpen}
         onCreated={reload}
+        initialQuery={createQuery}
       />
 
       <LinkBookDialog
@@ -300,12 +318,19 @@ function CreateRequestDialog({
   open,
   onOpenChange,
   onCreated,
+  initialQuery = "",
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onCreated: () => void;
+  initialQuery?: string;
 }) {
-  const [query, setQuery] = useState("");
+  const [query, setQuery] = useState(initialQuery);
+  const [prevOpen, setPrevOpen] = useState(open);
+  if (open !== prevOpen) {
+    setPrevOpen(open);
+    if (open) setQuery(initialQuery);
+  }
   const [results, setResults] = useState<BookMetadataResult[]>([]);
   const [searching, setSearching] = useState(false);
   const [searchError, setSearchError] = useState("");

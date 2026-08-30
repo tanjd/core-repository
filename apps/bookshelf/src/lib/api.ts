@@ -564,6 +564,20 @@ export const api = {
       `/loan-requests/mine${qs ? "?" + qs : ""}`,
     );
   },
+  getMyLendingHistory: (params?: {
+    page?: number;
+    page_size?: number;
+    view?: "current" | "history";
+  }) => {
+    const p: Record<string, string> = {};
+    if (params?.page) p.page = String(params.page);
+    if (params?.page_size) p.page_size = String(params.page_size);
+    if (params?.view) p.view = params.view;
+    const qs = new URLSearchParams(p).toString();
+    return request<PaginatedResult<LoanRequest>>(
+      `/loan-requests/mine/lending${qs ? "?" + qs : ""}`,
+    );
+  },
   getMyActiveLoans: () =>
     request<{ items: LoanRequest[] }>("/loan-requests/mine/active"),
   getLoanRequestsByCopy: (copyId: number) =>

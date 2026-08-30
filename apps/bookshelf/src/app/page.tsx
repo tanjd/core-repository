@@ -5,32 +5,35 @@ import { useRouter } from "next/navigation";
 import { api } from "@/lib/api";
 import { LandingPage } from "@/components/landing/LandingPage";
 
+type LandingState = "loading" | "authenticated" | "anonymous";
+
 export default function Home() {
   const router = useRouter();
-  const [showLanding, setShowLanding] = useState(false);
+  const [state, setState] = useState<LandingState>("loading");
 
   useEffect(() => {
-    // Logged-in members skip the pitch and go straight to the catalogue —
-    // the landing page below is only for logged-out visitors.
-    if (localStorage.getItem("bookshelf_token")) {
-      router.replace("/catalog");
-      return;
-    }
-    api
-      .setupStatus()
-      .then(({ needs_setup }) => {
+    async function resolveLandingState() {
+      // Logged-in members can view the pitch too, just with different CTAs —
+      // the setup check below only matters for logged-out first-run visitors.
+      if (localStorage.getItem("bookshelf_token")) {
+        setState("authenticated");
+        return;
+      }
+      try {
+        const { needs_setup } = await api.setupStatus();
         if (needs_setup) {
           router.replace("/setup");
         } else {
-          setShowLanding(true);
+          setState("anonymous");
         }
-      })
-      .catch(() => {
-        setShowLanding(true);
-      });
+      } catch {
+        setState("anonymous");
+      }
+    }
+    resolveLandingState();
   }, [router]);
 
-  if (!showLanding) return null;
+  if (state === "loading") return null;
 
-  return <LandingPage />;
+  return <LandingPage isAuthenticated={state === "authenticated"} />;
 }

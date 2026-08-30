@@ -285,7 +285,7 @@ export default function BookDetailPage() {
       });
       toast.success(
         created.status === "accepted"
-          ? "Request approved — check My Requests for the owner's contact info"
+          ? "Request approved — check Loans for the owner's contact info"
           : "Borrow request sent!",
       );
       setSelectedCopy(null);

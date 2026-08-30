@@ -145,6 +145,11 @@ type LoanRequestRepository interface {
 	// optionally filtered to the given statuses (empty/nil = no filter, i.e.
 	// every status).
 	ListByBorrowerIDPaginated(borrowerID uint, statuses []string, page, pageSize int) (*PaginatedResult[models.LoanRequest], error)
+	// ListByOwnerIDPaginated returns a page of loan requests against copies
+	// ownerID owns, optionally filtered to the given statuses (empty/nil = no
+	// filter). Mirrors ListByBorrowerIDPaginated but joins through Copy since
+	// owner_id lives there, not on LoanRequest.
+	ListByOwnerIDPaginated(ownerID uint, statuses []string, page, pageSize int) (*PaginatedResult[models.LoanRequest], error)
 	// ListActiveByBorrowerID returns borrowerID's currently-held loans
 	// (status "accepted"), due-soonest first with no-due-date requests last.
 	ListActiveByBorrowerID(borrowerID uint) ([]models.LoanRequest, error)

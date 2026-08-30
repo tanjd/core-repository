@@ -1,6 +1,14 @@
-import { test, expect } from "@playwright/test";
+import { test, expect, type Page } from "@playwright/test";
 import { login, registerTestUser } from "./auth-helpers";
 import { E2E_TEST_USER_PASSWORD } from "./test-users";
+
+// Import/Export live behind My Books' "More actions" overflow popover
+// (apps/bookshelf/src/app/my-books/page.tsx) rather than as standalone
+// header buttons — open it before reaching for the Import dialog.
+async function openImportDialog(page: Page) {
+  await page.getByRole("button", { name: "More actions" }).click();
+  await page.getByRole("button", { name: "Import books" }).click();
+}
 
 // Covers apps/bookshelf-backend's export/import round trip (GET
 // /copies/mine/export, POST /copies/mine/import{,/preview}) and the My Books
@@ -56,7 +64,7 @@ test("exporting then re-importing a book matches it to the existing catalog entr
 
   await test.step("re-importing the export matches the existing book instead of duplicating it", async () => {
     await page.goto("/my-books");
-    await page.getByRole("button", { name: "Import" }).click();
+    await openImportDialog(page);
     await expect(
       page.getByRole("heading", { name: "Import Books" }),
     ).toBeVisible();
@@ -120,7 +128,7 @@ test("exporting then re-importing a book matches it to the existing catalog entr
 
   await test.step("a title+author match with no external key surfaces as a possible match, defaulting to a new book when left untouched", async () => {
     await page.goto("/my-books");
-    await page.getByRole("button", { name: "Import" }).click();
+    await openImportDialog(page);
     await expect(
       page.getByRole("heading", { name: "Import Books" }),
     ).toBeVisible();
@@ -162,7 +170,7 @@ test("exporting then re-importing a book matches it to the existing catalog entr
 
   await test.step("choosing 'Use existing' on a possible match attaches to the existing book instead", async () => {
     await page.goto("/my-books");
-    await page.getByRole("button", { name: "Import" }).click();
+    await openImportDialog(page);
     await expect(
       page.getByRole("heading", { name: "Import Books" }),
     ).toBeVisible();
@@ -204,7 +212,7 @@ test("exporting then re-importing a book matches it to the existing catalog entr
     const beforeCount = (await before.json()).length;
 
     await page.goto("/my-books");
-    await page.getByRole("button", { name: "Import" }).click();
+    await openImportDialog(page);
     await expect(
       page.getByRole("heading", { name: "Import Books" }),
     ).toBeVisible();

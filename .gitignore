@@ -135,6 +135,11 @@ apps/bookshelf/.env.local
 # bookshelf: build-time generated changelog embed
 apps/bookshelf/src/lib/changelog.generated.ts
 
+# bookshelf-e2e: Playwright admin storage state (auth.setup.ts). Written under
+# apps/bookshelf-e2e/.auth/ when Nx runs the suite, but also at the repo root
+# when playwright is invoked from the workspace root — never commit either.
+.auth/
+
 # bookshelf-backend: cached book cover images written to disk at runtime
 apps/bookshelf-backend/data/covers/
 

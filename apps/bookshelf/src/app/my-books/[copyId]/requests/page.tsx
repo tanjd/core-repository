@@ -10,6 +10,7 @@ import { ContactReveal } from "@/components/ContactReveal";
 import { ReturnDateCell } from "@/components/ReturnDateCell";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
@@ -28,6 +29,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { cn } from "@/lib/utils";
 
 type Condition = "good" | "fair" | "worn";
 
@@ -54,6 +56,57 @@ function hasExpandContent(request: LoanRequest): boolean {
 // type="date"> needs a bare YYYY-MM-DD.
 function toDateInputValue(iso?: string): string {
   return iso ? iso.slice(0, 10) : "";
+}
+
+// The message/contact/returned-info detail shown when a row is expanded —
+// identical content in both the table's expand-row and the mobile card, so
+// it's factored out once rather than kept in sync in two places.
+function ExpandedDetail({ request }: { request: LoanRequest }) {
+  return (
+    <div className="flex flex-col gap-3">
+      {request.message && (
+        <div>
+          <p className="text-xs font-medium text-muted-foreground mb-1">
+            Message
+          </p>
+          <p className="text-sm border rounded-md p-3 bg-muted/50">
+            {request.message}
+          </p>
+        </div>
+      )}
+      {request.status === "accepted" && request.borrower && (
+        <div>
+          <p className="text-xs font-medium text-muted-foreground mb-2">
+            Borrower contact
+          </p>
+          <ContactReveal
+            name={request.borrower.name}
+            email={request.borrower.email}
+            phone={request.borrower.phone}
+            telegramUsername={request.borrower.telegram_username}
+            whatsappUsername={request.borrower.whatsapp_username}
+            contactNote={request.borrower.contact_note}
+          />
+        </div>
+      )}
+      {request.status === "returned" && (
+        <div>
+          <p className="text-xs font-medium text-muted-foreground mb-1">
+            Returned
+          </p>
+          <p className="text-sm text-muted-foreground">
+            {request.returned_at
+              ? new Date(request.returned_at).toLocaleDateString()
+              : "Return date not recorded"}
+            {request.returned_by != null &&
+              (request.returned_by === request.borrower_id
+                ? " · returned by the borrower"
+                : " · returned by you")}
+          </p>
+        </div>
+      )}
+    </div>
+  );
 }
 
 export default function CopyRequestsPage() {
@@ -212,6 +265,59 @@ export default function CopyRequestsPage() {
     setRequests((prev) => prev.map((r) => (r.id === updated.id ? updated : r)));
   }
 
+  // Shared between the desktop table and mobile card list below — same
+  // action set either way, per apps/bookshelf/CLAUDE.md's "Cards over dense
+  // tables on narrow screens" convention.
+  function renderActions(request: LoanRequest) {
+    if (request.status === "pending") {
+      return (
+        <div className="flex gap-2 justify-end">
+          <Button
+            size="sm"
+            onClick={() => openAcceptDialog(request)}
+            disabled={actioning === request.id}
+          >
+            {actioning === request.id ? "…" : "Accept"}
+          </Button>
+          <Button
+            size="sm"
+            variant="destructive"
+            onClick={() => handleAction(request.id, "rejected")}
+            disabled={actioning === request.id}
+          >
+            {actioning === request.id ? "…" : "Decline"}
+          </Button>
+        </div>
+      );
+    }
+    if (request.status === "accepted") {
+      return (
+        <Button
+          size="sm"
+          variant="outline"
+          onClick={() =>
+            openReturnDialog(request.id, request.copy?.condition ?? "good")
+          }
+          disabled={actioning === request.id}
+        >
+          {actioning === request.id ? "…" : "Mark Returned"}
+        </Button>
+      );
+    }
+    if (request.status === "returned") {
+      return (
+        <Button
+          size="sm"
+          variant="outline"
+          onClick={() => setUndoDialog({ requestId: request.id })}
+        >
+          Undo Return
+        </Button>
+      );
+    }
+    return null;
+  }
+
   const bookTitle = requests[0]?.copy?.book?.title;
   const bookAuthor = requests[0]?.copy?.book?.author;
 
@@ -254,181 +360,166 @@ export default function CopyRequestsPage() {
       )}
 
       {!loading && requests.length > 0 && (
-        <div className="rounded-md border overflow-x-auto">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead className="w-8" />
-                <TableHead>Requester</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead>Requested</TableHead>
-                <TableHead>Return by</TableHead>
-                <TableHead className="text-right">Actions</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {requests.map((request) => {
-                const expandable = hasExpandContent(request);
-                const isExpanded = expanded.has(request.id);
+        <>
+          {/* Desktop: dense table. Hidden below md — see the mobile card
+              list alongside it. */}
+          <div className="hidden md:block rounded-md border overflow-x-auto">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead className="w-8" />
+                  <TableHead>Requester</TableHead>
+                  <TableHead>Status</TableHead>
+                  <TableHead>Requested</TableHead>
+                  <TableHead>Return by</TableHead>
+                  <TableHead className="text-right">Actions</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {requests.map((request) => {
+                  const expandable = hasExpandContent(request);
+                  const isExpanded = expanded.has(request.id);
 
-                return (
-                  <Fragment key={request.id}>
-                    <TableRow
-                      onClick={
-                        expandable ? () => toggleExpand(request.id) : undefined
-                      }
-                      className={expandable ? "cursor-pointer" : ""}
-                    >
-                      <TableCell className="w-8 pr-0">
-                        {expandable ? (
-                          isExpanded ? (
-                            <ChevronDown className="size-4 text-muted-foreground" />
-                          ) : (
-                            <ChevronRight className="size-4 text-muted-foreground" />
-                          )
-                        ) : null}
-                      </TableCell>
-                      <TableCell className="font-medium">
-                        {request.borrower?.name ??
-                          `User #${request.borrower_id}`}
-                      </TableCell>
-                      <TableCell>
-                        <Badge
-                          variant={statusVariant[request.status] ?? "outline"}
+                  return (
+                    <Fragment key={request.id}>
+                      <TableRow
+                        onClick={
+                          expandable
+                            ? () => toggleExpand(request.id)
+                            : undefined
+                        }
+                        className={expandable ? "cursor-pointer" : ""}
+                      >
+                        <TableCell className="w-8 pr-0">
+                          {expandable ? (
+                            isExpanded ? (
+                              <ChevronDown className="size-4 text-muted-foreground" />
+                            ) : (
+                              <ChevronRight className="size-4 text-muted-foreground" />
+                            )
+                          ) : null}
+                        </TableCell>
+                        <TableCell className="font-medium">
+                          {request.borrower?.name ??
+                            `User #${request.borrower_id}`}
+                        </TableCell>
+                        <TableCell>
+                          <Badge
+                            variant={statusVariant[request.status] ?? "outline"}
+                          >
+                            {request.status}
+                          </Badge>
+                        </TableCell>
+                        <TableCell className="text-muted-foreground">
+                          {new Date(request.requested_at).toLocaleDateString()}
+                        </TableCell>
+                        <TableCell className="text-muted-foreground">
+                          <ReturnDateCell
+                            request={request}
+                            onUpdated={handleRequestUpdated}
+                          />
+                        </TableCell>
+                        <TableCell
+                          className="text-right"
+                          onClick={(e) => e.stopPropagation()}
                         >
-                          {request.status}
-                        </Badge>
-                      </TableCell>
-                      <TableCell className="text-muted-foreground">
+                          {renderActions(request)}
+                        </TableCell>
+                      </TableRow>
+
+                      {expandable && isExpanded && (
+                        <TableRow
+                          key={`${request.id}-detail`}
+                          className="hover:bg-transparent"
+                        >
+                          <TableCell colSpan={6} className="py-0 pb-3 px-8">
+                            <ExpandedDetail request={request} />
+                          </TableCell>
+                        </TableRow>
+                      )}
+                    </Fragment>
+                  );
+                })}
+              </TableBody>
+            </Table>
+          </div>
+
+          {/* Mobile: one glance card per requester, tap to expand detail —
+              same data as the table above, shown below md instead of it. */}
+          <div className="flex flex-col gap-3 md:hidden">
+            {requests.map((request) => {
+              const expandable = hasExpandContent(request);
+              const isExpanded = expanded.has(request.id);
+              const actions = renderActions(request);
+
+              return (
+                <Card key={request.id} className="overflow-hidden py-0 gap-0">
+                  <CardContent
+                    className={cn(
+                      "p-3 flex flex-col gap-3",
+                      expandable && "cursor-pointer",
+                    )}
+                    onClick={
+                      expandable ? () => toggleExpand(request.id) : undefined
+                    }
+                  >
+                    <div className="flex items-start gap-3">
+                      <div className="flex-1 min-w-0 flex flex-col gap-1">
+                        <p className="text-sm font-medium leading-snug">
+                          {request.borrower?.name ??
+                            `User #${request.borrower_id}`}
+                        </p>
+                        <div className="mt-0.5">
+                          <Badge
+                            variant={statusVariant[request.status] ?? "outline"}
+                          >
+                            {request.status}
+                          </Badge>
+                        </div>
+                      </div>
+                      {expandable &&
+                        (isExpanded ? (
+                          <ChevronDown className="size-4 text-muted-foreground shrink-0" />
+                        ) : (
+                          <ChevronRight className="size-4 text-muted-foreground shrink-0" />
+                        ))}
+                    </div>
+
+                    <div className="flex flex-col gap-1 text-xs text-muted-foreground">
+                      <span>
+                        Requested{" "}
                         {new Date(request.requested_at).toLocaleDateString()}
-                      </TableCell>
-                      <TableCell className="text-muted-foreground">
+                      </span>
+                      <div onClick={(e) => e.stopPropagation()}>
                         <ReturnDateCell
                           request={request}
                           onUpdated={handleRequestUpdated}
                         />
-                      </TableCell>
-                      <TableCell
-                        className="text-right"
+                      </div>
+                    </div>
+
+                    {isExpanded && (
+                      <div className="pt-1 border-t">
+                        <div className="pt-3">
+                          <ExpandedDetail request={request} />
+                        </div>
+                      </div>
+                    )}
+
+                    {actions && (
+                      <div
+                        className="flex justify-end"
                         onClick={(e) => e.stopPropagation()}
                       >
-                        <div className="flex gap-2 justify-end">
-                          {request.status === "pending" && (
-                            <>
-                              <Button
-                                size="sm"
-                                onClick={() => openAcceptDialog(request)}
-                                disabled={actioning === request.id}
-                              >
-                                {actioning === request.id ? "…" : "Accept"}
-                              </Button>
-                              <Button
-                                size="sm"
-                                variant="destructive"
-                                onClick={() =>
-                                  handleAction(request.id, "rejected")
-                                }
-                                disabled={actioning === request.id}
-                              >
-                                {actioning === request.id ? "…" : "Decline"}
-                              </Button>
-                            </>
-                          )}
-                          {request.status === "accepted" && (
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              onClick={() =>
-                                openReturnDialog(
-                                  request.id,
-                                  request.copy?.condition ?? "good",
-                                )
-                              }
-                              disabled={actioning === request.id}
-                            >
-                              {actioning === request.id ? "…" : "Mark Returned"}
-                            </Button>
-                          )}
-                          {request.status === "returned" && (
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              onClick={() =>
-                                setUndoDialog({ requestId: request.id })
-                              }
-                            >
-                              Undo Return
-                            </Button>
-                          )}
-                        </div>
-                      </TableCell>
-                    </TableRow>
-
-                    {expandable && isExpanded && (
-                      <TableRow
-                        key={`${request.id}-detail`}
-                        className="hover:bg-transparent"
-                      >
-                        <TableCell colSpan={6} className="py-0 pb-3 px-8">
-                          <div className="flex flex-col gap-3">
-                            {request.message && (
-                              <div>
-                                <p className="text-xs font-medium text-muted-foreground mb-1">
-                                  Message
-                                </p>
-                                <p className="text-sm border rounded-md p-3 bg-muted/50">
-                                  {request.message}
-                                </p>
-                              </div>
-                            )}
-                            {request.status === "accepted" &&
-                              request.borrower && (
-                                <div>
-                                  <p className="text-xs font-medium text-muted-foreground mb-2">
-                                    Borrower contact
-                                  </p>
-                                  <ContactReveal
-                                    name={request.borrower.name}
-                                    email={request.borrower.email}
-                                    phone={request.borrower.phone}
-                                    telegramUsername={
-                                      request.borrower.telegram_username
-                                    }
-                                    whatsappUsername={
-                                      request.borrower.whatsapp_username
-                                    }
-                                    contactNote={request.borrower.contact_note}
-                                  />
-                                </div>
-                              )}
-                            {request.status === "returned" && (
-                              <div>
-                                <p className="text-xs font-medium text-muted-foreground mb-1">
-                                  Returned
-                                </p>
-                                <p className="text-sm text-muted-foreground">
-                                  {request.returned_at
-                                    ? new Date(
-                                        request.returned_at,
-                                      ).toLocaleDateString()
-                                    : "Return date not recorded"}
-                                  {request.returned_by != null &&
-                                    (request.returned_by === request.borrower_id
-                                      ? " · returned by the borrower"
-                                      : " · returned by you")}
-                                </p>
-                              </div>
-                            )}
-                          </div>
-                        </TableCell>
-                      </TableRow>
+                        {actions}
+                      </div>
                     )}
-                  </Fragment>
-                );
-              })}
-            </TableBody>
-          </Table>
-        </div>
+                  </CardContent>
+                </Card>
+              );
+            })}
+          </div>
+        </>
       )}
 
       {/* Accept + return-date dialog */}
