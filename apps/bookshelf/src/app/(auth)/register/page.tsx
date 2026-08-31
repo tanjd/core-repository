@@ -13,6 +13,7 @@ import {
 import { PasswordStrengthMeter } from "@/components/PasswordStrengthMeter";
 import { PasswordInput } from "@/components/PasswordInput";
 import { PasswordMatchIndicator } from "@/components/PasswordMatchIndicator";
+import { PhoneNumberInput } from "@/components/PhoneNumberInput";
 import {
   Card,
   CardHeader,
@@ -26,13 +27,6 @@ import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 
 type Step = "details" | "verify-email";
-
-// Mirrors ProfileForm's phone handling: a bare local number gets Singapore's
-// +65 prefix; anything already starting with "+" is left as-is.
-function toFullPhone(localPhone: string): string {
-  const trimmed = localPhone.trim();
-  return trimmed.startsWith("+") ? trimmed : `+65 ${trimmed}`;
-}
 
 export default function RegisterPage() {
   const router = useRouter();
@@ -189,7 +183,7 @@ export default function RegisterPage() {
       name,
       email,
       password,
-      phone: trimmedPhone ? toFullPhone(trimmedPhone) : undefined,
+      phone: trimmedPhone || undefined,
       invite_code: inviteCode || undefined,
     });
     setEmailDebugCode(debug_code ?? "");
@@ -396,17 +390,13 @@ export default function RegisterPage() {
                       (optional)
                     </span>
                   </label>
-                  <div className="flex items-center gap-2">
-                    <span className="text-sm text-muted-foreground">+65</span>
-                    <Input
-                      id="phone"
-                      type="tel"
-                      autoComplete="tel-national"
-                      value={phone}
-                      onChange={(e) => setPhone(e.target.value)}
-                      placeholder="9123 4567"
-                    />
-                  </div>
+                  <PhoneNumberInput
+                    id="phone"
+                    autoComplete="tel-national"
+                    value={phone}
+                    onChange={setPhone}
+                    placeholder="9123 4567"
+                  />
                   {phoneRequirementLoaded && requirePhone && (
                     <p className="text-sm text-muted-foreground">
                       You&apos;ll need a phone number on file to borrow books in
