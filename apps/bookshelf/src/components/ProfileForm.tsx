@@ -9,6 +9,7 @@ import { api, emailLocalPart, validatePassword } from "@/lib/api";
 import { PasswordStrengthMeter } from "@/components/PasswordStrengthMeter";
 import { PasswordInput } from "@/components/PasswordInput";
 import { PasswordMatchIndicator } from "@/components/PasswordMatchIndicator";
+import { PhoneNumberInput } from "@/components/PhoneNumberInput";
 import { InviteLinkCard } from "@/components/InviteLinkCard";
 import type { User, VerificationStatus } from "@/lib/types";
 import { Badge } from "@/components/ui/badge";
@@ -83,11 +84,7 @@ export function ProfileForm() {
         setVerificationStatus(vs);
         setName(u.name);
         setEmail(u.email);
-        setPhone(
-          u.phone?.startsWith("+65")
-            ? u.phone.slice(3).trim()
-            : (u.phone ?? ""),
-        );
+        setPhone(u.phone ?? "");
         setEmailNotificationsEnabled(u.email_notifications_enabled);
         setMonthlyDigestEnabled(u.monthly_digest_enabled);
         setTelegramUsername(u.telegram_username ?? "");
@@ -128,12 +125,7 @@ export function ProfileForm() {
     e?.preventDefault();
     setSaving(true);
     try {
-      const localPhone = phone.trim();
-      const fullPhone = localPhone
-        ? localPhone.startsWith("+")
-          ? localPhone
-          : `+65 ${localPhone}`
-        : undefined;
+      const fullPhone = phone.trim() || undefined;
       const updated = await api.updateMe({
         name: name.trim() || undefined,
         email: email.trim() || undefined,
@@ -502,19 +494,12 @@ export function ProfileForm() {
                     >
                       Phone
                     </label>
-                    <div className="flex rounded-md border border-input overflow-hidden focus-within:ring-1 focus-within:ring-ring">
-                      <span className="flex items-center px-3 bg-muted text-muted-foreground text-sm border-r border-input select-none">
-                        +65
-                      </span>
-                      <input
-                        id="profile-phone"
-                        type="tel"
-                        className="flex-1 px-3 py-2 text-sm outline-none bg-background"
-                        value={phone}
-                        onChange={(e) => setPhone(e.target.value)}
-                        placeholder="9123 4567"
-                      />
-                    </div>
+                    <PhoneNumberInput
+                      id="profile-phone"
+                      value={phone}
+                      onChange={setPhone}
+                      placeholder="9123 4567"
+                    />
                   </div>
                   <div className="flex flex-col gap-1.5">
                     <label
