@@ -1,3 +1,13 @@
+## 0.35.0 (2026-08-31)
+
+### 🚀 Features
+
+- **bookshelf:** replace hardcoded +65 phone prefix with country picker ([#97](https://github.com/tanjd/core-repository/pull/97))
+
+### ❤️ Thank You
+
+- Jeddy Tan @tanjd
+
 ## 0.34.0 (2026-08-30)
 
 ### 🚀 Features
