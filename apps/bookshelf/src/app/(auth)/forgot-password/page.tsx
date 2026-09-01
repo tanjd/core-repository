@@ -35,6 +35,17 @@ export default function ForgotPasswordPage() {
   const [error, setError] = useState("");
   const [sending, setSending] = useState(false);
   const [resetting, setResetting] = useState(false);
+  const [resendCooldown, setResendCooldown] = useState(0);
+
+  useEffect(() => {
+    if (resendCooldown <= 0) return;
+    const id = setTimeout(() => setResendCooldown((s) => s - 1), 1000);
+    return () => clearTimeout(id);
+  }, [resendCooldown]);
+
+  function startResendCooldown() {
+    setResendCooldown(30);
+  }
 
   // Magic link from the reset email (?resetToken=...): skip straight to the
   // "new password" fields, no code entry needed. Read via window.location on
@@ -66,6 +77,7 @@ export default function ForgotPasswordPage() {
       const { debug_code } = await api.forgotPassword(email);
       setDebugCode(debug_code ?? "");
       setStep("reset");
+      startResendCooldown();
     } catch (err) {
       setError(
         err instanceof Error ? err.message : "Could not send reset code",
@@ -81,6 +93,7 @@ export default function ForgotPasswordPage() {
       const { debug_code } = await api.forgotPassword(email);
       setDebugCode(debug_code ?? "");
       toast.success("If that email is registered, a new code was sent");
+      startResendCooldown();
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Failed to resend code");
     } finally {
@@ -283,11 +296,15 @@ export default function ForgotPasswordPage() {
                       </button>
                       <button
                         type="button"
-                        className="text-primary hover:underline disabled:opacity-50"
-                        disabled={sending}
+                        className="text-primary hover:underline disabled:opacity-50 disabled:cursor-not-allowed"
+                        disabled={sending || resendCooldown > 0}
                         onClick={handleResendCode}
                       >
-                        {sending ? "Sending…" : "Resend code"}
+                        {resendCooldown > 0
+                          ? `Resend in 0:${String(resendCooldown).padStart(2, "0")}`
+                          : sending
+                            ? "Sending…"
+                            : "Resend code"}
                       </button>
                     </>
                   )}

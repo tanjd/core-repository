@@ -210,18 +210,29 @@ export default function BookDetailPage() {
   // the previous view visible (SWR-style stale-while-revalidate). Only
   // the *initial* load falls back to the skeleton, because there's
   // genuinely nothing to show yet.
+  //
+  // requestIdRef guards against an older fetch (e.g. a background retry
+  // for a book the user has since navigated away from) resolving after a
+  // newer one and clobbering it — only the most recently *started* call
+  // is allowed to apply its response.
+  const requestIdRef = useRef(0);
   function loadBook() {
+    const requestId = ++requestIdRef.current;
     return api
       .getBook(bookId)
       .then((b) => {
+        if (requestId !== requestIdRef.current) return;
         setBook(b);
         setError("");
         setRefreshKey((k) => k + 1);
       })
-      .catch((err) =>
-        setError(err instanceof Error ? err.message : "Failed to load book"),
-      )
-      .finally(() => setLoading(false));
+      .catch((err) => {
+        if (requestId !== requestIdRef.current) return;
+        setError(err instanceof Error ? err.message : "Failed to load book");
+      })
+      .finally(() => {
+        if (requestId === requestIdRef.current) setLoading(false);
+      });
   }
 
   useEffect(() => {
