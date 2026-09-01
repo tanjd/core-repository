@@ -93,6 +93,19 @@ export default function WishlistPage() {
     fetchRequests("", 1);
   }, []);
 
+  // Pre-fill the "Add to wishlist" dialog from a catalog search that came up
+  // empty (?q=...). Read via window.location on mount (rather than
+  // useSearchParams) to avoid a server/client hydration mismatch and the
+  // Suspense boundary that hook requires — same pattern as SharePage's ?q=
+  // prefill.
+  const prefilledRef = useRef(false);
+  useEffect(() => {
+    if (prefilledRef.current) return;
+    prefilledRef.current = true;
+    const q = new URLSearchParams(window.location.search).get("q");
+    if (q) openCreateDialog(q);
+  }, []);
+
   useEffect(() => {
     if (debounceRef.current) clearTimeout(debounceRef.current);
     debounceRef.current = setTimeout(() => {

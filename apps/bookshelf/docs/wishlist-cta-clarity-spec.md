@@ -1,6 +1,6 @@
 # Wishlist CTA & search-box clarity — spec
 
-**Status:** Proposed — ready to implement. **Scope:** `apps/bookshelf/src/app/wishlist/page.tsx`
+**Status:** Implemented (#96). **Scope:** `apps/bookshelf/src/app/wishlist/page.tsx`
 only. No backend/API changes, no changes to `/share`, `MetadataSearchStep`, or
 `CreateRequestDialog`'s internals beyond a small prefill prop. **Supersedes (for now):**
 `docs/wishlist-search-unification-spec.md`, which is on hold — see that file's "Revision notes" if

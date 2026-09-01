@@ -1,6 +1,6 @@
 # Invite-code registration — spec
 
-**Status:** Approved for build · **Scope:** `apps/bookshelf` + `apps/bookshelf-backend` ·
+**Status:** Implemented (#85; admin UX/discoverability polish in #93) · **Scope:** `apps/bookshelf` + `apps/bookshelf-backend` ·
 **Depends on:** `User`, `AppSetting`, `RegistrationVerification`, `PendingRegistrationData`,
 `AuthHandler`, `AdminHandler`
 
@@ -258,5 +258,6 @@ than a hard error, since open registration may still be on.
 
 ## Housekeeping
 
-`apps/bookshelf/TODO.md` lists "Invite-code registration" under "Next — approved, not yet
-built." Remove it from that list once this ships.
+Shipped in #85 (data layer, API, registration integration, frontend) with admin UX/
+discoverability follow-ups in #93. `apps/bookshelf/TODO.md`'s "Next — approved, not yet
+built" entry for this feature has been removed accordingly.

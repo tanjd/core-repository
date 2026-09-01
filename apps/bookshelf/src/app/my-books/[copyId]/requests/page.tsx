@@ -210,8 +210,16 @@ export default function CopyRequestsPage() {
 
   function openAcceptDialog(request: LoanRequest) {
     const proposed = toDateInputValue(request.expected_return_date);
+    const today = toDateInputValue(new Date().toISOString());
+    // A request that sat pending long enough can have a proposed date
+    // that's already in the past — don't pre-fill a value the date input's
+    // own `min={today}` implies is invalid. Bumping to today (rather than
+    // clearing) still lets handleAcceptConfirm's `acceptDate !==
+    // acceptProposedDate` check detect the change and PATCH the corrected
+    // date.
+    const clamped = proposed && proposed < today ? today : proposed;
     setAcceptProposedDate(proposed);
-    setAcceptDate(proposed);
+    setAcceptDate(clamped);
     setAcceptDialog({ requestId: request.id });
   }
 

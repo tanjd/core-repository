@@ -10,6 +10,7 @@ import {
   notificationDestination,
   notificationTypeLabel,
 } from "@/lib/notifications";
+import { useUnreadNotifications } from "@/hooks/useUnreadNotifications";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Pagination } from "@/components/ui/Pagination";
@@ -26,6 +27,7 @@ export default function NotificationsPage() {
   const [page, setPage] = useState(1);
   const [loading, setLoading] = useState(true);
   const [markingAll, setMarkingAll] = useState(false);
+  const { unreadCount, refetch: refetchUnread } = useUnreadNotifications();
 
   useEffect(() => {
     const token = localStorage.getItem("bookshelf_token");
@@ -68,6 +70,7 @@ export default function NotificationsPage() {
               }
             : prev,
         );
+        refetchUnread();
       } catch {
         // silently ignore
       }
@@ -88,6 +91,7 @@ export default function NotificationsPage() {
             }
           : prev,
       );
+      refetchUnread();
       toast.success("All notifications marked as read");
     } catch (err) {
       toast.error(
@@ -99,7 +103,6 @@ export default function NotificationsPage() {
   }
 
   const notifications = result?.items ?? [];
-  const unreadCount = notifications.filter((n) => !n.read).length;
 
   if (loading) {
     return (

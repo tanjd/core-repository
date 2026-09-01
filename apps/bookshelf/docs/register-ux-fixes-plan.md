@@ -1,6 +1,6 @@
 # Registration UX fixes — implementation plan
 
-**Status:** Approved for build · **Scope:** `apps/bookshelf` (frontend only) ·
+**Status:** Implemented · **Scope:** `apps/bookshelf` (frontend only) ·
 **Depends on:** `PasswordStrengthMeter`, `Input`, `register/page.tsx`,
 `forgot-password/page.tsx`, `ProfileForm.tsx`
 
@@ -9,7 +9,7 @@ frontend-only fixes. No backend changes, no new API endpoints, no migrations.
 
 ---
 
-## Fix 1 — No password visibility toggle
+## Fix 1 — No password visibility toggle ✅ Implemented (#88)
 
 **Priority: high · Affects: all password fields site-wide**
 
@@ -97,7 +97,7 @@ interactive element; the toggle is just a convenience affordance.
 
 ---
 
-## Fix 2 — Confirm-password mismatch only caught on submit
+## Fix 2 — Confirm-password mismatch only caught on submit ✅ Implemented (#87)
 
 **Priority: high · Affects: register, forgot-password, ProfileForm change-password**
 
@@ -172,7 +172,7 @@ typing — it turns green as soon as the two align. Red is reserved for a defini
 
 ---
 
-## Fix 3 — No resend cooldown on the verification step
+## Fix 3 — No resend cooldown on the verification step ✅ Implemented (#89)
 
 **Priority: medium · Affects: `register/page.tsx` only**
 
@@ -270,7 +270,7 @@ Button:
 
 ---
 
-## Fix 4 — Submit-time prose error duplicates the strength-meter checklist
+## Fix 4 — Submit-time prose error duplicates the strength-meter checklist ✅ Implemented (#90)
 
 **Priority: medium · Affects: `register/page.tsx`, `forgot-password/page.tsx`,
 `ProfileForm.tsx`**

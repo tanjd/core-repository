@@ -1,6 +1,6 @@
 # Monthly digest email — spec
 
-**Status:** Approved for build · **Scope:** `apps/bookshelf` + `apps/bookshelf-backend` ·
+**Status:** Implemented (#84) · **Scope:** `apps/bookshelf` + `apps/bookshelf-backend` ·
 **Depends on:** `User`, `Book`, `Recommendation`, `EmailService`, `Scheduler`, `AppSetting`
 
 Once a month, send opted-in members a short email covering what's new in the community:
@@ -158,9 +158,8 @@ feature — this digest only summarizes data that's already public elsewhere in 
 
 ## Housekeeping
 
-`apps/bookshelf/TODO.md` currently lists "digest email" under "Someday / hold — don't build
-until there's proven demand." Remove it from that list once this ships, so the file doesn't
-contradict a feature that's actually built.
+Shipped in #84. `apps/bookshelf/TODO.md`'s "Someday / hold" entry for this feature has been
+removed accordingly, so the file no longer contradicts a feature that's actually built.
 
 ## Testing
 

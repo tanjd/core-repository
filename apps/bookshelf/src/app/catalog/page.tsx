@@ -50,6 +50,11 @@ export default function CatalogPage() {
   // Tracks whether the user has explicitly picked a sort — once they have,
   // typing/clearing a search no longer auto-switches it for them.
   const sortTouchedRef = useRef(false);
+  // Guards against an older, slower fetch (e.g. a debounced search still in
+  // flight) resolving after a newer one (e.g. an immediate pagination click)
+  // and overwriting the newer result — only the most recently *started*
+  // fetch is allowed to apply its response.
+  const requestIdRef = useRef(0);
 
   async function fetchBooks(
     q: string,
@@ -58,6 +63,7 @@ export default function CatalogPage() {
     p: number,
     isInitial = false,
   ) {
+    const requestId = ++requestIdRef.current;
     if (isInitial) setLoading(true);
     else setFetching(true);
     setError("");
@@ -69,12 +75,16 @@ export default function CatalogPage() {
         page: p,
         page_size: PAGE_SIZE,
       });
+      if (requestId !== requestIdRef.current) return;
       setResult(data);
     } catch (err) {
+      if (requestId !== requestIdRef.current) return;
       setError(err instanceof Error ? err.message : "Failed to load books");
     } finally {
-      if (isInitial) setLoading(false);
-      else setFetching(false);
+      if (requestId === requestIdRef.current) {
+        if (isInitial) setLoading(false);
+        else setFetching(false);
+      }
     }
   }
 
