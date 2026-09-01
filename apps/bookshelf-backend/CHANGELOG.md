@@ -1,3 +1,13 @@
+## 0.23.0 (2026-09-01)
+
+### 🚀 Features
+
+- **bookshelf,bookshelf-backend:** rework My Books list and bulk actions ([#99](https://github.com/tanjd/core-repository/pull/99))
+
+### ❤️ Thank You
+
+- Jeddy Tan @tanjd
+
 ## 0.22.2 (2026-08-30)
 
 ### 🚀 Features
