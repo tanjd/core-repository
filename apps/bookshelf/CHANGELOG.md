@@ -1,3 +1,13 @@
+## 0.35.1 (2026-09-01)
+
+### 🩹 Fixes
+
+- **bookshelf:** stale-request guards, resend cooldown, and UX fixes ([#98](https://github.com/tanjd/core-repository/pull/98))
+
+### ❤️ Thank You
+
+- Jeddy Tan @tanjd
+
 ## 0.35.0 (2026-08-31)
 
 ### 🚀 Features
