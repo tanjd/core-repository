@@ -1,4 +1,20 @@
-import { test, expect } from "@playwright/test";
+import { test, expect, type Page } from "@playwright/test";
+
+// Bulk-select checkboxes are opt-in on mobile (a "Select" toggle in the
+// toolbar) but always visible on desktop — see apps/bookshelf/CLAUDE.md's
+// "Bulk-select checkboxes are opt-in on mobile" note. The toggle only
+// renders in the mobile-only toolbar block, so it's absent (not just
+// hidden) on the chromium project — hence the isVisible check rather than
+// clicking unconditionally.
+async function enterMobileSelectMode(page: Page) {
+  const selectToggle = page.getByRole("button", {
+    name: "Select",
+    exact: true,
+  });
+  if (await selectToggle.isVisible()) {
+    await selectToggle.click();
+  }
+}
 
 // Mocked API, not real backend — deliberately, per apps/bookshelf-e2e/CLAUDE.md's
 // "seeding 50 books to test pagination" example of when mocking is the right
@@ -90,9 +106,60 @@ test.describe("my books: pagination", () => {
       page.getByText("E2E Pagination Book 21").filter({ visible: true }),
     ).toBeVisible();
 
-    await page
-      .getByPlaceholder("Search your books by title, author…")
-      .fill("Book 01");
+    await page.getByPlaceholder("Search by title or author…").fill("Book 01");
+
+    await expect(
+      page.getByText("E2E Pagination Book 01").filter({ visible: true }),
+    ).toBeVisible();
+    await expect(page.getByRole("button", { name: "Page 2" })).toHaveCount(0);
+  });
+
+  test("bulk-deleting the rest of page 2 falls back to page 1 instead of rendering blank", async ({
+    page,
+  }) => {
+    // Regression test: nothing previously clamped `page` after the list
+    // shrank out from under it — bulk-deleting every copy on page 2 (ids
+    // 21-25, leaving 20 total = exactly one page) used to leave `page`
+    // stuck at 2, rendering a table/card list with zero rows and no
+    // "no results" messaging, even though page 1 still had 20 books.
+    // Single handler (registered after the describe-level beforeEach's
+    // "**/api/copies/mine" route, so it takes priority for every match)
+    // covering both GET .../copies/mine and DELETE .../copies/:id, so the
+    // bulk delete below actually shrinks what the next GET returns.
+    let copies = mockCopies();
+    await page.route("**/api/copies/**", (route) => {
+      const url = new URL(route.request().url());
+      const method = route.request().method();
+      if (method === "GET" && url.pathname.endsWith("/copies/mine")) {
+        return route.fulfill({ json: copies });
+      }
+      if (method === "DELETE") {
+        const id = Number(url.pathname.split("/").pop());
+        copies = copies.filter((c) => c.id !== id);
+        return route.fulfill({ status: 204, body: "" });
+      }
+      return route.continue();
+    });
+
+    await page.goto("/my-books");
+    await page.getByRole("button", { name: "Page 2" }).click();
+    await expect(
+      page.getByText("E2E Pagination Book 21").filter({ visible: true }),
+    ).toBeVisible();
+
+    // Select just the 5 books on page 2 (ids 21-25) — a plain "select all"
+    // would span every filtered book across both pages per the "Selection
+    // spans all filtered books" comment in page.tsx, deleting everything
+    // instead of leaving page 1's 20 books to fall back onto.
+    await enterMobileSelectMode(page);
+    for (let n = 21; n <= 25; n++) {
+      await page
+        .getByRole("checkbox", { name: `Select E2E Pagination Book ${n}` })
+        .filter({ visible: true })
+        .check();
+    }
+    await page.getByRole("button", { name: "Delete" }).click();
+    await page.getByRole("button", { name: "Remove copies" }).click();
 
     await expect(
       page.getByText("E2E Pagination Book 01").filter({ visible: true }),

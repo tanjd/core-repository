@@ -20,6 +20,7 @@ import { ConditionPicker, type Condition } from "../components/ConditionPicker";
 import { CopySettings } from "../components/CopySettings";
 import { MetadataSearchStep } from "../components/MetadataSearchStep";
 import { BookCover } from "@/components/BookCover";
+import { Breadcrumb } from "@/components/Breadcrumb";
 
 type ScanItemStatus = "resolving" | "resolved" | "unresolved";
 
@@ -285,16 +286,11 @@ export default function ScanPage() {
   if (view === "review") {
     return (
       <div className="flex flex-col gap-6 max-w-2xl mx-auto pb-24">
-        <div className="flex items-center justify-between">
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => setView("scan")}
-            className="self-start -ml-1"
-          >
-            <ArrowLeft className="size-4" /> Back to scanning
-          </Button>
-        </div>
+        <Breadcrumb
+          back={{ onClick: () => setView("scan") }}
+          backLabel="Scanning"
+          current="Review scanned books"
+        />
 
         <div>
           <h1 className="text-2xl font-bold">Review scanned books</h1>

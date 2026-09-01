@@ -4,13 +4,14 @@ import { useEffect, useMemo, useState, useRef } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { toast } from "sonner";
-import { ArrowLeft, ChevronRight, Info, RotateCw } from "lucide-react";
+import { ArrowLeft, Info, RotateCw } from "lucide-react";
 import { api } from "@/lib/api";
 import type { Book, User, Copy } from "@/lib/types";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { CopyCard } from "@/components/CopyCard";
 import { BookCover } from "@/components/BookCover";
+import { Breadcrumb } from "@/components/Breadcrumb";
 import { WaitlistButton } from "@/components/WaitlistButton";
 import { RecommendButton } from "@/components/RecommendButton";
 import { RecommendedBy } from "@/components/RecommendedBy";
@@ -377,25 +378,11 @@ export default function BookDetailPage() {
       {/* Breadcrumb works regardless of history state — a fresh link
           from a QR scan or shared URL has no back stack for router.back()
           to fall back to, so we lean on a real anchor to /catalog instead. */}
-      <nav
-        aria-label="Breadcrumb"
-        className="flex items-center gap-1 text-sm text-muted-foreground -ml-1"
-      >
-        <Button variant="ghost" size="sm" asChild className="h-8 px-2">
-          <Link href={catalogHref} aria-label={`Back to ${catalogLabel}`}>
-            <ArrowLeft className="size-4" />
-            <span>{catalogLabel}</span>
-          </Link>
-        </Button>
-        <ChevronRight className="size-3.5 shrink-0" aria-hidden="true" />
-        <span
-          className="truncate text-foreground"
-          title={book.title}
-          aria-current="page"
-        >
-          {book.title}
-        </span>
-      </nav>
+      <Breadcrumb
+        back={{ href: catalogHref }}
+        backLabel={catalogLabel}
+        current={book.title}
+      />
 
       {/* Stale-data hint: if a background refetch failed but we still
           have data from the previous fetch, tell the user rather than

@@ -265,7 +265,25 @@ export default function MyBooksPage() {
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [conditionFilter, setConditionFilter] = useState<string>("all");
   const [filtersOpen, setFiltersOpen] = useState(false);
-  const [actionMenuCopyId, setActionMenuCopyId] = useState<number | null>(null);
+  // Mobile only — bulk-select checkboxes stay hidden until the user opts in
+  // via "Select", since most mobile visits are a glance rather than a bulk
+  // edit (see apps/bookshelf/CLAUDE.md's "Cards over dense tables"). Desktop
+  // keeps its checkboxes always visible, matching the table's per-row ones.
+  const [mobileSelectMode, setMobileSelectMode] = useState(false);
+  // Separate state per layout rather than one shared id: the desktop table
+  // and mobile card list both render a CopyActionsPopover for every copy at
+  // all times (CSS-hidden per breakpoint, never unmounted — see "Cards over
+  // dense tables" in apps/bookshelf/CLAUDE.md), so sharing one id opened
+  // both Popovers for the clicked copy at once; each one's Radix dismiss
+  // layer then saw the other's freshly-mounted content as an outside
+  // interaction and immediately closed itself, collapsing the shared state
+  // back to null in the same tick — the button looked like it did nothing.
+  const [desktopActionMenuCopyId, setDesktopActionMenuCopyId] = useState<
+    number | null
+  >(null);
+  const [mobileActionMenuCopyId, setMobileActionMenuCopyId] = useState<
+    number | null
+  >(null);
   const [page, setPage] = useState(1);
 
   // Edit dialog
@@ -490,6 +508,7 @@ export default function MyBooksPage() {
     }
     setBulkAction(null);
     setSelectedCopyIds(new Set());
+    setMobileSelectMode(false);
     setBulkSubmitting(false);
     loadMyCopies();
   }
@@ -727,9 +746,15 @@ export default function MyBooksPage() {
     });
 
   const totalPages = Math.max(1, Math.ceil(filteredGroups.length / PAGE_SIZE));
+  // Derived rather than trusting `page` directly: deleting/pausing copies
+  // (or a filter narrowing the results) can shrink totalPages out from under
+  // whatever page the user was already on, and nothing else resets it —
+  // without clamping here, that leaves an empty page rendered with no
+  // "no results" messaging even though earlier pages still have books.
+  const currentPage = Math.min(page, totalPages);
   const pagedGroups = filteredGroups.slice(
-    (page - 1) * PAGE_SIZE,
-    page * PAGE_SIZE,
+    (currentPage - 1) * PAGE_SIZE,
+    currentPage * PAGE_SIZE,
   );
 
   // Selection spans all filtered books, not just the current page — a bulk
@@ -838,7 +863,7 @@ export default function MyBooksPage() {
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground pointer-events-none" />
             <Input
               type="search"
-              placeholder="Search your books by title, author…"
+              placeholder="Search by title or author…"
               value={search}
               onChange={(e) => updateSearch(e.target.value)}
               className="pl-9 h-10"
@@ -951,8 +976,10 @@ export default function MyBooksPage() {
       )}
 
       {totalCopies > 0 && filteredGroups.length > 0 && (
-        <div className="flex items-center justify-between -mt-2">
-          <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center justify-between gap-2 -mt-2">
+          {/* Desktop: select-all stays always visible, matching the
+              table's always-visible per-row checkboxes. */}
+          <div className="hidden md:flex items-center gap-2">
             <Checkbox
               id="select-all-copies"
               checked={allVisibleSelected}
@@ -967,8 +994,50 @@ export default function MyBooksPage() {
                 : "Select all"}
             </Label>
           </div>
+
+          {/* Mobile: bulk selection is opt-in via "Select" instead of a
+              permanent checkbox on every card — see mobileSelectMode. */}
+          <div className="flex md:hidden items-center gap-2 w-full">
+            {mobileSelectMode ? (
+              <>
+                <Checkbox
+                  id="select-all-copies-mobile"
+                  checked={allVisibleSelected}
+                  onCheckedChange={toggleSelectAllVisible}
+                />
+                <Label
+                  htmlFor="select-all-copies-mobile"
+                  className="text-sm font-normal text-muted-foreground cursor-pointer flex-1"
+                >
+                  {selectedCopyIds.size > 0
+                    ? `${selectedCopyIds.size} selected`
+                    : "Select all"}
+                </Label>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  onClick={() => {
+                    setMobileSelectMode(false);
+                    setSelectedCopyIds(new Set());
+                  }}
+                >
+                  Cancel
+                </Button>
+              </>
+            ) : (
+              <Button
+                size="sm"
+                variant="ghost"
+                className="-ml-3"
+                onClick={() => setMobileSelectMode(true)}
+              >
+                Select
+              </Button>
+            )}
+          </div>
+
           {selectedCopyIds.size > 0 && (
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 flex-wrap">
               <Button
                 size="sm"
                 variant="outline"
@@ -987,6 +1056,7 @@ export default function MyBooksPage() {
               <Button
                 size="sm"
                 variant="ghost"
+                className="hidden md:inline-flex"
                 onClick={() => setSelectedCopyIds(new Set())}
               >
                 Clear
@@ -1018,8 +1088,15 @@ export default function MyBooksPage() {
         </div>
       ) : (
         <>
-          {/* Desktop: dense table, grouped by book via a colSpan header row
-              per group. Hidden below md — see the mobile card list below. */}
+          {/* Desktop: dense table, one self-contained row per copy — book
+              cover/title/author live in the row's own "Book" cell (same
+              pattern as LendingTab.tsx's table) rather than a separate
+              colSpan banner row above the copies. A banner row put the book
+              info outside every column, which read as if it were "spilling"
+              across Condition/Status instead of belonging to a row; a copy
+              index badge (below) replaces the banner's "N copies" count for
+              books with more than one copy. Hidden below md — see the
+              mobile card list below. */}
           <div className="hidden md:block rounded-md border overflow-x-auto">
             <Table>
               <TableHeader>
@@ -1040,53 +1117,18 @@ export default function MyBooksPage() {
 
                   return (
                     <Fragment key={group.bookId}>
-                      <TableRow className="bg-muted/30 hover:bg-muted/30">
-                        <TableCell colSpan={6} className="py-3">
-                          <div className="flex items-center gap-3">
-                            <Link
-                              href={`/catalog/${group.bookId}?from=/my-books`}
-                              className="w-10 shrink-0"
-                            >
-                              <div className="relative w-10 aspect-[2/3] rounded overflow-hidden">
-                                <BookCover
-                                  title={group.title}
-                                  author={group.author}
-                                  coverUrl={group.coverUrl}
-                                  alt={group.title}
-                                  sizes="40px"
-                                />
-                              </div>
-                            </Link>
-                            <div className="min-w-0">
-                              <Link
-                                href={`/catalog/${group.bookId}?from=/my-books`}
-                                className="font-semibold hover:underline"
-                              >
-                                {group.title}
-                              </Link>
-                              {group.author && (
-                                <span className="text-sm text-muted-foreground">
-                                  {" "}
-                                  by {group.author}
-                                </span>
-                              )}
-                              <span className="text-xs text-muted-foreground ml-2">
-                                {group.copies.length}{" "}
-                                {group.copies.length === 1 ? "copy" : "copies"}
-                              </span>
-                            </div>
-                          </div>
-                        </TableCell>
-                      </TableRow>
                       {rows.map(
-                        ({
-                          copy,
-                          canDelete,
-                          canTransfer,
-                          loan,
-                          overdue,
-                          pendingCount,
-                        }) => (
+                        (
+                          {
+                            copy,
+                            canDelete,
+                            canTransfer,
+                            loan,
+                            overdue,
+                            pendingCount,
+                          },
+                          i,
+                        ) => (
                           <TableRow key={copy.id}>
                             <TableCell>
                               <Checkbox
@@ -1095,7 +1137,44 @@ export default function MyBooksPage() {
                                 onCheckedChange={() => toggleSelected(copy.id)}
                               />
                             </TableCell>
-                            <TableCell />
+                            <TableCell>
+                              <div className="flex items-center gap-3">
+                                <Link
+                                  href={`/catalog/${group.bookId}?from=/my-books`}
+                                  className="w-12 shrink-0"
+                                >
+                                  <div className="relative w-12 aspect-[2/3] rounded overflow-hidden">
+                                    <BookCover
+                                      title={group.title}
+                                      author={group.author}
+                                      coverUrl={group.coverUrl}
+                                      alt={group.title}
+                                      sizes="48px"
+                                    />
+                                  </div>
+                                </Link>
+                                <div className="min-w-0">
+                                  <div className="flex items-center gap-1.5">
+                                    <Link
+                                      href={`/catalog/${group.bookId}?from=/my-books`}
+                                      className="font-medium truncate max-w-[200px] hover:underline"
+                                    >
+                                      {group.title}
+                                    </Link>
+                                    {rows.length > 1 && (
+                                      <span className="text-xs text-muted-foreground shrink-0">
+                                        (copy {i + 1}/{rows.length})
+                                      </span>
+                                    )}
+                                  </div>
+                                  {group.author && (
+                                    <p className="text-xs text-muted-foreground truncate max-w-[200px]">
+                                      {group.author}
+                                    </p>
+                                  )}
+                                </div>
+                              </div>
+                            </TableCell>
                             <TableCell>
                               <Badge
                                 variant={
@@ -1158,7 +1237,17 @@ export default function MyBooksPage() {
                             <TableCell className="text-right">
                               <div className="flex items-center justify-end gap-2">
                                 <Link href={`/my-books/${copy.id}/requests`}>
-                                  <Button size="sm">
+                                  {/* Outline unless there's something to act
+                                      on — same idle/actionable convention as
+                                      the mobile card below; only the layout
+                                      should differ between breakpoints, not
+                                      what the color means. */}
+                                  <Button
+                                    size="sm"
+                                    variant={
+                                      pendingCount ? "default" : "outline"
+                                    }
+                                  >
                                     Manage Requests
                                     {!!pendingCount && (
                                       <Badge
@@ -1173,22 +1262,24 @@ export default function MyBooksPage() {
                                 <CopyActionsPopover
                                   canTransfer={canTransfer}
                                   canDelete={canDelete}
-                                  isOpen={actionMenuCopyId === copy.id}
+                                  isOpen={desktopActionMenuCopyId === copy.id}
                                   onOpenChange={(open) =>
-                                    setActionMenuCopyId(open ? copy.id : null)
+                                    setDesktopActionMenuCopyId(
+                                      open ? copy.id : null,
+                                    )
                                   }
                                   onEdit={() => {
                                     openEdit(copy);
-                                    setActionMenuCopyId(null);
+                                    setDesktopActionMenuCopyId(null);
                                   }}
                                   onTransfer={() => {
                                     setTransferCopy(copy);
                                     setTransferEmail("");
-                                    setActionMenuCopyId(null);
+                                    setDesktopActionMenuCopyId(null);
                                   }}
                                   onDelete={() => {
                                     setDeleteCopy(copy);
-                                    setActionMenuCopyId(null);
+                                    setDesktopActionMenuCopyId(null);
                                   }}
                                 />
                               </div>
@@ -1203,168 +1294,195 @@ export default function MyBooksPage() {
             </Table>
           </div>
 
-          {/* Mobile: book heading + one glance card per copy — same data as
-              the table above, shown below md instead of it. */}
-          <div className="flex flex-col gap-6 md:hidden">
+          {/* Mobile: one self-contained glance card per copy — cover, title
+              and author live inside the card itself (rather than a separate
+              heading block above it) so a single-copy book, the common case,
+              reads as one row instead of two stacked chunks. A book with
+              multiple copies gets one card per copy, each labelled "(copy
+              i/n)" next to the title — same data as the desktop table,
+              shown below md instead of it. */}
+          <div className="flex flex-col gap-3 md:hidden">
             {pagedGroups.map((group) => {
               const rows = group.copies.map((copy) =>
                 buildCopyRowInfo(copy, pendingCounts, activeLoans),
               );
 
               return (
-                <div key={group.bookId} className="flex flex-col gap-3">
-                  <div className="flex gap-3 items-center">
-                    <Link
-                      href={`/catalog/${group.bookId}?from=/my-books`}
-                      className="w-10 shrink-0"
-                    >
-                      <div className="relative w-10 aspect-[2/3] rounded overflow-hidden">
-                        <BookCover
-                          title={group.title}
-                          author={group.author}
-                          coverUrl={group.coverUrl}
-                          alt={group.title}
-                          sizes="40px"
-                        />
-                      </div>
-                    </Link>
-                    <div className="min-w-0">
-                      <Link
-                        href={`/catalog/${group.bookId}?from=/my-books`}
-                        className="font-semibold text-base hover:underline line-clamp-2"
-                      >
-                        {group.title}
-                      </Link>
-                      {group.author && (
-                        <p className="text-sm text-muted-foreground">
-                          by {group.author}
-                        </p>
-                      )}
-                    </div>
-                  </div>
-
-                  <div className="flex flex-col gap-3">
-                    {rows.map(
-                      ({
+                <Fragment key={group.bookId}>
+                  {rows.map(
+                    (
+                      {
                         copy,
                         canDelete,
                         canTransfer,
                         loan,
                         overdue,
                         pendingCount,
-                      }) => (
-                        <Card key={copy.id} className="overflow-hidden">
-                          <CardContent className="p-4 flex gap-3">
+                      },
+                      i,
+                    ) => (
+                      <Card
+                        key={copy.id}
+                        className="overflow-hidden py-0 gap-0"
+                      >
+                        <CardContent className="p-3 flex gap-3">
+                          {mobileSelectMode && (
                             <Checkbox
                               className="mt-1 shrink-0"
                               aria-label={`Select ${copy.bookTitle ?? "copy"}`}
                               checked={selectedCopyIds.has(copy.id)}
                               onCheckedChange={() => toggleSelected(copy.id)}
                             />
-                            <div className="flex flex-col gap-2 flex-1 min-w-0">
-                              <div className="flex flex-wrap items-center gap-2">
-                                <Badge
-                                  variant={
-                                    conditionVariant[copy.condition] ??
-                                    "outline"
-                                  }
-                                  className="capitalize"
-                                >
-                                  {copy.condition}
-                                </Badge>
-                                <Badge
-                                  variant={
-                                    statusVariant[copy.status] ?? "outline"
-                                  }
-                                  className="capitalize"
-                                >
-                                  {copy.status}
-                                </Badge>
-                                {copy.status === "requested" &&
-                                  !!pendingCount && (
-                                    <Badge variant="outline">
-                                      {pendingCount} pending
-                                    </Badge>
+                          )}
+                          <Link
+                            href={`/catalog/${group.bookId}?from=/my-books`}
+                            className="w-12 shrink-0"
+                          >
+                            <div className="relative w-12 aspect-[2/3] rounded overflow-hidden">
+                              <BookCover
+                                title={group.title}
+                                author={group.author}
+                                coverUrl={group.coverUrl}
+                                alt={group.title}
+                                sizes="48px"
+                              />
+                            </div>
+                          </Link>
+                          <div className="flex flex-col gap-1.5 flex-1 min-w-0">
+                            {/* Title + kebab share this row, kebab pinned to
+                                the card's right edge — mirrors the desktop
+                                table's right-aligned Actions column, and
+                                uses the width a left-aligned column would
+                                otherwise leave empty on a wide phone card. */}
+                            <div className="flex items-start justify-between gap-2">
+                              <div className="min-w-0">
+                                <div className="flex items-center gap-1.5">
+                                  <Link
+                                    href={`/catalog/${group.bookId}?from=/my-books`}
+                                    className="font-medium text-sm truncate hover:underline"
+                                  >
+                                    {group.title}
+                                  </Link>
+                                  {rows.length > 1 && (
+                                    <span className="text-xs text-muted-foreground shrink-0">
+                                      (copy {i + 1}/{rows.length})
+                                    </span>
                                   )}
-                                {overdue && (
-                                  <Badge variant="destructive">Overdue</Badge>
+                                </div>
+                                {group.author && (
+                                  <p className="text-xs text-muted-foreground truncate">
+                                    by {group.author}
+                                  </p>
                                 )}
                               </div>
-
-                              {loan && (
-                                <p
-                                  className={cn(
-                                    "text-xs",
-                                    overdue
-                                      ? "text-destructive font-medium"
-                                      : "text-muted-foreground",
-                                  )}
-                                >
-                                  Loaned to{" "}
-                                  <span className="font-medium text-foreground">
-                                    {loan.borrowerName}
-                                  </span>
-                                  {loan.dueDate
-                                    ? ` · ${overdue ? "overdue since" : "due"} ${new Date(loan.dueDate).toLocaleDateString()}`
-                                    : " · no return date agreed"}
-                                </p>
-                              )}
-
-                              {copy.notes && (
-                                <p className="text-xs text-muted-foreground line-clamp-1">
-                                  {copy.notes}
-                                </p>
-                              )}
-
-                              <div className="flex items-center gap-2 mt-1">
-                                <Link href={`/my-books/${copy.id}/requests`}>
-                                  <Button size="sm">
-                                    Manage Requests
-                                    {!!pendingCount && (
-                                      <Badge
-                                        variant="secondary"
-                                        className="px-1.5"
-                                      >
-                                        {pendingCount}
-                                      </Badge>
-                                    )}
-                                  </Button>
-                                </Link>
-                                <CopyActionsPopover
-                                  canTransfer={canTransfer}
-                                  canDelete={canDelete}
-                                  isOpen={actionMenuCopyId === copy.id}
-                                  onOpenChange={(open) =>
-                                    setActionMenuCopyId(open ? copy.id : null)
-                                  }
-                                  onEdit={() => {
-                                    openEdit(copy);
-                                    setActionMenuCopyId(null);
-                                  }}
-                                  onTransfer={() => {
-                                    setTransferCopy(copy);
-                                    setTransferEmail("");
-                                    setActionMenuCopyId(null);
-                                  }}
-                                  onDelete={() => {
-                                    setDeleteCopy(copy);
-                                    setActionMenuCopyId(null);
-                                  }}
-                                />
-                              </div>
+                              <CopyActionsPopover
+                                canTransfer={canTransfer}
+                                canDelete={canDelete}
+                                isOpen={mobileActionMenuCopyId === copy.id}
+                                onOpenChange={(open) =>
+                                  setMobileActionMenuCopyId(
+                                    open ? copy.id : null,
+                                  )
+                                }
+                                onEdit={() => {
+                                  openEdit(copy);
+                                  setMobileActionMenuCopyId(null);
+                                }}
+                                onTransfer={() => {
+                                  setTransferCopy(copy);
+                                  setTransferEmail("");
+                                  setMobileActionMenuCopyId(null);
+                                }}
+                                onDelete={() => {
+                                  setDeleteCopy(copy);
+                                  setMobileActionMenuCopyId(null);
+                                }}
+                              />
                             </div>
-                          </CardContent>
-                        </Card>
-                      ),
-                    )}
-                  </div>
-                </div>
+
+                            <div className="flex flex-wrap items-center gap-1.5">
+                              <Badge
+                                variant={
+                                  conditionVariant[copy.condition] ?? "outline"
+                                }
+                                className="capitalize"
+                              >
+                                {copy.condition}
+                              </Badge>
+                              <Badge
+                                variant={
+                                  statusVariant[copy.status] ?? "outline"
+                                }
+                                className="capitalize"
+                              >
+                                {copy.status}
+                              </Badge>
+                              {copy.status === "requested" &&
+                                !!pendingCount && (
+                                  <Badge variant="outline">
+                                    {pendingCount} pending
+                                  </Badge>
+                                )}
+                              {overdue && (
+                                <Badge variant="destructive">Overdue</Badge>
+                              )}
+                            </div>
+
+                            {loan && (
+                              <p
+                                className={cn(
+                                  "text-xs",
+                                  overdue
+                                    ? "text-destructive font-medium"
+                                    : "text-muted-foreground",
+                                )}
+                              >
+                                Loaned to{" "}
+                                <span className="font-medium text-foreground">
+                                  {loan.borrowerName}
+                                </span>
+                                {loan.dueDate
+                                  ? ` · ${overdue ? "overdue since" : "due"} ${new Date(loan.dueDate).toLocaleDateString()}`
+                                  : " · no return date agreed"}
+                              </p>
+                            )}
+
+                            {copy.notes && (
+                              <p className="text-xs text-muted-foreground line-clamp-1">
+                                {copy.notes}
+                              </p>
+                            )}
+                          </div>
+                        </CardContent>
+                        {/* Full-bleed footer, edge to edge under the cover
+                            too — not just under the text column — so this
+                            reads as the card's action rather than the text
+                            column's. Outline unless there's something to
+                            act on, matching the desktop table's button. */}
+                        <Link href={`/my-books/${copy.id}/requests`}>
+                          <Button
+                            size="sm"
+                            variant={pendingCount ? "default" : "outline"}
+                            className="w-full rounded-none border-x-0 border-b-0"
+                          >
+                            Manage Requests
+                            {!!pendingCount && (
+                              <Badge variant="secondary" className="px-1.5">
+                                {pendingCount}
+                              </Badge>
+                            )}
+                          </Button>
+                        </Link>
+                      </Card>
+                    ),
+                  )}
+                </Fragment>
               );
             })}
           </div>
 
           <Pagination
-            page={page}
+            page={currentPage}
             totalPages={totalPages}
             onPageChange={setPage}
           />

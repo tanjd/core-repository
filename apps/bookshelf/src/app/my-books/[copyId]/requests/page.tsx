@@ -2,10 +2,12 @@
 
 import { Fragment, useEffect, useState, useRef } from "react";
 import { useParams, useRouter } from "next/navigation";
-import { ArrowLeft, ChevronDown, ChevronRight } from "lucide-react";
+import { ChevronDown, ChevronRight } from "lucide-react";
 import { toast } from "sonner";
 import { api } from "@/lib/api";
-import type { LoanRequest } from "@/lib/types";
+import type { Copy, LoanRequest } from "@/lib/types";
+import { Breadcrumb } from "@/components/Breadcrumb";
+import { BookCover } from "@/components/BookCover";
 import { ContactReveal } from "@/components/ContactReveal";
 import { ReturnDateCell } from "@/components/ReturnDateCell";
 import { Button } from "@/components/ui/button";
@@ -116,6 +118,7 @@ export default function CopyRequestsPage() {
   const copyId = Number(params.copyId);
 
   const [requests, setRequests] = useState<LoanRequest[]>([]);
+  const [copyInfo, setCopyInfo] = useState<Copy | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [actioning, setActioning] = useState<number | null>(null);
@@ -151,9 +154,18 @@ export default function CopyRequestsPage() {
     if (!copyId || fetchedCopyIdRef.current === copyId) return;
     fetchedCopyIdRef.current = copyId;
     setLoading(true);
-    api
-      .getLoanRequestsByCopy(copyId)
-      .then(setRequests)
+    // Book identity (title/author/cover) is sourced from the owner's copy
+    // list rather than from `requests[0]` — the requests list is empty for
+    // a copy with no requests yet, which would otherwise leave the page
+    // unable to say which book it's showing.
+    Promise.all([
+      api.getLoanRequestsByCopy(copyId).then(setRequests),
+      api
+        .getMyCopies()
+        .then((copies) =>
+          setCopyInfo(copies.find((c) => c.id === copyId) ?? null),
+        ),
+    ])
       .catch((err) =>
         setError(
           err instanceof Error ? err.message : "Failed to load requests",
@@ -326,27 +338,40 @@ export default function CopyRequestsPage() {
     return null;
   }
 
-  const bookTitle = requests[0]?.copy?.book?.title;
-  const bookAuthor = requests[0]?.copy?.book?.author;
+  const book = copyInfo?.book ?? requests[0]?.copy?.book;
+  const bookTitle = book?.title;
+  const bookAuthor = book?.author;
+  const notFound = !loading && !error && !bookTitle && !copyInfo;
 
   return (
     <div className="flex flex-col gap-6">
-      <Button
-        variant="ghost"
-        size="sm"
-        onClick={() => router.push("/my-books")}
-        className="self-start -ml-1"
-      >
-        <ArrowLeft className="size-4" /> Back to My Books
-      </Button>
+      <Breadcrumb
+        back={{ href: "/my-books" }}
+        backLabel="My Books"
+        current={bookTitle ?? "Manage Requests"}
+      />
 
-      <div>
-        <h1 className="text-2xl font-bold">Manage Requests</h1>
-        <p className="text-muted-foreground text-sm mt-1">
-          {bookTitle
-            ? `${bookTitle}${bookAuthor ? ` · ${bookAuthor}` : ""}`
-            : `Copy #${copyId}`}
-        </p>
+      <div className="flex items-center gap-3">
+        {bookTitle && (
+          <div className="relative w-12 aspect-[2/3] rounded overflow-hidden bg-muted shrink-0">
+            <BookCover
+              title={bookTitle}
+              author={bookAuthor}
+              coverUrl={book?.cover_url}
+              sizes="48px"
+            />
+          </div>
+        )}
+        <div>
+          <h1 className="text-2xl font-bold">Manage Requests</h1>
+          <p className="text-muted-foreground text-sm mt-1">
+            {bookTitle
+              ? `${bookTitle}${bookAuthor ? ` · ${bookAuthor}` : ""}`
+              : notFound
+                ? "This copy could not be found."
+                : "Loading…"}
+          </p>
+        </div>
       </div>
 
       {loading && (

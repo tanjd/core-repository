@@ -1,6 +1,27 @@
-import { test, expect, type APIRequestContext } from "@playwright/test";
+import {
+  test,
+  expect,
+  type APIRequestContext,
+  type Page,
+} from "@playwright/test";
 import { login, registerTestUser } from "./auth-helpers";
 import { E2E_TEST_USER_PASSWORD } from "./test-users";
+
+// Bulk-select checkboxes are opt-in on mobile (a "Select" toggle in the
+// toolbar) but always visible on desktop — see apps/bookshelf/CLAUDE.md's
+// "Bulk-select checkboxes are opt-in on mobile" note. The toggle only
+// renders in the mobile-only toolbar block, so it's absent (not just
+// hidden) on the chromium project — hence the isVisible check rather than
+// clicking unconditionally.
+async function enterMobileSelectMode(page: Page) {
+  const selectToggle = page.getByRole("button", {
+    name: "Select",
+    exact: true,
+  });
+  if (await selectToggle.isVisible()) {
+    await selectToggle.click();
+  }
+}
 
 // Covers the My Books page additions from the "copy status badges / overdue
 // nudges / bulk actions" plan: inline per-copy status (pending count, "on
@@ -127,10 +148,27 @@ test.describe("my books: status badges and bulk actions", () => {
 
     await login(page, ownerEmail, E2E_TEST_USER_PASSWORD);
     await page.goto("/my-books");
+    // Wait for the list to render before looking for the "Select" toggle —
+    // it (and the checkboxes) don't exist until the copies have loaded.
+    await expect(
+      page.getByText(titleA).filter({ visible: true }),
+    ).toBeVisible();
 
-    await page.getByRole("checkbox", { name: `Select ${titleA}` }).check();
-    await page.getByRole("checkbox", { name: `Select ${titleB}` }).check();
-    await expect(page.getByText("2 selected")).toBeVisible();
+    await enterMobileSelectMode(page);
+    await page
+      .getByRole("checkbox", { name: `Select ${titleA}` })
+      .filter({ visible: true })
+      .check();
+    await page
+      .getByRole("checkbox", { name: `Select ${titleB}` })
+      .filter({ visible: true })
+      .check();
+    // Visible-only filter — the desktop and mobile "select all" toolbars
+    // both render this same "N selected" label, one CSS-hidden per
+    // apps/bookshelf/CLAUDE.md's responsive pattern.
+    await expect(
+      page.getByText("2 selected").filter({ visible: true }),
+    ).toBeVisible();
 
     await page.getByRole("button", { name: "Pause lending" }).click();
     await page.getByRole("button", { name: "Pause 2 copies" }).click();
@@ -144,8 +182,16 @@ test.describe("my books: status badges and bulk actions", () => {
     expect(copies.find((c) => c.id === b.copyId)?.status).toBe("unavailable");
 
     // Bulk delete both copies now that they're no longer loaned/requested.
-    await page.getByRole("checkbox", { name: `Select ${titleA}` }).check();
-    await page.getByRole("checkbox", { name: `Select ${titleB}` }).check();
+    // Selection (and mobileSelectMode) reset after the pause action above.
+    await enterMobileSelectMode(page);
+    await page
+      .getByRole("checkbox", { name: `Select ${titleA}` })
+      .filter({ visible: true })
+      .check();
+    await page
+      .getByRole("checkbox", { name: `Select ${titleB}` })
+      .filter({ visible: true })
+      .check();
     await page.getByRole("button", { name: "Delete" }).click();
     await page.getByRole("button", { name: "Remove copies" }).click();
     await expect(page.getByText("2 copies removed")).toBeVisible();
@@ -174,12 +220,20 @@ test.describe("my books: status badges and bulk actions", () => {
 
     await login(page, ownerEmail, E2E_TEST_USER_PASSWORD);
     await page.goto("/my-books");
+    // Wait for the list to render before looking for the "Select" toggle —
+    // it (and the checkboxes) don't exist until the copies have loaded.
+    await expect(
+      page.getByText(availableTitle).filter({ visible: true }),
+    ).toBeVisible();
 
+    await enterMobileSelectMode(page);
     await page
       .getByRole("checkbox", { name: `Select ${requestedTitle}` })
+      .filter({ visible: true })
       .check();
     await page
       .getByRole("checkbox", { name: `Select ${availableTitle}` })
+      .filter({ visible: true })
       .check();
     await page.getByRole("button", { name: "Delete" }).click();
     await page.getByRole("button", { name: "Remove copies" }).click();

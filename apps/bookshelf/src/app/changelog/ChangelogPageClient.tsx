@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import Link from "next/link";
 
 import type { ChangelogEntry } from "@/lib/changelog";
 import { formatChangelogDateLabel } from "@/lib/changelog";
@@ -68,7 +67,6 @@ export function ChangelogPageClient({
           isLoggedIn={isLoggedIn}
         />
         <ChangelogEmptyState />
-        <ChangelogFooterLinks />
       </div>
     );
   }
@@ -162,8 +160,6 @@ export function ChangelogPageClient({
           </div>
         </>
       ) : null}
-
-      <ChangelogFooterLinks />
     </div>
   );
 }
@@ -203,20 +199,6 @@ function ChangelogPageHeader({
           onCheckedChange={onAdminDetailsChange}
         />
       </div>
-    </div>
-  );
-}
-
-function ChangelogFooterLinks() {
-  return (
-    <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-muted-foreground">
-      <Link href="/catalog" className="hover:underline underline-offset-2">
-        Catalog
-      </Link>
-      <span aria-hidden>·</span>
-      <Link href="/about" className="hover:underline underline-offset-2">
-        About
-      </Link>
     </div>
   );
 }
