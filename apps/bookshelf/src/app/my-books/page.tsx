@@ -50,6 +50,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { BookCover } from "@/components/BookCover";
+import { Pagination } from "@/components/ui/Pagination";
 import { cn } from "@/lib/utils";
 import { isOverdue } from "@/lib/loanStatus";
 import {
@@ -119,6 +120,13 @@ const importActionLabel: Record<ImportRowAction, string> = {
   possible_match: "Possible match",
   skipped: "Skipped",
 };
+
+// Books are grouped and paginated client-side rather than via the backend,
+// since GET /copies/mine returns the full list unpaginated and this page
+// already filters/sorts in memory — a reasonable tradeoff at the "tens of
+// books per member" scale this app targets (see product scope note in
+// apps/bookshelf-backend/CLAUDE.md).
+const PAGE_SIZE = 20;
 
 const SORT_LABELS: Record<string, string> = {
   title: "Title A–Z",
@@ -258,6 +266,7 @@ export default function MyBooksPage() {
   const [conditionFilter, setConditionFilter] = useState<string>("all");
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [actionMenuCopyId, setActionMenuCopyId] = useState<number | null>(null);
+  const [page, setPage] = useState(1);
 
   // Edit dialog
   const [editCopy, setEditCopy] = useState<MyCopy | null>(null);
@@ -602,6 +611,27 @@ export default function MyBooksPage() {
     setStatusFilter("all");
     setConditionFilter("all");
     setSort("title");
+    setPage(1);
+  }
+
+  function updateSearch(value: string) {
+    setSearch(value);
+    setPage(1);
+  }
+
+  function updateSort(value: typeof sort) {
+    setSort(value);
+    setPage(1);
+  }
+
+  function updateStatusFilter(value: string) {
+    setStatusFilter(value);
+    setPage(1);
+  }
+
+  function updateConditionFilter(value: string) {
+    setConditionFilter(value);
+    setPage(1);
   }
 
   const activeFilterCount = [
@@ -612,7 +642,7 @@ export default function MyBooksPage() {
 
   function renderSortSelect(triggerClassName: string) {
     return (
-      <Select value={sort} onValueChange={(v) => setSort(v as typeof sort)}>
+      <Select value={sort} onValueChange={(v) => updateSort(v as typeof sort)}>
         <SelectTrigger className={triggerClassName}>
           <SelectValue />
         </SelectTrigger>
@@ -628,7 +658,7 @@ export default function MyBooksPage() {
 
   function renderStatusSelect(triggerClassName: string) {
     return (
-      <Select value={statusFilter} onValueChange={setStatusFilter}>
+      <Select value={statusFilter} onValueChange={updateStatusFilter}>
         <SelectTrigger className={triggerClassName}>
           <SelectValue />
         </SelectTrigger>
@@ -645,7 +675,7 @@ export default function MyBooksPage() {
 
   function renderConditionSelect(triggerClassName: string) {
     return (
-      <Select value={conditionFilter} onValueChange={setConditionFilter}>
+      <Select value={conditionFilter} onValueChange={updateConditionFilter}>
         <SelectTrigger className={triggerClassName}>
           <SelectValue />
         </SelectTrigger>
@@ -696,6 +726,15 @@ export default function MyBooksPage() {
       }
     });
 
+  const totalPages = Math.max(1, Math.ceil(filteredGroups.length / PAGE_SIZE));
+  const pagedGroups = filteredGroups.slice(
+    (page - 1) * PAGE_SIZE,
+    page * PAGE_SIZE,
+  );
+
+  // Selection spans all filtered books, not just the current page — a bulk
+  // pause/delete should act on everything matching the active filters, not
+  // reset when the user pages through a long list.
   const visibleCopyIds = filteredGroups.flatMap((g) =>
     g.copies.map((c) => c.id),
   );
@@ -801,7 +840,7 @@ export default function MyBooksPage() {
               type="search"
               placeholder="Search your books by title, author…"
               value={search}
-              onChange={(e) => setSearch(e.target.value)}
+              onChange={(e) => updateSearch(e.target.value)}
               className="pl-9 h-10"
             />
           </div>
@@ -856,7 +895,7 @@ export default function MyBooksPage() {
               <button
                 type="button"
                 aria-label="Clear search"
-                onClick={() => setSearch("")}
+                onClick={() => updateSearch("")}
                 className="rounded-full hover:bg-background/60 p-0.5"
               >
                 <X className="size-3" />
@@ -869,7 +908,7 @@ export default function MyBooksPage() {
               <button
                 type="button"
                 aria-label="Remove status filter"
-                onClick={() => setStatusFilter("all")}
+                onClick={() => updateStatusFilter("all")}
                 className="rounded-full hover:bg-background/60 p-0.5"
               >
                 <X className="size-3" />
@@ -882,7 +921,7 @@ export default function MyBooksPage() {
               <button
                 type="button"
                 aria-label="Remove condition filter"
-                onClick={() => setConditionFilter("all")}
+                onClick={() => updateConditionFilter("all")}
                 className="rounded-full hover:bg-background/60 p-0.5"
               >
                 <X className="size-3" />
@@ -895,7 +934,7 @@ export default function MyBooksPage() {
               <button
                 type="button"
                 aria-label="Reset sort"
-                onClick={() => setSort("title")}
+                onClick={() => updateSort("title")}
                 className="rounded-full hover:bg-background/60 p-0.5"
               >
                 <X className="size-3" />
@@ -994,7 +1033,7 @@ export default function MyBooksPage() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {filteredGroups.map((group) => {
+                {pagedGroups.map((group) => {
                   const rows = group.copies.map((copy) =>
                     buildCopyRowInfo(copy, pendingCounts, activeLoans),
                   );
@@ -1167,7 +1206,7 @@ export default function MyBooksPage() {
           {/* Mobile: book heading + one glance card per copy — same data as
               the table above, shown below md instead of it. */}
           <div className="flex flex-col gap-6 md:hidden">
-            {filteredGroups.map((group) => {
+            {pagedGroups.map((group) => {
               const rows = group.copies.map((copy) =>
                 buildCopyRowInfo(copy, pendingCounts, activeLoans),
               );
@@ -1323,6 +1362,12 @@ export default function MyBooksPage() {
               );
             })}
           </div>
+
+          <Pagination
+            page={page}
+            totalPages={totalPages}
+            onPageChange={setPage}
+          />
         </>
       )}
 
