@@ -2,11 +2,11 @@ import { test, expect, type Page } from "@playwright/test";
 import { login, registerTestUser } from "./auth-helpers";
 import { E2E_TEST_USER_PASSWORD } from "./test-users";
 
-// Import/Export live behind My Books' "More actions" overflow popover
+// Import/Export live behind My Books' "More library actions" overflow popover
 // (apps/bookshelf/src/app/my-books/page.tsx) rather than as standalone
 // header buttons — open it before reaching for the Import dialog.
 async function openImportDialog(page: Page) {
-  await page.getByRole("button", { name: "More actions" }).click();
+  await page.getByRole("button", { name: "More library actions" }).click();
   await page.getByRole("button", { name: "Import books" }).click();
 }
 

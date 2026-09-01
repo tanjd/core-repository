@@ -6,6 +6,7 @@ import { toast } from "sonner";
 import { api } from "@/lib/api";
 import type { LoanRequest } from "@/lib/types";
 import { timeAgo } from "@/lib/timeFormat";
+import { isOverdue } from "@/lib/loanStatus";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -78,10 +79,8 @@ export function ReturnDateCell({
     }
   }
 
-  const isOverdue =
-    request.status === "accepted" &&
-    !!request.expected_return_date &&
-    new Date(request.expected_return_date) < new Date();
+  const overdue =
+    request.status === "accepted" && isOverdue(request.expected_return_date);
 
   const amendedByName = !request.expected_return_date_changed_by
     ? null
@@ -92,12 +91,12 @@ export function ReturnDateCell({
   return (
     <div className="flex flex-col gap-0.5">
       <div className="flex items-center gap-1">
-        <span className={cn(isOverdue && "text-destructive font-medium")}>
+        <span className={cn(overdue && "text-destructive font-medium")}>
           {request.expected_return_date
             ? new Date(request.expected_return_date).toLocaleDateString()
             : "No return date agreed"}
         </span>
-        {isOverdue && <Badge variant="destructive">Overdue</Badge>}
+        {overdue && <Badge variant="destructive">Overdue</Badge>}
         {request.status === "accepted" && (
           <Popover
             open={open}

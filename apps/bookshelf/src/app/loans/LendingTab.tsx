@@ -21,6 +21,7 @@ import {
 } from "@/components/ui/table";
 import { SegmentedControl } from "@/components/ui/segmented-control";
 import { cn } from "@/lib/utils";
+import { isOverdue } from "@/lib/loanStatus";
 
 const PAGE_SIZE = 20;
 
@@ -49,18 +50,16 @@ function hasExpandContent(req: LoanRequest): boolean {
 // read-only by design: actions stay on the per-copy /my-books/{copyId}/requests
 // page, this is a display-only overdue treatment matching the same logic.
 function returnDateDisplay(req: LoanRequest) {
-  const isOverdue =
-    req.status === "accepted" &&
-    !!req.expected_return_date &&
-    new Date(req.expected_return_date) < new Date();
+  const overdue =
+    req.status === "accepted" && isOverdue(req.expected_return_date);
   return (
     <div className="flex items-center gap-1">
-      <span className={cn(isOverdue && "text-destructive font-medium")}>
+      <span className={cn(overdue && "text-destructive font-medium")}>
         {req.expected_return_date
           ? new Date(req.expected_return_date).toLocaleDateString()
           : "No return date agreed"}
       </span>
-      {isOverdue && <Badge variant="destructive">Overdue</Badge>}
+      {overdue && <Badge variant="destructive">Overdue</Badge>}
     </div>
   );
 }

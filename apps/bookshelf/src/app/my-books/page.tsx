@@ -42,6 +42,7 @@ import {
 } from "@/components/ui/select";
 import { BookCover } from "@/components/BookCover";
 import { cn } from "@/lib/utils";
+import { isOverdue } from "@/lib/loanStatus";
 import {
   Dialog,
   DialogContent,
@@ -156,6 +157,8 @@ export default function MyBooksPage() {
   );
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [conditionFilter, setConditionFilter] = useState<string>("all");
+  const [filtersOpen, setFiltersOpen] = useState(false);
+  const [actionMenuCopyId, setActionMenuCopyId] = useState<number | null>(null);
 
   // Edit dialog
   const [editCopy, setEditCopy] = useState<MyCopy | null>(null);
@@ -174,6 +177,13 @@ export default function MyBooksPage() {
   // Delete confirm dialog
   const [deleteCopy, setDeleteCopy] = useState<MyCopy | null>(null);
   const [deleteSubmitting, setDeleteSubmitting] = useState(false);
+
+  // Bulk selection + actions
+  const [selectedCopyIds, setSelectedCopyIds] = useState<Set<number>>(
+    new Set(),
+  );
+  const [bulkAction, setBulkAction] = useState<"pause" | "delete" | null>(null);
+  const [bulkSubmitting, setBulkSubmitting] = useState(false);
 
   // Export dialog
   const [moreMenuOpen, setMoreMenuOpen] = useState(false);
@@ -331,6 +341,51 @@ export default function MyBooksPage() {
     }
   }
 
+  function toggleSelected(id: number) {
+    setSelectedCopyIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) {
+        next.delete(id);
+      } else {
+        next.add(id);
+      }
+      return next;
+    });
+  }
+
+  async function handleBulkAction() {
+    if (!bulkAction) return;
+    setBulkSubmitting(true);
+    const ids = [...selectedCopyIds];
+    const results = await Promise.allSettled(
+      ids.map((id) =>
+        bulkAction === "pause"
+          ? api.updateCopy(id, { status: "unavailable" })
+          : api.deleteCopy(id),
+      ),
+    );
+    const succeeded = results.filter((r) => r.status === "fulfilled").length;
+    const failed = results.length - succeeded;
+    const verb = bulkAction === "pause" ? "paused" : "removed";
+    if (succeeded > 0 && failed > 0) {
+      toast.success(
+        `${succeeded} ${verb}, ${failed} skipped (currently on loan or requested)`,
+      );
+    } else if (succeeded > 0) {
+      toast.success(
+        `${succeeded} ${succeeded === 1 ? "copy" : "copies"} ${verb}`,
+      );
+    } else {
+      toast.error(
+        `Couldn't ${bulkAction === "pause" ? "pause" : "remove"} the selected copies — they're currently on loan or requested`,
+      );
+    }
+    setBulkAction(null);
+    setSelectedCopyIds(new Set());
+    setBulkSubmitting(false);
+    loadMyCopies();
+  }
+
   async function handleExport() {
     setExportSubmitting(true);
     try {
@@ -450,6 +505,61 @@ export default function MyBooksPage() {
     setSort("title");
   }
 
+  const activeFilterCount = [
+    statusFilter !== "all",
+    conditionFilter !== "all",
+    sort !== "title",
+  ].filter(Boolean).length;
+
+  function renderSortSelect(triggerClassName: string) {
+    return (
+      <Select value={sort} onValueChange={(v) => setSort(v as typeof sort)}>
+        <SelectTrigger className={triggerClassName}>
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          <SelectItem value="title">Title A–Z</SelectItem>
+          <SelectItem value="author">Author A–Z</SelectItem>
+          <SelectItem value="copies">Most Copies</SelectItem>
+          <SelectItem value="newest">Recently Added</SelectItem>
+        </SelectContent>
+      </Select>
+    );
+  }
+
+  function renderStatusSelect(triggerClassName: string) {
+    return (
+      <Select value={statusFilter} onValueChange={setStatusFilter}>
+        <SelectTrigger className={triggerClassName}>
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          <SelectItem value="all">All statuses</SelectItem>
+          <SelectItem value="available">Available</SelectItem>
+          <SelectItem value="unavailable">Unavailable</SelectItem>
+          <SelectItem value="loaned">Loaned</SelectItem>
+          <SelectItem value="requested">Requested</SelectItem>
+        </SelectContent>
+      </Select>
+    );
+  }
+
+  function renderConditionSelect(triggerClassName: string) {
+    return (
+      <Select value={conditionFilter} onValueChange={setConditionFilter}>
+        <SelectTrigger className={triggerClassName}>
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          <SelectItem value="all">All conditions</SelectItem>
+          <SelectItem value="good">Good</SelectItem>
+          <SelectItem value="fair">Fair</SelectItem>
+          <SelectItem value="worn">Worn</SelectItem>
+        </SelectContent>
+      </Select>
+    );
+  }
+
   const filteredGroups = bookGroups
     .filter(
       (g) =>
@@ -487,6 +597,24 @@ export default function MyBooksPage() {
       }
     });
 
+  const visibleCopyIds = filteredGroups.flatMap((g) =>
+    g.copies.map((c) => c.id),
+  );
+  const allVisibleSelected =
+    visibleCopyIds.length > 0 &&
+    visibleCopyIds.every((id) => selectedCopyIds.has(id));
+
+  function toggleSelectAllVisible() {
+    setSelectedCopyIds((prev) => {
+      if (allVisibleSelected) {
+        const next = new Set(prev);
+        for (const id of visibleCopyIds) next.delete(id);
+        return next;
+      }
+      return new Set([...prev, ...visibleCopyIds]);
+    });
+  }
+
   if (loading) {
     return (
       <div className="flex flex-col gap-4">
@@ -510,7 +638,11 @@ export default function MyBooksPage() {
         <div className="flex items-center gap-2">
           <Popover open={moreMenuOpen} onOpenChange={setMoreMenuOpen}>
             <PopoverTrigger asChild>
-              <Button size="icon" variant="ghost" aria-label="More actions">
+              <Button
+                size="icon"
+                variant="ghost"
+                aria-label="More library actions"
+              >
                 <MoreVertical className="size-4" />
               </Button>
             </PopoverTrigger>
@@ -563,7 +695,7 @@ export default function MyBooksPage() {
       {error && <p className="text-sm text-destructive">{error}</p>}
 
       {totalCopies > 0 && (
-        <div className="flex flex-col sm:flex-row gap-3 items-start sm:items-center">
+        <div className="flex gap-3 items-start sm:items-center">
           <div className="relative flex-1 max-w-xl">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground pointer-events-none" />
             <Input
@@ -575,50 +707,45 @@ export default function MyBooksPage() {
             />
           </div>
 
-          <div className="flex items-center gap-3 flex-wrap">
+          {/* Desktop: filters shown inline */}
+          <div className="hidden sm:flex items-center gap-3 flex-wrap">
             <div className="flex items-center gap-1.5">
               <SlidersHorizontal className="size-4 text-muted-foreground" />
-              <Select
-                value={sort}
-                onValueChange={(v) => setSort(v as typeof sort)}
-              >
-                <SelectTrigger className="h-10 w-40">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="title">Title A–Z</SelectItem>
-                  <SelectItem value="author">Author A–Z</SelectItem>
-                  <SelectItem value="copies">Most Copies</SelectItem>
-                  <SelectItem value="newest">Recently Added</SelectItem>
-                </SelectContent>
-              </Select>
+              {renderSortSelect("h-10 w-40")}
             </div>
-
-            <Select value={statusFilter} onValueChange={setStatusFilter}>
-              <SelectTrigger className="h-10 w-36">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All statuses</SelectItem>
-                <SelectItem value="available">Available</SelectItem>
-                <SelectItem value="unavailable">Unavailable</SelectItem>
-                <SelectItem value="loaned">Loaned</SelectItem>
-                <SelectItem value="requested">Requested</SelectItem>
-              </SelectContent>
-            </Select>
-
-            <Select value={conditionFilter} onValueChange={setConditionFilter}>
-              <SelectTrigger className="h-10 w-36">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All conditions</SelectItem>
-                <SelectItem value="good">Good</SelectItem>
-                <SelectItem value="fair">Fair</SelectItem>
-                <SelectItem value="worn">Worn</SelectItem>
-              </SelectContent>
-            </Select>
+            {renderStatusSelect("h-10 w-36")}
+            {renderConditionSelect("h-10 w-36")}
           </div>
+
+          {/* Mobile: filters collapsed into one popover, to avoid stacking
+              three full-width selects above the results on a narrow screen. */}
+          <Popover open={filtersOpen} onOpenChange={setFiltersOpen}>
+            <PopoverTrigger asChild>
+              <Button variant="outline" className="h-10 gap-2 sm:hidden">
+                <SlidersHorizontal className="size-4" />
+                Filters
+                {activeFilterCount > 0 && (
+                  <Badge variant="secondary" className="px-1.5">
+                    {activeFilterCount}
+                  </Badge>
+                )}
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent align="end" className="w-64 flex flex-col gap-3">
+              <div className="flex flex-col gap-1.5">
+                <Label>Sort</Label>
+                {renderSortSelect("h-10 w-full")}
+              </div>
+              <div className="flex flex-col gap-1.5">
+                <Label>Status</Label>
+                {renderStatusSelect("h-10 w-full")}
+              </div>
+              <div className="flex flex-col gap-1.5">
+                <Label>Condition</Label>
+                {renderConditionSelect("h-10 w-full")}
+              </div>
+            </PopoverContent>
+          </Popover>
         </div>
       )}
 
@@ -685,6 +812,52 @@ export default function MyBooksPage() {
         </div>
       )}
 
+      {totalCopies > 0 && filteredGroups.length > 0 && (
+        <div className="flex items-center justify-between -mt-2">
+          <div className="flex items-center gap-2">
+            <Checkbox
+              id="select-all-copies"
+              checked={allVisibleSelected}
+              onCheckedChange={toggleSelectAllVisible}
+            />
+            <Label
+              htmlFor="select-all-copies"
+              className="text-sm font-normal text-muted-foreground cursor-pointer"
+            >
+              {selectedCopyIds.size > 0
+                ? `${selectedCopyIds.size} selected`
+                : "Select all"}
+            </Label>
+          </div>
+          {selectedCopyIds.size > 0 && (
+            <div className="flex items-center gap-2">
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => setBulkAction("pause")}
+              >
+                Pause lending
+              </Button>
+              <Button
+                size="sm"
+                variant="outline"
+                className="text-destructive hover:text-destructive"
+                onClick={() => setBulkAction("delete")}
+              >
+                <Trash2 className="size-4" /> Delete
+              </Button>
+              <Button
+                size="sm"
+                variant="ghost"
+                onClick={() => setSelectedCopyIds(new Set())}
+              >
+                Clear
+              </Button>
+            </div>
+          )}
+        </div>
+      )}
+
       {totalCopies === 0 ? (
         <div className="flex flex-col items-center justify-center py-16 text-center gap-3">
           <p className="text-muted-foreground">
@@ -715,7 +888,7 @@ export default function MyBooksPage() {
               {/* Book header */}
               <div className="flex gap-4 p-4 border-b bg-muted/30">
                 <Link
-                  href={`/catalog/${group.bookId}`}
+                  href={`/catalog/${group.bookId}?from=/my-books`}
                   className="w-14 shrink-0 self-start"
                 >
                   <div className="relative w-14 aspect-[2/3] rounded overflow-hidden">
@@ -730,7 +903,7 @@ export default function MyBooksPage() {
                 </Link>
                 <div className="min-w-0">
                   <Link
-                    href={`/catalog/${group.bookId}`}
+                    href={`/catalog/${group.bookId}?from=/my-books`}
                     className="font-semibold text-base hover:underline line-clamp-2"
                   >
                     {group.title}
@@ -756,97 +929,133 @@ export default function MyBooksPage() {
                     copy.status !== "loaned" && copy.status !== "requested";
                   const loan =
                     copy.status === "loaned" ? activeLoans[copy.id] : null;
+                  const overdue = isOverdue(loan?.dueDate);
 
                   return (
-                    <div key={copy.id} className="p-4 flex flex-col gap-2">
-                      <div className="flex flex-wrap items-center gap-2">
-                        <Badge
-                          variant={
-                            conditionVariant[copy.condition] ?? "outline"
-                          }
-                          className="capitalize"
-                        >
-                          {copy.condition}
-                        </Badge>
-                        <Badge
-                          variant={statusVariant[copy.status] ?? "outline"}
-                          className="capitalize"
-                        >
-                          {copy.status}
-                        </Badge>
-                      </div>
-
-                      {loan &&
-                        (() => {
-                          const overdue =
-                            !!loan.dueDate &&
-                            new Date(loan.dueDate) < new Date();
-                          return (
-                            <p
-                              className={cn(
-                                "text-xs",
-                                overdue
-                                  ? "text-destructive font-medium"
-                                  : "text-muted-foreground",
-                              )}
-                            >
-                              Loaned to{" "}
-                              <span className="font-medium text-foreground">
-                                {loan.borrowerName}
-                              </span>
-                              {loan.dueDate
-                                ? ` · ${overdue ? "overdue since" : "due"} ${new Date(loan.dueDate).toLocaleDateString()}`
-                                : " · no return date agreed"}
-                            </p>
-                          );
-                        })()}
-
-                      {copy.notes && (
-                        <p className="text-xs text-muted-foreground line-clamp-1">
-                          {copy.notes}
-                        </p>
-                      )}
-
-                      <div className="flex flex-wrap items-center gap-2 mt-1">
-                        <Link href={`/my-books/${copy.id}/requests`}>
-                          <Button size="sm">
-                            Manage Requests
-                            {!!pendingCounts[copy.id] && (
-                              <Badge variant="secondary" className="px-1.5">
-                                {pendingCounts[copy.id]}
+                    <div key={copy.id} className="p-4 flex gap-3">
+                      <Checkbox
+                        className="mt-1 shrink-0"
+                        aria-label={`Select ${copy.bookTitle ?? "copy"}`}
+                        checked={selectedCopyIds.has(copy.id)}
+                        onCheckedChange={() => toggleSelected(copy.id)}
+                      />
+                      <div className="flex flex-col gap-2 flex-1 min-w-0">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <Badge
+                            variant={
+                              conditionVariant[copy.condition] ?? "outline"
+                            }
+                            className="capitalize"
+                          >
+                            {copy.condition}
+                          </Badge>
+                          <Badge
+                            variant={statusVariant[copy.status] ?? "outline"}
+                            className="capitalize"
+                          >
+                            {copy.status}
+                          </Badge>
+                          {copy.status === "requested" &&
+                            !!pendingCounts[copy.id] && (
+                              <Badge variant="outline">
+                                {pendingCounts[copy.id]} pending
                               </Badge>
                             )}
-                          </Button>
-                        </Link>
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          onClick={() => openEdit(copy)}
-                        >
-                          <Pencil className="size-3" /> Edit
-                        </Button>
-                        {canTransfer && (
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            onClick={() => {
-                              setTransferCopy(copy);
-                              setTransferEmail("");
-                            }}
+                          {overdue && (
+                            <Badge variant="destructive">Overdue</Badge>
+                          )}
+                        </div>
+
+                        {loan && (
+                          <p
+                            className={cn(
+                              "text-xs",
+                              overdue
+                                ? "text-destructive font-medium"
+                                : "text-muted-foreground",
+                            )}
                           >
-                            <ArrowRightLeft className="size-3" /> Transfer
-                          </Button>
+                            Loaned to{" "}
+                            <span className="font-medium text-foreground">
+                              {loan.borrowerName}
+                            </span>
+                            {loan.dueDate
+                              ? ` · ${overdue ? "overdue since" : "due"} ${new Date(loan.dueDate).toLocaleDateString()}`
+                              : " · no return date agreed"}
+                          </p>
                         )}
-                        {canDelete && (
-                          <Button
-                            size="sm"
-                            variant="ghost"
-                            className="text-destructive hover:text-destructive hover:bg-destructive/10"
-                            onClick={() => setDeleteCopy(copy)}
+
+                        {copy.notes && (
+                          <p className="text-xs text-muted-foreground line-clamp-1">
+                            {copy.notes}
+                          </p>
+                        )}
+
+                        <div className="flex items-center gap-2 mt-1">
+                          <Link href={`/my-books/${copy.id}/requests`}>
+                            <Button size="sm">
+                              Manage Requests
+                              {!!pendingCounts[copy.id] && (
+                                <Badge variant="secondary" className="px-1.5">
+                                  {pendingCounts[copy.id]}
+                                </Badge>
+                              )}
+                            </Button>
+                          </Link>
+                          <Popover
+                            open={actionMenuCopyId === copy.id}
+                            onOpenChange={(open) =>
+                              setActionMenuCopyId(open ? copy.id : null)
+                            }
                           >
-                            <Trash2 className="size-3" /> Remove
-                          </Button>
-                        )}
+                            <PopoverTrigger asChild>
+                              <Button
+                                size="icon"
+                                variant="ghost"
+                                aria-label="More actions for this copy"
+                              >
+                                <MoreVertical className="size-4" />
+                              </Button>
+                            </PopoverTrigger>
+                            <PopoverContent align="start" className="w-44 p-1">
+                              <button
+                                type="button"
+                                className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-sm hover:bg-accent"
+                                onClick={() => {
+                                  openEdit(copy);
+                                  setActionMenuCopyId(null);
+                                }}
+                              >
+                                <Pencil className="size-4" /> Edit
+                              </button>
+                              {canTransfer && (
+                                <button
+                                  type="button"
+                                  className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-sm hover:bg-accent"
+                                  onClick={() => {
+                                    setTransferCopy(copy);
+                                    setTransferEmail("");
+                                    setActionMenuCopyId(null);
+                                  }}
+                                >
+                                  <ArrowRightLeft className="size-4" /> Transfer
+                                </button>
+                              )}
+                              {canDelete && (
+                                <button
+                                  type="button"
+                                  className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-sm text-destructive hover:bg-destructive/10"
+                                  onClick={() => {
+                                    setDeleteCopy(copy);
+                                    setActionMenuCopyId(null);
+                                  }}
+                                >
+                                  <Trash2 className="size-4" /> Remove
+                                </button>
+                              )}
+                            </PopoverContent>
+                          </Popover>
+                        </div>
                       </div>
                     </div>
                   );
@@ -1237,6 +1446,40 @@ export default function MyBooksPage() {
               disabled={deleteSubmitting}
             >
               {deleteSubmitting ? "Removing…" : "Remove copy"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Bulk action confirm dialog */}
+      <Dialog
+        open={!!bulkAction}
+        onOpenChange={(open) => !open && setBulkAction(null)}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>
+              {bulkAction === "pause"
+                ? "Pause lending for selected copies?"
+                : "Remove selected copies?"}
+            </DialogTitle>
+            <DialogDescription>
+              {bulkAction === "pause"
+                ? `This marks ${selectedCopyIds.size} ${selectedCopyIds.size === 1 ? "copy" : "copies"} as unavailable. Copies currently on loan or requested will be skipped.`
+                : `This removes ${selectedCopyIds.size} ${selectedCopyIds.size === 1 ? "copy" : "copies"} from the community catalog. Copies currently on loan or requested will be skipped. This can't be undone.`}
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter showCloseButton>
+            <Button
+              variant={bulkAction === "delete" ? "destructive" : "default"}
+              onClick={handleBulkAction}
+              disabled={bulkSubmitting}
+            >
+              {bulkSubmitting
+                ? "Working…"
+                : bulkAction === "pause"
+                  ? `Pause ${selectedCopyIds.size} ${selectedCopyIds.size === 1 ? "copy" : "copies"}`
+                  : "Remove copies"}
             </Button>
           </DialogFooter>
         </DialogContent>
