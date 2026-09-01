@@ -106,6 +106,44 @@ true`, the default) plus a centered, raised **"Share"** button between the first
   crammed into the card, so the default view stays scannable one-handed.
 - Touch targets follow shadcn/ui defaults (`size-icon`/`size-5`+ icons, `py-2`+ tap areas) — avoid
   shrinking interactive elements below those defaults for density on mobile-facing pages.
+- **List-item card checklist** — every mobile card list in this app (`my-books/page.tsx`,
+  `BorrowingTab.tsx`, `LendingTab.tsx`, `my-books/[copyId]/requests/page.tsx`,
+  `wishlist/page.tsx`'s `WishlistCard`) already follows the first rule below; the my-books rewrite
+  (see its card's inline comments) is the reference for the rest, since it's the one card in this
+  app with both a bulk-select checkbox and a kebab menu:
+  - **`Card` + `CardContent` padding don't compose — pick one.** `Card` bakes in `py-6`; a
+    `CardContent` that adds its own padding (`p-3`/`p-4`) stacks on top of it, producing a big
+    empty band around whatever's in the card instead of the density you asked for. Every
+    list-item card in this app overrides it with `py-0 gap-0` on the `Card` itself
+    (`className="overflow-hidden py-0 gap-0"`) and lets `CardContent`'s own padding do the work —
+    copy that exact pair of classes for a new one, don't just add `p-*` to `CardContent` alone.
+  - **Merge identity + controls into one card, not a header block above a card.** Cover, title,
+    and author belong inside the same card as the badges/actions below them — a separate heading
+    row above a bordered card reads as two disconnected chunks for what's conceptually one row,
+    and wastes vertical space for the common single-item case.
+  - **A kebab menu goes top-right, next to the title** — not down in the action row next to a
+    button. This mirrors the desktop table's right-aligned Actions column (so the same data reads
+    the same way at both breakpoints) and uses width a left-aligned text column would otherwise
+    leave empty.
+  - **A single primary CTA becomes a full-bleed footer** (`w-full rounded-none border-x-0
+border-b-0`, placed as a sibling after `CardContent`, not inside its flex row) — it reads as
+    the card's action rather than the text column's, and the `overflow-hidden` on `Card` clips it
+    to the card's own corner radius. This only applies when there's exactly one primary action;
+    `BorrowingTab.tsx`/`LendingTab.tsx`/the requests page use a different, equally valid pattern
+    instead — the whole card is tappable to expand inline detail (chevron icon, top-right, signals
+    this) with 0–1 lightweight `outline` buttons inside the padding, since none of those cards has
+    a single dominant action to promote.
+  - **A button's color must mean the same thing on both breakpoints.** `variant={pendingCount ?
+"default" : "outline"}` (solid only when there's something to act on, outline when idle) is
+    applied identically to the desktop table's button and the mobile card's — don't let one
+    breakpoint default to always-solid while the other conditionally dims; that turns color into
+    noise instead of a signal.
+  - **Bulk-select checkboxes are opt-in on mobile, always-on on desktop.** A checkbox on every
+    card costs a tap target and a column of whitespace on every single visit, even though bulk
+    editing is a rare visit compared to glancing. Desktop's table can afford always-visible
+    per-row checkboxes; mobile gates them behind a "Select" toggle in the toolbar (see
+    `mobileSelectMode` in `my-books/page.tsx`) that reveals them plus a "Select all"/"Cancel" row
+    only once the user opts in.
 
 When adding a new page or primary action, check both the `md:hidden`/`hidden md:*` breakpoint
 split and the tab-bar slot budget above before assuming there's room for one more nav entry.

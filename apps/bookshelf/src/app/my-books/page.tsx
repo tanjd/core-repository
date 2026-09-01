@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState, useRef } from "react";
+import { Fragment, useCallback, useEffect, useState, useRef } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
@@ -33,6 +33,15 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Textarea } from "@/components/ui/textarea";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Card, CardContent } from "@/components/ui/card";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 import {
   Select,
   SelectContent,
@@ -41,7 +50,9 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { BookCover } from "@/components/BookCover";
+import { Pagination } from "@/components/ui/Pagination";
 import { cn } from "@/lib/utils";
+import { isOverdue } from "@/lib/loanStatus";
 import {
   Dialog,
   DialogContent,
@@ -110,12 +121,109 @@ const importActionLabel: Record<ImportRowAction, string> = {
   skipped: "Skipped",
 };
 
+// Books are grouped and paginated client-side rather than via the backend,
+// since GET /copies/mine returns the full list unpaginated and this page
+// already filters/sorts in memory — a reasonable tradeoff at the "tens of
+// books per member" scale this app targets (see product scope note in
+// apps/bookshelf-backend/CLAUDE.md).
+const PAGE_SIZE = 20;
+
 const SORT_LABELS: Record<string, string> = {
   title: "Title A–Z",
   author: "Author A–Z",
   copies: "Most Copies",
   newest: "Recently Added",
 };
+
+// Per-copy derived values shared by the desktop table and the mobile card
+// list below — computed once per copy, rendered twice (table hidden on
+// mobile, cards hidden on desktop, per apps/bookshelf/CLAUDE.md's
+// "Cards over dense tables on narrow screens" convention).
+interface CopyRowInfo {
+  copy: MyCopy;
+  canDelete: boolean;
+  canTransfer: boolean;
+  loan: ActiveLoan | null;
+  overdue: boolean;
+  pendingCount: number;
+}
+
+function buildCopyRowInfo(
+  copy: MyCopy,
+  pendingCounts: Record<number, number>,
+  activeLoans: Record<number, ActiveLoan>,
+): CopyRowInfo {
+  const loan = copy.status === "loaned" ? (activeLoans[copy.id] ?? null) : null;
+  return {
+    copy,
+    canDelete: copy.status !== "loaned" && copy.status !== "requested",
+    canTransfer: copy.status !== "loaned" && copy.status !== "requested",
+    loan,
+    overdue: isOverdue(loan?.dueDate),
+    pendingCount: pendingCounts[copy.id] ?? 0,
+  };
+}
+
+// The "More actions" popover body is identical in both layouts, so it's
+// factored out once rather than kept in sync in two places.
+function CopyActionsPopover({
+  canTransfer,
+  canDelete,
+  isOpen,
+  onOpenChange,
+  onEdit,
+  onTransfer,
+  onDelete,
+}: {
+  canTransfer: boolean;
+  canDelete: boolean;
+  isOpen: boolean;
+  onOpenChange: (open: boolean) => void;
+  onEdit: () => void;
+  onTransfer: () => void;
+  onDelete: () => void;
+}) {
+  return (
+    <Popover open={isOpen} onOpenChange={onOpenChange}>
+      <PopoverTrigger asChild>
+        <Button
+          size="icon"
+          variant="ghost"
+          aria-label="More actions for this copy"
+        >
+          <MoreVertical className="size-4" />
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent align="start" className="w-44 p-1">
+        <button
+          type="button"
+          className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-sm hover:bg-accent"
+          onClick={onEdit}
+        >
+          <Pencil className="size-4" /> Edit
+        </button>
+        {canTransfer && (
+          <button
+            type="button"
+            className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-sm hover:bg-accent"
+            onClick={onTransfer}
+          >
+            <ArrowRightLeft className="size-4" /> Transfer
+          </button>
+        )}
+        {canDelete && (
+          <button
+            type="button"
+            className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-sm text-destructive hover:bg-destructive/10"
+            onClick={onDelete}
+          >
+            <Trash2 className="size-4" /> Remove
+          </button>
+        )}
+      </PopoverContent>
+    </Popover>
+  );
+}
 
 function importSummaryText(summary: ImportSummary, isResult: boolean): string {
   const parts: string[] = [];
@@ -156,6 +264,27 @@ export default function MyBooksPage() {
   );
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [conditionFilter, setConditionFilter] = useState<string>("all");
+  const [filtersOpen, setFiltersOpen] = useState(false);
+  // Mobile only — bulk-select checkboxes stay hidden until the user opts in
+  // via "Select", since most mobile visits are a glance rather than a bulk
+  // edit (see apps/bookshelf/CLAUDE.md's "Cards over dense tables"). Desktop
+  // keeps its checkboxes always visible, matching the table's per-row ones.
+  const [mobileSelectMode, setMobileSelectMode] = useState(false);
+  // Separate state per layout rather than one shared id: the desktop table
+  // and mobile card list both render a CopyActionsPopover for every copy at
+  // all times (CSS-hidden per breakpoint, never unmounted — see "Cards over
+  // dense tables" in apps/bookshelf/CLAUDE.md), so sharing one id opened
+  // both Popovers for the clicked copy at once; each one's Radix dismiss
+  // layer then saw the other's freshly-mounted content as an outside
+  // interaction and immediately closed itself, collapsing the shared state
+  // back to null in the same tick — the button looked like it did nothing.
+  const [desktopActionMenuCopyId, setDesktopActionMenuCopyId] = useState<
+    number | null
+  >(null);
+  const [mobileActionMenuCopyId, setMobileActionMenuCopyId] = useState<
+    number | null
+  >(null);
+  const [page, setPage] = useState(1);
 
   // Edit dialog
   const [editCopy, setEditCopy] = useState<MyCopy | null>(null);
@@ -174,6 +303,13 @@ export default function MyBooksPage() {
   // Delete confirm dialog
   const [deleteCopy, setDeleteCopy] = useState<MyCopy | null>(null);
   const [deleteSubmitting, setDeleteSubmitting] = useState(false);
+
+  // Bulk selection + actions
+  const [selectedCopyIds, setSelectedCopyIds] = useState<Set<number>>(
+    new Set(),
+  );
+  const [bulkAction, setBulkAction] = useState<"pause" | "delete" | null>(null);
+  const [bulkSubmitting, setBulkSubmitting] = useState(false);
 
   // Export dialog
   const [moreMenuOpen, setMoreMenuOpen] = useState(false);
@@ -331,6 +467,52 @@ export default function MyBooksPage() {
     }
   }
 
+  function toggleSelected(id: number) {
+    setSelectedCopyIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) {
+        next.delete(id);
+      } else {
+        next.add(id);
+      }
+      return next;
+    });
+  }
+
+  async function handleBulkAction() {
+    if (!bulkAction) return;
+    setBulkSubmitting(true);
+    const ids = [...selectedCopyIds];
+    const results = await Promise.allSettled(
+      ids.map((id) =>
+        bulkAction === "pause"
+          ? api.updateCopy(id, { status: "unavailable" })
+          : api.deleteCopy(id),
+      ),
+    );
+    const succeeded = results.filter((r) => r.status === "fulfilled").length;
+    const failed = results.length - succeeded;
+    const verb = bulkAction === "pause" ? "paused" : "removed";
+    if (succeeded > 0 && failed > 0) {
+      toast.success(
+        `${succeeded} ${verb}, ${failed} skipped (currently on loan or requested)`,
+      );
+    } else if (succeeded > 0) {
+      toast.success(
+        `${succeeded} ${succeeded === 1 ? "copy" : "copies"} ${verb}`,
+      );
+    } else {
+      toast.error(
+        `Couldn't ${bulkAction === "pause" ? "pause" : "remove"} the selected copies — they're currently on loan or requested`,
+      );
+    }
+    setBulkAction(null);
+    setSelectedCopyIds(new Set());
+    setMobileSelectMode(false);
+    setBulkSubmitting(false);
+    loadMyCopies();
+  }
+
   async function handleExport() {
     setExportSubmitting(true);
     try {
@@ -448,6 +630,82 @@ export default function MyBooksPage() {
     setStatusFilter("all");
     setConditionFilter("all");
     setSort("title");
+    setPage(1);
+  }
+
+  function updateSearch(value: string) {
+    setSearch(value);
+    setPage(1);
+  }
+
+  function updateSort(value: typeof sort) {
+    setSort(value);
+    setPage(1);
+  }
+
+  function updateStatusFilter(value: string) {
+    setStatusFilter(value);
+    setPage(1);
+  }
+
+  function updateConditionFilter(value: string) {
+    setConditionFilter(value);
+    setPage(1);
+  }
+
+  const activeFilterCount = [
+    statusFilter !== "all",
+    conditionFilter !== "all",
+    sort !== "title",
+  ].filter(Boolean).length;
+
+  function renderSortSelect(triggerClassName: string) {
+    return (
+      <Select value={sort} onValueChange={(v) => updateSort(v as typeof sort)}>
+        <SelectTrigger className={triggerClassName}>
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          <SelectItem value="title">Title A–Z</SelectItem>
+          <SelectItem value="author">Author A–Z</SelectItem>
+          <SelectItem value="copies">Most Copies</SelectItem>
+          <SelectItem value="newest">Recently Added</SelectItem>
+        </SelectContent>
+      </Select>
+    );
+  }
+
+  function renderStatusSelect(triggerClassName: string) {
+    return (
+      <Select value={statusFilter} onValueChange={updateStatusFilter}>
+        <SelectTrigger className={triggerClassName}>
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          <SelectItem value="all">All statuses</SelectItem>
+          <SelectItem value="available">Available</SelectItem>
+          <SelectItem value="unavailable">Unavailable</SelectItem>
+          <SelectItem value="loaned">Loaned</SelectItem>
+          <SelectItem value="requested">Requested</SelectItem>
+        </SelectContent>
+      </Select>
+    );
+  }
+
+  function renderConditionSelect(triggerClassName: string) {
+    return (
+      <Select value={conditionFilter} onValueChange={updateConditionFilter}>
+        <SelectTrigger className={triggerClassName}>
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          <SelectItem value="all">All conditions</SelectItem>
+          <SelectItem value="good">Good</SelectItem>
+          <SelectItem value="fair">Fair</SelectItem>
+          <SelectItem value="worn">Worn</SelectItem>
+        </SelectContent>
+      </Select>
+    );
   }
 
   const filteredGroups = bookGroups
@@ -487,6 +745,39 @@ export default function MyBooksPage() {
       }
     });
 
+  const totalPages = Math.max(1, Math.ceil(filteredGroups.length / PAGE_SIZE));
+  // Derived rather than trusting `page` directly: deleting/pausing copies
+  // (or a filter narrowing the results) can shrink totalPages out from under
+  // whatever page the user was already on, and nothing else resets it —
+  // without clamping here, that leaves an empty page rendered with no
+  // "no results" messaging even though earlier pages still have books.
+  const currentPage = Math.min(page, totalPages);
+  const pagedGroups = filteredGroups.slice(
+    (currentPage - 1) * PAGE_SIZE,
+    currentPage * PAGE_SIZE,
+  );
+
+  // Selection spans all filtered books, not just the current page — a bulk
+  // pause/delete should act on everything matching the active filters, not
+  // reset when the user pages through a long list.
+  const visibleCopyIds = filteredGroups.flatMap((g) =>
+    g.copies.map((c) => c.id),
+  );
+  const allVisibleSelected =
+    visibleCopyIds.length > 0 &&
+    visibleCopyIds.every((id) => selectedCopyIds.has(id));
+
+  function toggleSelectAllVisible() {
+    setSelectedCopyIds((prev) => {
+      if (allVisibleSelected) {
+        const next = new Set(prev);
+        for (const id of visibleCopyIds) next.delete(id);
+        return next;
+      }
+      return new Set([...prev, ...visibleCopyIds]);
+    });
+  }
+
   if (loading) {
     return (
       <div className="flex flex-col gap-4">
@@ -510,7 +801,11 @@ export default function MyBooksPage() {
         <div className="flex items-center gap-2">
           <Popover open={moreMenuOpen} onOpenChange={setMoreMenuOpen}>
             <PopoverTrigger asChild>
-              <Button size="icon" variant="ghost" aria-label="More actions">
+              <Button
+                size="icon"
+                variant="ghost"
+                aria-label="More library actions"
+              >
                 <MoreVertical className="size-4" />
               </Button>
             </PopoverTrigger>
@@ -563,62 +858,57 @@ export default function MyBooksPage() {
       {error && <p className="text-sm text-destructive">{error}</p>}
 
       {totalCopies > 0 && (
-        <div className="flex flex-col sm:flex-row gap-3 items-start sm:items-center">
+        <div className="flex gap-3 items-start sm:items-center">
           <div className="relative flex-1 max-w-xl">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground pointer-events-none" />
             <Input
               type="search"
-              placeholder="Search your books by title, author…"
+              placeholder="Search by title or author…"
               value={search}
-              onChange={(e) => setSearch(e.target.value)}
+              onChange={(e) => updateSearch(e.target.value)}
               className="pl-9 h-10"
             />
           </div>
 
-          <div className="flex items-center gap-3 flex-wrap">
+          {/* Desktop: filters shown inline */}
+          <div className="hidden sm:flex items-center gap-3 flex-wrap">
             <div className="flex items-center gap-1.5">
               <SlidersHorizontal className="size-4 text-muted-foreground" />
-              <Select
-                value={sort}
-                onValueChange={(v) => setSort(v as typeof sort)}
-              >
-                <SelectTrigger className="h-10 w-40">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="title">Title A–Z</SelectItem>
-                  <SelectItem value="author">Author A–Z</SelectItem>
-                  <SelectItem value="copies">Most Copies</SelectItem>
-                  <SelectItem value="newest">Recently Added</SelectItem>
-                </SelectContent>
-              </Select>
+              {renderSortSelect("h-10 w-40")}
             </div>
-
-            <Select value={statusFilter} onValueChange={setStatusFilter}>
-              <SelectTrigger className="h-10 w-36">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All statuses</SelectItem>
-                <SelectItem value="available">Available</SelectItem>
-                <SelectItem value="unavailable">Unavailable</SelectItem>
-                <SelectItem value="loaned">Loaned</SelectItem>
-                <SelectItem value="requested">Requested</SelectItem>
-              </SelectContent>
-            </Select>
-
-            <Select value={conditionFilter} onValueChange={setConditionFilter}>
-              <SelectTrigger className="h-10 w-36">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All conditions</SelectItem>
-                <SelectItem value="good">Good</SelectItem>
-                <SelectItem value="fair">Fair</SelectItem>
-                <SelectItem value="worn">Worn</SelectItem>
-              </SelectContent>
-            </Select>
+            {renderStatusSelect("h-10 w-36")}
+            {renderConditionSelect("h-10 w-36")}
           </div>
+
+          {/* Mobile: filters collapsed into one popover, to avoid stacking
+              three full-width selects above the results on a narrow screen. */}
+          <Popover open={filtersOpen} onOpenChange={setFiltersOpen}>
+            <PopoverTrigger asChild>
+              <Button variant="outline" className="h-10 gap-2 sm:hidden">
+                <SlidersHorizontal className="size-4" />
+                Filters
+                {activeFilterCount > 0 && (
+                  <Badge variant="secondary" className="px-1.5">
+                    {activeFilterCount}
+                  </Badge>
+                )}
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent align="end" className="w-64 flex flex-col gap-3">
+              <div className="flex flex-col gap-1.5">
+                <Label>Sort</Label>
+                {renderSortSelect("h-10 w-full")}
+              </div>
+              <div className="flex flex-col gap-1.5">
+                <Label>Status</Label>
+                {renderStatusSelect("h-10 w-full")}
+              </div>
+              <div className="flex flex-col gap-1.5">
+                <Label>Condition</Label>
+                {renderConditionSelect("h-10 w-full")}
+              </div>
+            </PopoverContent>
+          </Popover>
         </div>
       )}
 
@@ -630,7 +920,7 @@ export default function MyBooksPage() {
               <button
                 type="button"
                 aria-label="Clear search"
-                onClick={() => setSearch("")}
+                onClick={() => updateSearch("")}
                 className="rounded-full hover:bg-background/60 p-0.5"
               >
                 <X className="size-3" />
@@ -643,7 +933,7 @@ export default function MyBooksPage() {
               <button
                 type="button"
                 aria-label="Remove status filter"
-                onClick={() => setStatusFilter("all")}
+                onClick={() => updateStatusFilter("all")}
                 className="rounded-full hover:bg-background/60 p-0.5"
               >
                 <X className="size-3" />
@@ -656,7 +946,7 @@ export default function MyBooksPage() {
               <button
                 type="button"
                 aria-label="Remove condition filter"
-                onClick={() => setConditionFilter("all")}
+                onClick={() => updateConditionFilter("all")}
                 className="rounded-full hover:bg-background/60 p-0.5"
               >
                 <X className="size-3" />
@@ -669,7 +959,7 @@ export default function MyBooksPage() {
               <button
                 type="button"
                 aria-label="Reset sort"
-                onClick={() => setSort("title")}
+                onClick={() => updateSort("title")}
                 className="rounded-full hover:bg-background/60 p-0.5"
               >
                 <X className="size-3" />
@@ -682,6 +972,97 @@ export default function MyBooksPage() {
           >
             Clear all
           </button>
+        </div>
+      )}
+
+      {totalCopies > 0 && filteredGroups.length > 0 && (
+        <div className="flex flex-wrap items-center justify-between gap-2 -mt-2">
+          {/* Desktop: select-all stays always visible, matching the
+              table's always-visible per-row checkboxes. */}
+          <div className="hidden md:flex items-center gap-2">
+            <Checkbox
+              id="select-all-copies"
+              checked={allVisibleSelected}
+              onCheckedChange={toggleSelectAllVisible}
+            />
+            <Label
+              htmlFor="select-all-copies"
+              className="text-sm font-normal text-muted-foreground cursor-pointer"
+            >
+              {selectedCopyIds.size > 0
+                ? `${selectedCopyIds.size} selected`
+                : "Select all"}
+            </Label>
+          </div>
+
+          {/* Mobile: bulk selection is opt-in via "Select" instead of a
+              permanent checkbox on every card — see mobileSelectMode. */}
+          <div className="flex md:hidden items-center gap-2 w-full">
+            {mobileSelectMode ? (
+              <>
+                <Checkbox
+                  id="select-all-copies-mobile"
+                  checked={allVisibleSelected}
+                  onCheckedChange={toggleSelectAllVisible}
+                />
+                <Label
+                  htmlFor="select-all-copies-mobile"
+                  className="text-sm font-normal text-muted-foreground cursor-pointer flex-1"
+                >
+                  {selectedCopyIds.size > 0
+                    ? `${selectedCopyIds.size} selected`
+                    : "Select all"}
+                </Label>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  onClick={() => {
+                    setMobileSelectMode(false);
+                    setSelectedCopyIds(new Set());
+                  }}
+                >
+                  Cancel
+                </Button>
+              </>
+            ) : (
+              <Button
+                size="sm"
+                variant="ghost"
+                className="-ml-3"
+                onClick={() => setMobileSelectMode(true)}
+              >
+                Select
+              </Button>
+            )}
+          </div>
+
+          {selectedCopyIds.size > 0 && (
+            <div className="flex items-center gap-2 flex-wrap">
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => setBulkAction("pause")}
+              >
+                Pause lending
+              </Button>
+              <Button
+                size="sm"
+                variant="outline"
+                className="text-destructive hover:text-destructive"
+                onClick={() => setBulkAction("delete")}
+              >
+                <Trash2 className="size-4" /> Delete
+              </Button>
+              <Button
+                size="sm"
+                variant="ghost"
+                className="hidden md:inline-flex"
+                onClick={() => setSelectedCopyIds(new Set())}
+              >
+                Clear
+              </Button>
+            </div>
+          )}
         </div>
       )}
 
@@ -706,155 +1087,406 @@ export default function MyBooksPage() {
           </Button>
         </div>
       ) : (
-        <div className="flex flex-col gap-6">
-          {filteredGroups.map((group) => (
-            <div
-              key={group.bookId}
-              className="rounded-xl border bg-card overflow-hidden"
-            >
-              {/* Book header */}
-              <div className="flex gap-4 p-4 border-b bg-muted/30">
-                <Link
-                  href={`/catalog/${group.bookId}`}
-                  className="w-14 shrink-0 self-start"
-                >
-                  <div className="relative w-14 aspect-[2/3] rounded overflow-hidden">
-                    <BookCover
-                      title={group.title}
-                      author={group.author}
-                      coverUrl={group.coverUrl}
-                      alt={group.title}
-                      sizes="56px"
-                    />
-                  </div>
-                </Link>
-                <div className="min-w-0">
-                  <Link
-                    href={`/catalog/${group.bookId}`}
-                    className="font-semibold text-base hover:underline line-clamp-2"
-                  >
-                    {group.title}
-                  </Link>
-                  {group.author && (
-                    <p className="text-sm text-muted-foreground mt-0.5">
-                      by {group.author}
-                    </p>
-                  )}
-                  <p className="text-xs text-muted-foreground mt-1">
-                    {group.copies.length}{" "}
-                    {group.copies.length === 1 ? "copy" : "copies"}
-                  </p>
-                </div>
-              </div>
-
-              {/* Copies */}
-              <div className="divide-y">
-                {group.copies.map((copy) => {
-                  const canDelete =
-                    copy.status !== "loaned" && copy.status !== "requested";
-                  const canTransfer =
-                    copy.status !== "loaned" && copy.status !== "requested";
-                  const loan =
-                    copy.status === "loaned" ? activeLoans[copy.id] : null;
+        <>
+          {/* Desktop: dense table, one self-contained row per copy — book
+              cover/title/author live in the row's own "Book" cell (same
+              pattern as LendingTab.tsx's table) rather than a separate
+              colSpan banner row above the copies. A banner row put the book
+              info outside every column, which read as if it were "spilling"
+              across Condition/Status instead of belonging to a row; a copy
+              index badge (below) replaces the banner's "N copies" count for
+              books with more than one copy. Hidden below md — see the
+              mobile card list below. */}
+          <div className="hidden md:block rounded-md border overflow-x-auto">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead className="w-8" />
+                  <TableHead>Book</TableHead>
+                  <TableHead>Condition</TableHead>
+                  <TableHead>Status</TableHead>
+                  <TableHead>Loan / Due</TableHead>
+                  <TableHead className="text-right">Actions</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {pagedGroups.map((group) => {
+                  const rows = group.copies.map((copy) =>
+                    buildCopyRowInfo(copy, pendingCounts, activeLoans),
+                  );
 
                   return (
-                    <div key={copy.id} className="p-4 flex flex-col gap-2">
-                      <div className="flex flex-wrap items-center gap-2">
-                        <Badge
-                          variant={
-                            conditionVariant[copy.condition] ?? "outline"
-                          }
-                          className="capitalize"
-                        >
-                          {copy.condition}
-                        </Badge>
-                        <Badge
-                          variant={statusVariant[copy.status] ?? "outline"}
-                          className="capitalize"
-                        >
-                          {copy.status}
-                        </Badge>
-                      </div>
-
-                      {loan &&
-                        (() => {
-                          const overdue =
-                            !!loan.dueDate &&
-                            new Date(loan.dueDate) < new Date();
-                          return (
-                            <p
-                              className={cn(
-                                "text-xs",
-                                overdue
-                                  ? "text-destructive font-medium"
-                                  : "text-muted-foreground",
+                    <Fragment key={group.bookId}>
+                      {rows.map(
+                        (
+                          {
+                            copy,
+                            canDelete,
+                            canTransfer,
+                            loan,
+                            overdue,
+                            pendingCount,
+                          },
+                          i,
+                        ) => (
+                          <TableRow key={copy.id}>
+                            <TableCell>
+                              <Checkbox
+                                aria-label={`Select ${copy.bookTitle ?? "copy"}`}
+                                checked={selectedCopyIds.has(copy.id)}
+                                onCheckedChange={() => toggleSelected(copy.id)}
+                              />
+                            </TableCell>
+                            <TableCell>
+                              <div className="flex items-center gap-3">
+                                <Link
+                                  href={`/catalog/${group.bookId}?from=/my-books`}
+                                  className="w-12 shrink-0"
+                                >
+                                  <div className="relative w-12 aspect-[2/3] rounded overflow-hidden">
+                                    <BookCover
+                                      title={group.title}
+                                      author={group.author}
+                                      coverUrl={group.coverUrl}
+                                      alt={group.title}
+                                      sizes="48px"
+                                    />
+                                  </div>
+                                </Link>
+                                <div className="min-w-0">
+                                  <div className="flex items-center gap-1.5">
+                                    <Link
+                                      href={`/catalog/${group.bookId}?from=/my-books`}
+                                      className="font-medium truncate max-w-[200px] hover:underline"
+                                    >
+                                      {group.title}
+                                    </Link>
+                                    {rows.length > 1 && (
+                                      <span className="text-xs text-muted-foreground shrink-0">
+                                        (copy {i + 1}/{rows.length})
+                                      </span>
+                                    )}
+                                  </div>
+                                  {group.author && (
+                                    <p className="text-xs text-muted-foreground truncate max-w-[200px]">
+                                      {group.author}
+                                    </p>
+                                  )}
+                                </div>
+                              </div>
+                            </TableCell>
+                            <TableCell>
+                              <Badge
+                                variant={
+                                  conditionVariant[copy.condition] ?? "outline"
+                                }
+                                className="capitalize"
+                              >
+                                {copy.condition}
+                              </Badge>
+                            </TableCell>
+                            <TableCell>
+                              <div className="flex flex-wrap items-center gap-1.5">
+                                <Badge
+                                  variant={
+                                    statusVariant[copy.status] ?? "outline"
+                                  }
+                                  className="capitalize"
+                                >
+                                  {copy.status}
+                                </Badge>
+                                {copy.status === "requested" &&
+                                  !!pendingCount && (
+                                    <Badge variant="outline">
+                                      {pendingCount} pending
+                                    </Badge>
+                                  )}
+                                {overdue && (
+                                  <Badge variant="destructive">Overdue</Badge>
+                                )}
+                              </div>
+                            </TableCell>
+                            <TableCell className="whitespace-normal">
+                              {loan ? (
+                                <p
+                                  className={cn(
+                                    "text-xs",
+                                    overdue
+                                      ? "text-destructive font-medium"
+                                      : "text-muted-foreground",
+                                  )}
+                                >
+                                  <span className="font-medium text-foreground">
+                                    {loan.borrowerName}
+                                  </span>
+                                  {loan.dueDate
+                                    ? ` · ${overdue ? "overdue since" : "due"} ${new Date(loan.dueDate).toLocaleDateString()}`
+                                    : " · no return date agreed"}
+                                </p>
+                              ) : (
+                                <span className="text-xs text-muted-foreground">
+                                  —
+                                </span>
                               )}
-                            >
-                              Loaned to{" "}
-                              <span className="font-medium text-foreground">
-                                {loan.borrowerName}
-                              </span>
-                              {loan.dueDate
-                                ? ` · ${overdue ? "overdue since" : "due"} ${new Date(loan.dueDate).toLocaleDateString()}`
-                                : " · no return date agreed"}
-                            </p>
-                          );
-                        })()}
-
-                      {copy.notes && (
-                        <p className="text-xs text-muted-foreground line-clamp-1">
-                          {copy.notes}
-                        </p>
+                              {copy.notes && (
+                                <p className="text-xs text-muted-foreground line-clamp-1">
+                                  {copy.notes}
+                                </p>
+                              )}
+                            </TableCell>
+                            <TableCell className="text-right">
+                              <div className="flex items-center justify-end gap-2">
+                                <Link href={`/my-books/${copy.id}/requests`}>
+                                  {/* Outline unless there's something to act
+                                      on — same idle/actionable convention as
+                                      the mobile card below; only the layout
+                                      should differ between breakpoints, not
+                                      what the color means. */}
+                                  <Button
+                                    size="sm"
+                                    variant={
+                                      pendingCount ? "default" : "outline"
+                                    }
+                                  >
+                                    Manage Requests
+                                    {!!pendingCount && (
+                                      <Badge
+                                        variant="secondary"
+                                        className="px-1.5"
+                                      >
+                                        {pendingCount}
+                                      </Badge>
+                                    )}
+                                  </Button>
+                                </Link>
+                                <CopyActionsPopover
+                                  canTransfer={canTransfer}
+                                  canDelete={canDelete}
+                                  isOpen={desktopActionMenuCopyId === copy.id}
+                                  onOpenChange={(open) =>
+                                    setDesktopActionMenuCopyId(
+                                      open ? copy.id : null,
+                                    )
+                                  }
+                                  onEdit={() => {
+                                    openEdit(copy);
+                                    setDesktopActionMenuCopyId(null);
+                                  }}
+                                  onTransfer={() => {
+                                    setTransferCopy(copy);
+                                    setTransferEmail("");
+                                    setDesktopActionMenuCopyId(null);
+                                  }}
+                                  onDelete={() => {
+                                    setDeleteCopy(copy);
+                                    setDesktopActionMenuCopyId(null);
+                                  }}
+                                />
+                              </div>
+                            </TableCell>
+                          </TableRow>
+                        ),
                       )}
+                    </Fragment>
+                  );
+                })}
+              </TableBody>
+            </Table>
+          </div>
 
-                      <div className="flex flex-wrap items-center gap-2 mt-1">
+          {/* Mobile: one self-contained glance card per copy — cover, title
+              and author live inside the card itself (rather than a separate
+              heading block above it) so a single-copy book, the common case,
+              reads as one row instead of two stacked chunks. A book with
+              multiple copies gets one card per copy, each labelled "(copy
+              i/n)" next to the title — same data as the desktop table,
+              shown below md instead of it. */}
+          <div className="flex flex-col gap-3 md:hidden">
+            {pagedGroups.map((group) => {
+              const rows = group.copies.map((copy) =>
+                buildCopyRowInfo(copy, pendingCounts, activeLoans),
+              );
+
+              return (
+                <Fragment key={group.bookId}>
+                  {rows.map(
+                    (
+                      {
+                        copy,
+                        canDelete,
+                        canTransfer,
+                        loan,
+                        overdue,
+                        pendingCount,
+                      },
+                      i,
+                    ) => (
+                      <Card
+                        key={copy.id}
+                        className="overflow-hidden py-0 gap-0"
+                      >
+                        <CardContent className="p-3 flex gap-3">
+                          {mobileSelectMode && (
+                            <Checkbox
+                              className="mt-1 shrink-0"
+                              aria-label={`Select ${copy.bookTitle ?? "copy"}`}
+                              checked={selectedCopyIds.has(copy.id)}
+                              onCheckedChange={() => toggleSelected(copy.id)}
+                            />
+                          )}
+                          <Link
+                            href={`/catalog/${group.bookId}?from=/my-books`}
+                            className="w-12 shrink-0"
+                          >
+                            <div className="relative w-12 aspect-[2/3] rounded overflow-hidden">
+                              <BookCover
+                                title={group.title}
+                                author={group.author}
+                                coverUrl={group.coverUrl}
+                                alt={group.title}
+                                sizes="48px"
+                              />
+                            </div>
+                          </Link>
+                          <div className="flex flex-col gap-1.5 flex-1 min-w-0">
+                            {/* Title + kebab share this row, kebab pinned to
+                                the card's right edge — mirrors the desktop
+                                table's right-aligned Actions column, and
+                                uses the width a left-aligned column would
+                                otherwise leave empty on a wide phone card. */}
+                            <div className="flex items-start justify-between gap-2">
+                              <div className="min-w-0">
+                                <div className="flex items-center gap-1.5">
+                                  <Link
+                                    href={`/catalog/${group.bookId}?from=/my-books`}
+                                    className="font-medium text-sm truncate hover:underline"
+                                  >
+                                    {group.title}
+                                  </Link>
+                                  {rows.length > 1 && (
+                                    <span className="text-xs text-muted-foreground shrink-0">
+                                      (copy {i + 1}/{rows.length})
+                                    </span>
+                                  )}
+                                </div>
+                                {group.author && (
+                                  <p className="text-xs text-muted-foreground truncate">
+                                    by {group.author}
+                                  </p>
+                                )}
+                              </div>
+                              <CopyActionsPopover
+                                canTransfer={canTransfer}
+                                canDelete={canDelete}
+                                isOpen={mobileActionMenuCopyId === copy.id}
+                                onOpenChange={(open) =>
+                                  setMobileActionMenuCopyId(
+                                    open ? copy.id : null,
+                                  )
+                                }
+                                onEdit={() => {
+                                  openEdit(copy);
+                                  setMobileActionMenuCopyId(null);
+                                }}
+                                onTransfer={() => {
+                                  setTransferCopy(copy);
+                                  setTransferEmail("");
+                                  setMobileActionMenuCopyId(null);
+                                }}
+                                onDelete={() => {
+                                  setDeleteCopy(copy);
+                                  setMobileActionMenuCopyId(null);
+                                }}
+                              />
+                            </div>
+
+                            <div className="flex flex-wrap items-center gap-1.5">
+                              <Badge
+                                variant={
+                                  conditionVariant[copy.condition] ?? "outline"
+                                }
+                                className="capitalize"
+                              >
+                                {copy.condition}
+                              </Badge>
+                              <Badge
+                                variant={
+                                  statusVariant[copy.status] ?? "outline"
+                                }
+                                className="capitalize"
+                              >
+                                {copy.status}
+                              </Badge>
+                              {copy.status === "requested" &&
+                                !!pendingCount && (
+                                  <Badge variant="outline">
+                                    {pendingCount} pending
+                                  </Badge>
+                                )}
+                              {overdue && (
+                                <Badge variant="destructive">Overdue</Badge>
+                              )}
+                            </div>
+
+                            {loan && (
+                              <p
+                                className={cn(
+                                  "text-xs",
+                                  overdue
+                                    ? "text-destructive font-medium"
+                                    : "text-muted-foreground",
+                                )}
+                              >
+                                Loaned to{" "}
+                                <span className="font-medium text-foreground">
+                                  {loan.borrowerName}
+                                </span>
+                                {loan.dueDate
+                                  ? ` · ${overdue ? "overdue since" : "due"} ${new Date(loan.dueDate).toLocaleDateString()}`
+                                  : " · no return date agreed"}
+                              </p>
+                            )}
+
+                            {copy.notes && (
+                              <p className="text-xs text-muted-foreground line-clamp-1">
+                                {copy.notes}
+                              </p>
+                            )}
+                          </div>
+                        </CardContent>
+                        {/* Full-bleed footer, edge to edge under the cover
+                            too — not just under the text column — so this
+                            reads as the card's action rather than the text
+                            column's. Outline unless there's something to
+                            act on, matching the desktop table's button. */}
                         <Link href={`/my-books/${copy.id}/requests`}>
-                          <Button size="sm">
+                          <Button
+                            size="sm"
+                            variant={pendingCount ? "default" : "outline"}
+                            className="w-full rounded-none border-x-0 border-b-0"
+                          >
                             Manage Requests
-                            {!!pendingCounts[copy.id] && (
+                            {!!pendingCount && (
                               <Badge variant="secondary" className="px-1.5">
-                                {pendingCounts[copy.id]}
+                                {pendingCount}
                               </Badge>
                             )}
                           </Button>
                         </Link>
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          onClick={() => openEdit(copy)}
-                        >
-                          <Pencil className="size-3" /> Edit
-                        </Button>
-                        {canTransfer && (
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            onClick={() => {
-                              setTransferCopy(copy);
-                              setTransferEmail("");
-                            }}
-                          >
-                            <ArrowRightLeft className="size-3" /> Transfer
-                          </Button>
-                        )}
-                        {canDelete && (
-                          <Button
-                            size="sm"
-                            variant="ghost"
-                            className="text-destructive hover:text-destructive hover:bg-destructive/10"
-                            onClick={() => setDeleteCopy(copy)}
-                          >
-                            <Trash2 className="size-3" /> Remove
-                          </Button>
-                        )}
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-          ))}
-        </div>
+                      </Card>
+                    ),
+                  )}
+                </Fragment>
+              );
+            })}
+          </div>
+
+          <Pagination
+            page={currentPage}
+            totalPages={totalPages}
+            onPageChange={setPage}
+          />
+        </>
       )}
 
       {/* Edit dialog */}
@@ -1237,6 +1869,40 @@ export default function MyBooksPage() {
               disabled={deleteSubmitting}
             >
               {deleteSubmitting ? "Removing…" : "Remove copy"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Bulk action confirm dialog */}
+      <Dialog
+        open={!!bulkAction}
+        onOpenChange={(open) => !open && setBulkAction(null)}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>
+              {bulkAction === "pause"
+                ? "Pause lending for selected copies?"
+                : "Remove selected copies?"}
+            </DialogTitle>
+            <DialogDescription>
+              {bulkAction === "pause"
+                ? `This marks ${selectedCopyIds.size} ${selectedCopyIds.size === 1 ? "copy" : "copies"} as unavailable. Copies currently on loan or requested will be skipped.`
+                : `This removes ${selectedCopyIds.size} ${selectedCopyIds.size === 1 ? "copy" : "copies"} from the community catalog. Copies currently on loan or requested will be skipped. This can't be undone.`}
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter showCloseButton>
+            <Button
+              variant={bulkAction === "delete" ? "destructive" : "default"}
+              onClick={handleBulkAction}
+              disabled={bulkSubmitting}
+            >
+              {bulkSubmitting
+                ? "Working…"
+                : bulkAction === "pause"
+                  ? `Pause ${selectedCopyIds.size} ${selectedCopyIds.size === 1 ? "copy" : "copies"}`
+                  : "Remove copies"}
             </Button>
           </DialogFooter>
         </DialogContent>

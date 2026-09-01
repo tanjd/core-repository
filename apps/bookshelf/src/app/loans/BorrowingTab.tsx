@@ -407,20 +407,20 @@ export function BorrowingTab() {
                               </TableCell>
                               <TableCell>
                                 <div className="flex items-center gap-3">
-                                  <div className="w-8 shrink-0">
+                                  <div className="w-12 shrink-0">
                                     {coverUrl ? (
-                                      <div className="relative w-8 aspect-[2/3] rounded overflow-hidden">
+                                      <div className="relative w-12 aspect-[2/3] rounded overflow-hidden">
                                         <Image
                                           src={coverUrl}
                                           alt={bookTitle}
                                           fill
                                           className="object-cover"
-                                          sizes="32px"
+                                          sizes="48px"
                                         />
                                       </div>
                                     ) : (
-                                      <div className="w-8 aspect-[2/3] rounded bg-muted flex items-center justify-center">
-                                        <BookOpen className="size-3 text-muted-foreground" />
+                                      <div className="w-12 aspect-[2/3] rounded bg-muted flex items-center justify-center">
+                                        <BookOpen className="size-4 text-muted-foreground" />
                                       </div>
                                     )}
                                   </div>

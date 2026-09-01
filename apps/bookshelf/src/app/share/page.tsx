@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { toast } from "sonner";
-import { ArrowLeft, BookPlus, ScanLine } from "lucide-react";
+import { BookPlus, ScanLine } from "lucide-react";
 import { api } from "@/lib/api";
 import type { BookMetadataResult } from "@/lib/types";
 import { Button } from "@/components/ui/button";
@@ -18,6 +18,7 @@ import {
   CardContent,
 } from "@/components/ui/card";
 import { BookCover } from "@/components/BookCover";
+import { Breadcrumb } from "@/components/Breadcrumb";
 import { MetadataSearchStep } from "./components/MetadataSearchStep";
 import { ConditionPicker, type Condition } from "./components/ConditionPicker";
 import { CopySettings } from "./components/CopySettings";
@@ -203,14 +204,11 @@ export default function SharePage() {
     <>
       <div className={step === "manual" ? "" : "hidden"}>
         <div className="flex flex-col gap-6 max-w-lg mx-auto">
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => setStep("search")}
-            className="self-start -ml-1"
-          >
-            <ArrowLeft className="size-4" /> Back to search
-          </Button>
+          <Breadcrumb
+            back={{ onClick: () => setStep("search") }}
+            backLabel="Search"
+            current="Enter book manually"
+          />
 
           <div>
             <h1 className="text-2xl font-bold">Enter book manually</h1>
@@ -290,14 +288,11 @@ export default function SharePage() {
       <div className={step === "confirm" && selected ? "" : "hidden"}>
         {selected && (
           <div className="flex flex-col gap-6 max-w-lg mx-auto">
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => setStep("search")}
-              className="self-start -ml-1"
-            >
-              <ArrowLeft className="size-4" /> Back to search
-            </Button>
+            <Breadcrumb
+              back={{ onClick: () => setStep("search") }}
+              backLabel="Search"
+              current="Confirm & share"
+            />
 
             <div>
               <h1 className="text-2xl font-bold">Confirm & share</h1>

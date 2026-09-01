@@ -7,6 +7,7 @@ import type { LoanRequest } from "@/lib/types";
 jest.mock("@/lib/api", () => ({
   api: {
     getLoanRequestsByCopy: jest.fn(),
+    getMyCopies: jest.fn(),
     updateLoanRequest: jest.fn(),
     updateExpectedReturnDate: jest.fn(),
   },
@@ -44,6 +45,7 @@ function pendingRequest(overrides: Partial<LoanRequest> = {}): LoanRequest {
 describe("Accept dialog return-date clamping", () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    (api.getMyCopies as jest.Mock).mockResolvedValue([]);
     localStorage.setItem("bookshelf_token", "test-token");
   });
 

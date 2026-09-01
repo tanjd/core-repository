@@ -238,6 +238,8 @@ type DashboardStats struct {
 	SignupsThisWeek      int64            `json:"signups_this_week"`
 	OverdueCount         int64            `json:"overdue_count"`
 	PendingApprovalCount int64            `json:"pending_approval_count"`
+	ActiveLoansCount     int64            `json:"active_loans_count"`
+	CompletedLoansCount  int64            `json:"completed_loans_count"`
 	MostBorrowedBooks    []BookBorrowStat `json:"most_borrowed_books"`
 	ActiveLenders        []LenderStat     `json:"active_lenders"`
 }

@@ -4,13 +4,14 @@ import { useEffect, useMemo, useState, useRef } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { toast } from "sonner";
-import { ArrowLeft, ChevronRight, Info, RotateCw } from "lucide-react";
+import { ArrowLeft, Info, RotateCw } from "lucide-react";
 import { api } from "@/lib/api";
 import type { Book, User, Copy } from "@/lib/types";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { CopyCard } from "@/components/CopyCard";
 import { BookCover } from "@/components/BookCover";
+import { Breadcrumb } from "@/components/Breadcrumb";
 import { WaitlistButton } from "@/components/WaitlistButton";
 import { RecommendButton } from "@/components/RecommendButton";
 import { RecommendedBy } from "@/components/RecommendedBy";
@@ -176,17 +177,27 @@ export default function BookDetailPage() {
   const [expectedReturnDate, setExpectedReturnDate] = useState("");
   const [requesting, setRequesting] = useState(false);
 
-  // The catalog URL (with page/filter params) that brought the user here,
-  // embedded as ?from= by BookCard so the breadcrumb can send them back to
-  // the exact page they were on rather than always resetting to /catalog.
-  // Validated to /catalog* to guard against open-redirect via a crafted URL.
+  // The URL that brought the user here, embedded as ?from= by BookCard /
+  // BookshelfRow (a catalog page/filter URL) or My Books (always plain
+  // "/my-books") so the breadcrumb can send them back to where they came
+  // from rather than always resetting to /catalog. Validated against an
+  // allowlist of known origins to guard against open-redirect via a crafted
+  // URL.
   const [catalogHref, setCatalogHref] = useState("/catalog");
+  const [catalogLabel, setCatalogLabel] = useState("Catalog");
   useEffect(() => {
     const from = new URLSearchParams(window.location.search).get("from");
     // window.location isn't available during SSR — same setState-in-effect
     // exception as CatalogPage's URL hydration on mount.
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    if (from?.startsWith("/catalog")) setCatalogHref(from);
+    /* eslint-disable react-hooks/set-state-in-effect */
+    if (from?.startsWith("/catalog")) {
+      setCatalogHref(from);
+      setCatalogLabel("Catalog");
+    } else if (from === "/my-books") {
+      setCatalogHref(from);
+      setCatalogLabel("My Books");
+    }
+    /* eslint-enable react-hooks/set-state-in-effect */
   }, []);
 
   const identifiedRef = useRef(false);
@@ -343,7 +354,7 @@ export default function BookDetailPage() {
           </Button>
           <Button variant="outline" asChild>
             <Link href={catalogHref}>
-              <ArrowLeft className="size-4" /> Back to catalog
+              <ArrowLeft className="size-4" /> Back to {catalogLabel}
             </Link>
           </Button>
         </div>
@@ -367,25 +378,11 @@ export default function BookDetailPage() {
       {/* Breadcrumb works regardless of history state — a fresh link
           from a QR scan or shared URL has no back stack for router.back()
           to fall back to, so we lean on a real anchor to /catalog instead. */}
-      <nav
-        aria-label="Breadcrumb"
-        className="flex items-center gap-1 text-sm text-muted-foreground -ml-1"
-      >
-        <Button variant="ghost" size="sm" asChild className="h-8 px-2">
-          <Link href={catalogHref} aria-label="Back to catalog">
-            <ArrowLeft className="size-4" />
-            <span>Catalog</span>
-          </Link>
-        </Button>
-        <ChevronRight className="size-3.5 shrink-0" aria-hidden="true" />
-        <span
-          className="truncate text-foreground"
-          title={book.title}
-          aria-current="page"
-        >
-          {book.title}
-        </span>
-      </nav>
+      <Breadcrumb
+        back={{ href: catalogHref }}
+        backLabel={catalogLabel}
+        current={book.title}
+      />
 
       {/* Stale-data hint: if a background refetch failed but we still
           have data from the previous fetch, tell the user rather than

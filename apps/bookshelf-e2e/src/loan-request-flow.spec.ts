@@ -296,7 +296,12 @@ test.describe("loan request flow", () => {
     const ownerPage = await contextOwner.newPage();
     await login(ownerPage, ownerEmail, E2E_TEST_USER_PASSWORD);
     await ownerPage.goto("/my-books");
-    await expect(ownerPage.getByText(/overdue since/i)).toBeVisible();
+    // Scoped to the desktop table — see the similar comment below. My Books
+    // now uses the same table/card responsive split as Loans and the
+    // per-copy requests page.
+    await expect(
+      ownerPage.getByRole("table").getByText(/overdue since/i),
+    ).toBeVisible();
 
     await ownerPage.goto(`/my-books/${copyId}/requests`);
     // Scoped to the desktop table — the mobile card list renders the same

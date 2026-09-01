@@ -295,6 +295,8 @@ export interface DashboardStats {
   signups_this_week: number;
   overdue_count: number;
   pending_approval_count: number;
+  active_loans_count: number;
+  completed_loans_count: number;
   most_borrowed_books: BookBorrowStat[];
   active_lenders: LenderStat[];
 }

@@ -8,6 +8,8 @@ import {
   UserPlus,
   AlertTriangle,
   RefreshCw,
+  ArrowRightLeft,
+  CheckCircle2,
 } from "lucide-react";
 import { api } from "@/lib/api";
 import type { DashboardStats } from "@/lib/types";
@@ -79,8 +81,8 @@ export default function AdminDashboardPage() {
   if (loading) {
     return (
       <div className="flex flex-col gap-4">
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4">
-          {[1, 2, 3, 4, 5].map((i) => (
+        <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-4">
+          {[1, 2, 3, 4, 5, 6, 7].map((i) => (
             <Skeleton key={i} className="h-24 rounded-lg" />
           ))}
         </div>
@@ -122,7 +124,7 @@ export default function AdminDashboardPage() {
           </Button>
         </div>
 
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4">
+        <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-4">
           <StatCard
             icon={BookOpen}
             label="Books"
@@ -146,6 +148,16 @@ export default function AdminDashboardPage() {
             label="Overdue loans"
             value={stats.overdue_count}
             warn
+          />
+          <StatCard
+            icon={ArrowRightLeft}
+            label="Active loans"
+            value={stats.active_loans_count}
+          />
+          <StatCard
+            icon={CheckCircle2}
+            label="Completed loans"
+            value={stats.completed_loans_count}
           />
         </div>
       </div>
