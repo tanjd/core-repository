@@ -97,12 +97,21 @@ test.describe("my books: status badges and bulk actions", () => {
     await page.goto("/my-books");
     // This is the first test in the file (see the describe-level comment on
     // shared owner/borrower accounts), so this owner's shelf has exactly one
-    // requested copy at this point — a page-wide check is unambiguous.
-    await expect(page.getByText(bookTitle)).toBeVisible();
+    // requested copy at this point — a page-wide check is unambiguous, aside
+    // from the desktop table and mobile card both rendering this title (only
+    // one is CSS-hidden per apps/bookshelf/CLAUDE.md's responsive pattern —
+    // see LendingTab.tsx), hence the visible-only filter.
+    await expect(
+      page.getByText(bookTitle).filter({ visible: true }),
+    ).toBeVisible();
     // exact: the page-summary line above also contains the substring "1
     // pending" (as part of "1 pending request"), so a non-exact match is a
     // strict-mode violation — this is checking the per-copy badge alone.
-    await expect(page.getByText("1 pending", { exact: true })).toBeVisible();
+    // Visible-only filter — see the comment above on the desktop/mobile
+    // dual-render pattern.
+    await expect(
+      page.getByText("1 pending", { exact: true }).filter({ visible: true }),
+    ).toBeVisible();
   });
 
   test("bulk pause and bulk delete act on selected copies", async ({
@@ -179,7 +188,10 @@ test.describe("my books: status badges and bulk actions", () => {
       page.getByText("1 removed, 1 skipped (currently on loan or requested)"),
     ).toBeVisible();
     await expect(page.getByText(availableTitle)).toHaveCount(0);
-    await expect(page.getByText(requestedTitle)).toBeVisible();
+    // Visible-only filter — see the comment on the equivalent assertion above.
+    await expect(
+      page.getByText(requestedTitle).filter({ visible: true }),
+    ).toBeVisible();
   });
 
   test("clicking a book from My Books breadcrumbs back to My Books, not Catalog", async ({

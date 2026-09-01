@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState, useRef } from "react";
+import { Fragment, useCallback, useEffect, useState, useRef } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
@@ -33,6 +33,15 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Textarea } from "@/components/ui/textarea";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Card, CardContent } from "@/components/ui/card";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 import {
   Select,
   SelectContent,
@@ -117,6 +126,96 @@ const SORT_LABELS: Record<string, string> = {
   copies: "Most Copies",
   newest: "Recently Added",
 };
+
+// Per-copy derived values shared by the desktop table and the mobile card
+// list below — computed once per copy, rendered twice (table hidden on
+// mobile, cards hidden on desktop, per apps/bookshelf/CLAUDE.md's
+// "Cards over dense tables on narrow screens" convention).
+interface CopyRowInfo {
+  copy: MyCopy;
+  canDelete: boolean;
+  canTransfer: boolean;
+  loan: ActiveLoan | null;
+  overdue: boolean;
+  pendingCount: number;
+}
+
+function buildCopyRowInfo(
+  copy: MyCopy,
+  pendingCounts: Record<number, number>,
+  activeLoans: Record<number, ActiveLoan>,
+): CopyRowInfo {
+  const loan = copy.status === "loaned" ? (activeLoans[copy.id] ?? null) : null;
+  return {
+    copy,
+    canDelete: copy.status !== "loaned" && copy.status !== "requested",
+    canTransfer: copy.status !== "loaned" && copy.status !== "requested",
+    loan,
+    overdue: isOverdue(loan?.dueDate),
+    pendingCount: pendingCounts[copy.id] ?? 0,
+  };
+}
+
+// The "More actions" popover body is identical in both layouts, so it's
+// factored out once rather than kept in sync in two places.
+function CopyActionsPopover({
+  canTransfer,
+  canDelete,
+  isOpen,
+  onOpenChange,
+  onEdit,
+  onTransfer,
+  onDelete,
+}: {
+  canTransfer: boolean;
+  canDelete: boolean;
+  isOpen: boolean;
+  onOpenChange: (open: boolean) => void;
+  onEdit: () => void;
+  onTransfer: () => void;
+  onDelete: () => void;
+}) {
+  return (
+    <Popover open={isOpen} onOpenChange={onOpenChange}>
+      <PopoverTrigger asChild>
+        <Button
+          size="icon"
+          variant="ghost"
+          aria-label="More actions for this copy"
+        >
+          <MoreVertical className="size-4" />
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent align="start" className="w-44 p-1">
+        <button
+          type="button"
+          className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-sm hover:bg-accent"
+          onClick={onEdit}
+        >
+          <Pencil className="size-4" /> Edit
+        </button>
+        {canTransfer && (
+          <button
+            type="button"
+            className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-sm hover:bg-accent"
+            onClick={onTransfer}
+          >
+            <ArrowRightLeft className="size-4" /> Transfer
+          </button>
+        )}
+        {canDelete && (
+          <button
+            type="button"
+            className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-sm text-destructive hover:bg-destructive/10"
+            onClick={onDelete}
+          >
+            <Trash2 className="size-4" /> Remove
+          </button>
+        )}
+      </PopoverContent>
+    </Popover>
+  );
+}
 
 function importSummaryText(summary: ImportSummary, isResult: boolean): string {
   const parts: string[] = [];
@@ -879,191 +978,352 @@ export default function MyBooksPage() {
           </Button>
         </div>
       ) : (
-        <div className="flex flex-col gap-6">
-          {filteredGroups.map((group) => (
-            <div
-              key={group.bookId}
-              className="rounded-xl border bg-card overflow-hidden"
-            >
-              {/* Book header */}
-              <div className="flex gap-4 p-4 border-b bg-muted/30">
-                <Link
-                  href={`/catalog/${group.bookId}?from=/my-books`}
-                  className="w-14 shrink-0 self-start"
-                >
-                  <div className="relative w-14 aspect-[2/3] rounded overflow-hidden">
-                    <BookCover
-                      title={group.title}
-                      author={group.author}
-                      coverUrl={group.coverUrl}
-                      alt={group.title}
-                      sizes="56px"
-                    />
-                  </div>
-                </Link>
-                <div className="min-w-0">
-                  <Link
-                    href={`/catalog/${group.bookId}?from=/my-books`}
-                    className="font-semibold text-base hover:underline line-clamp-2"
-                  >
-                    {group.title}
-                  </Link>
-                  {group.author && (
-                    <p className="text-sm text-muted-foreground mt-0.5">
-                      by {group.author}
-                    </p>
-                  )}
-                  <p className="text-xs text-muted-foreground mt-1">
-                    {group.copies.length}{" "}
-                    {group.copies.length === 1 ? "copy" : "copies"}
-                  </p>
-                </div>
-              </div>
-
-              {/* Copies */}
-              <div className="divide-y">
-                {group.copies.map((copy) => {
-                  const canDelete =
-                    copy.status !== "loaned" && copy.status !== "requested";
-                  const canTransfer =
-                    copy.status !== "loaned" && copy.status !== "requested";
-                  const loan =
-                    copy.status === "loaned" ? activeLoans[copy.id] : null;
-                  const overdue = isOverdue(loan?.dueDate);
+        <>
+          {/* Desktop: dense table, grouped by book via a colSpan header row
+              per group. Hidden below md — see the mobile card list below. */}
+          <div className="hidden md:block rounded-md border overflow-x-auto">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead className="w-8" />
+                  <TableHead>Book</TableHead>
+                  <TableHead>Condition</TableHead>
+                  <TableHead>Status</TableHead>
+                  <TableHead>Loan / Due</TableHead>
+                  <TableHead className="text-right">Actions</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {filteredGroups.map((group) => {
+                  const rows = group.copies.map((copy) =>
+                    buildCopyRowInfo(copy, pendingCounts, activeLoans),
+                  );
 
                   return (
-                    <div key={copy.id} className="p-4 flex gap-3">
-                      <Checkbox
-                        className="mt-1 shrink-0"
-                        aria-label={`Select ${copy.bookTitle ?? "copy"}`}
-                        checked={selectedCopyIds.has(copy.id)}
-                        onCheckedChange={() => toggleSelected(copy.id)}
-                      />
-                      <div className="flex flex-col gap-2 flex-1 min-w-0">
-                        <div className="flex flex-wrap items-center gap-2">
-                          <Badge
-                            variant={
-                              conditionVariant[copy.condition] ?? "outline"
-                            }
-                            className="capitalize"
-                          >
-                            {copy.condition}
-                          </Badge>
-                          <Badge
-                            variant={statusVariant[copy.status] ?? "outline"}
-                            className="capitalize"
-                          >
-                            {copy.status}
-                          </Badge>
-                          {copy.status === "requested" &&
-                            !!pendingCounts[copy.id] && (
-                              <Badge variant="outline">
-                                {pendingCounts[copy.id]} pending
-                              </Badge>
-                            )}
-                          {overdue && (
-                            <Badge variant="destructive">Overdue</Badge>
-                          )}
-                        </div>
-
-                        {loan && (
-                          <p
-                            className={cn(
-                              "text-xs",
-                              overdue
-                                ? "text-destructive font-medium"
-                                : "text-muted-foreground",
-                            )}
-                          >
-                            Loaned to{" "}
-                            <span className="font-medium text-foreground">
-                              {loan.borrowerName}
-                            </span>
-                            {loan.dueDate
-                              ? ` · ${overdue ? "overdue since" : "due"} ${new Date(loan.dueDate).toLocaleDateString()}`
-                              : " · no return date agreed"}
-                          </p>
-                        )}
-
-                        {copy.notes && (
-                          <p className="text-xs text-muted-foreground line-clamp-1">
-                            {copy.notes}
-                          </p>
-                        )}
-
-                        <div className="flex items-center gap-2 mt-1">
-                          <Link href={`/my-books/${copy.id}/requests`}>
-                            <Button size="sm">
-                              Manage Requests
-                              {!!pendingCounts[copy.id] && (
-                                <Badge variant="secondary" className="px-1.5">
-                                  {pendingCounts[copy.id]}
-                                </Badge>
+                    <Fragment key={group.bookId}>
+                      <TableRow className="bg-muted/30 hover:bg-muted/30">
+                        <TableCell colSpan={6} className="py-3">
+                          <div className="flex items-center gap-3">
+                            <Link
+                              href={`/catalog/${group.bookId}?from=/my-books`}
+                              className="w-10 shrink-0"
+                            >
+                              <div className="relative w-10 aspect-[2/3] rounded overflow-hidden">
+                                <BookCover
+                                  title={group.title}
+                                  author={group.author}
+                                  coverUrl={group.coverUrl}
+                                  alt={group.title}
+                                  sizes="40px"
+                                />
+                              </div>
+                            </Link>
+                            <div className="min-w-0">
+                              <Link
+                                href={`/catalog/${group.bookId}?from=/my-books`}
+                                className="font-semibold hover:underline"
+                              >
+                                {group.title}
+                              </Link>
+                              {group.author && (
+                                <span className="text-sm text-muted-foreground">
+                                  {" "}
+                                  by {group.author}
+                                </span>
                               )}
-                            </Button>
-                          </Link>
-                          <Popover
-                            open={actionMenuCopyId === copy.id}
-                            onOpenChange={(open) =>
-                              setActionMenuCopyId(open ? copy.id : null)
-                            }
-                          >
-                            <PopoverTrigger asChild>
-                              <Button
-                                size="icon"
-                                variant="ghost"
-                                aria-label="More actions for this copy"
+                              <span className="text-xs text-muted-foreground ml-2">
+                                {group.copies.length}{" "}
+                                {group.copies.length === 1 ? "copy" : "copies"}
+                              </span>
+                            </div>
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                      {rows.map(
+                        ({
+                          copy,
+                          canDelete,
+                          canTransfer,
+                          loan,
+                          overdue,
+                          pendingCount,
+                        }) => (
+                          <TableRow key={copy.id}>
+                            <TableCell>
+                              <Checkbox
+                                aria-label={`Select ${copy.bookTitle ?? "copy"}`}
+                                checked={selectedCopyIds.has(copy.id)}
+                                onCheckedChange={() => toggleSelected(copy.id)}
+                              />
+                            </TableCell>
+                            <TableCell />
+                            <TableCell>
+                              <Badge
+                                variant={
+                                  conditionVariant[copy.condition] ?? "outline"
+                                }
+                                className="capitalize"
                               >
-                                <MoreVertical className="size-4" />
-                              </Button>
-                            </PopoverTrigger>
-                            <PopoverContent align="start" className="w-44 p-1">
-                              <button
-                                type="button"
-                                className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-sm hover:bg-accent"
-                                onClick={() => {
-                                  openEdit(copy);
-                                  setActionMenuCopyId(null);
-                                }}
-                              >
-                                <Pencil className="size-4" /> Edit
-                              </button>
-                              {canTransfer && (
-                                <button
-                                  type="button"
-                                  className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-sm hover:bg-accent"
-                                  onClick={() => {
+                                {copy.condition}
+                              </Badge>
+                            </TableCell>
+                            <TableCell>
+                              <div className="flex flex-wrap items-center gap-1.5">
+                                <Badge
+                                  variant={
+                                    statusVariant[copy.status] ?? "outline"
+                                  }
+                                  className="capitalize"
+                                >
+                                  {copy.status}
+                                </Badge>
+                                {copy.status === "requested" &&
+                                  !!pendingCount && (
+                                    <Badge variant="outline">
+                                      {pendingCount} pending
+                                    </Badge>
+                                  )}
+                                {overdue && (
+                                  <Badge variant="destructive">Overdue</Badge>
+                                )}
+                              </div>
+                            </TableCell>
+                            <TableCell className="whitespace-normal">
+                              {loan ? (
+                                <p
+                                  className={cn(
+                                    "text-xs",
+                                    overdue
+                                      ? "text-destructive font-medium"
+                                      : "text-muted-foreground",
+                                  )}
+                                >
+                                  <span className="font-medium text-foreground">
+                                    {loan.borrowerName}
+                                  </span>
+                                  {loan.dueDate
+                                    ? ` · ${overdue ? "overdue since" : "due"} ${new Date(loan.dueDate).toLocaleDateString()}`
+                                    : " · no return date agreed"}
+                                </p>
+                              ) : (
+                                <span className="text-xs text-muted-foreground">
+                                  —
+                                </span>
+                              )}
+                              {copy.notes && (
+                                <p className="text-xs text-muted-foreground line-clamp-1">
+                                  {copy.notes}
+                                </p>
+                              )}
+                            </TableCell>
+                            <TableCell className="text-right">
+                              <div className="flex items-center justify-end gap-2">
+                                <Link href={`/my-books/${copy.id}/requests`}>
+                                  <Button size="sm">
+                                    Manage Requests
+                                    {!!pendingCount && (
+                                      <Badge
+                                        variant="secondary"
+                                        className="px-1.5"
+                                      >
+                                        {pendingCount}
+                                      </Badge>
+                                    )}
+                                  </Button>
+                                </Link>
+                                <CopyActionsPopover
+                                  canTransfer={canTransfer}
+                                  canDelete={canDelete}
+                                  isOpen={actionMenuCopyId === copy.id}
+                                  onOpenChange={(open) =>
+                                    setActionMenuCopyId(open ? copy.id : null)
+                                  }
+                                  onEdit={() => {
+                                    openEdit(copy);
+                                    setActionMenuCopyId(null);
+                                  }}
+                                  onTransfer={() => {
                                     setTransferCopy(copy);
                                     setTransferEmail("");
                                     setActionMenuCopyId(null);
                                   }}
-                                >
-                                  <ArrowRightLeft className="size-4" /> Transfer
-                                </button>
-                              )}
-                              {canDelete && (
-                                <button
-                                  type="button"
-                                  className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-sm text-destructive hover:bg-destructive/10"
-                                  onClick={() => {
+                                  onDelete={() => {
                                     setDeleteCopy(copy);
                                     setActionMenuCopyId(null);
                                   }}
-                                >
-                                  <Trash2 className="size-4" /> Remove
-                                </button>
-                              )}
-                            </PopoverContent>
-                          </Popover>
-                        </div>
-                      </div>
-                    </div>
+                                />
+                              </div>
+                            </TableCell>
+                          </TableRow>
+                        ),
+                      )}
+                    </Fragment>
                   );
                 })}
-              </div>
-            </div>
-          ))}
-        </div>
+              </TableBody>
+            </Table>
+          </div>
+
+          {/* Mobile: book heading + one glance card per copy — same data as
+              the table above, shown below md instead of it. */}
+          <div className="flex flex-col gap-6 md:hidden">
+            {filteredGroups.map((group) => {
+              const rows = group.copies.map((copy) =>
+                buildCopyRowInfo(copy, pendingCounts, activeLoans),
+              );
+
+              return (
+                <div key={group.bookId} className="flex flex-col gap-3">
+                  <div className="flex gap-3 items-center">
+                    <Link
+                      href={`/catalog/${group.bookId}?from=/my-books`}
+                      className="w-10 shrink-0"
+                    >
+                      <div className="relative w-10 aspect-[2/3] rounded overflow-hidden">
+                        <BookCover
+                          title={group.title}
+                          author={group.author}
+                          coverUrl={group.coverUrl}
+                          alt={group.title}
+                          sizes="40px"
+                        />
+                      </div>
+                    </Link>
+                    <div className="min-w-0">
+                      <Link
+                        href={`/catalog/${group.bookId}?from=/my-books`}
+                        className="font-semibold text-base hover:underline line-clamp-2"
+                      >
+                        {group.title}
+                      </Link>
+                      {group.author && (
+                        <p className="text-sm text-muted-foreground">
+                          by {group.author}
+                        </p>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="flex flex-col gap-3">
+                    {rows.map(
+                      ({
+                        copy,
+                        canDelete,
+                        canTransfer,
+                        loan,
+                        overdue,
+                        pendingCount,
+                      }) => (
+                        <Card key={copy.id} className="overflow-hidden">
+                          <CardContent className="p-4 flex gap-3">
+                            <Checkbox
+                              className="mt-1 shrink-0"
+                              aria-label={`Select ${copy.bookTitle ?? "copy"}`}
+                              checked={selectedCopyIds.has(copy.id)}
+                              onCheckedChange={() => toggleSelected(copy.id)}
+                            />
+                            <div className="flex flex-col gap-2 flex-1 min-w-0">
+                              <div className="flex flex-wrap items-center gap-2">
+                                <Badge
+                                  variant={
+                                    conditionVariant[copy.condition] ??
+                                    "outline"
+                                  }
+                                  className="capitalize"
+                                >
+                                  {copy.condition}
+                                </Badge>
+                                <Badge
+                                  variant={
+                                    statusVariant[copy.status] ?? "outline"
+                                  }
+                                  className="capitalize"
+                                >
+                                  {copy.status}
+                                </Badge>
+                                {copy.status === "requested" &&
+                                  !!pendingCount && (
+                                    <Badge variant="outline">
+                                      {pendingCount} pending
+                                    </Badge>
+                                  )}
+                                {overdue && (
+                                  <Badge variant="destructive">Overdue</Badge>
+                                )}
+                              </div>
+
+                              {loan && (
+                                <p
+                                  className={cn(
+                                    "text-xs",
+                                    overdue
+                                      ? "text-destructive font-medium"
+                                      : "text-muted-foreground",
+                                  )}
+                                >
+                                  Loaned to{" "}
+                                  <span className="font-medium text-foreground">
+                                    {loan.borrowerName}
+                                  </span>
+                                  {loan.dueDate
+                                    ? ` · ${overdue ? "overdue since" : "due"} ${new Date(loan.dueDate).toLocaleDateString()}`
+                                    : " · no return date agreed"}
+                                </p>
+                              )}
+
+                              {copy.notes && (
+                                <p className="text-xs text-muted-foreground line-clamp-1">
+                                  {copy.notes}
+                                </p>
+                              )}
+
+                              <div className="flex items-center gap-2 mt-1">
+                                <Link href={`/my-books/${copy.id}/requests`}>
+                                  <Button size="sm">
+                                    Manage Requests
+                                    {!!pendingCount && (
+                                      <Badge
+                                        variant="secondary"
+                                        className="px-1.5"
+                                      >
+                                        {pendingCount}
+                                      </Badge>
+                                    )}
+                                  </Button>
+                                </Link>
+                                <CopyActionsPopover
+                                  canTransfer={canTransfer}
+                                  canDelete={canDelete}
+                                  isOpen={actionMenuCopyId === copy.id}
+                                  onOpenChange={(open) =>
+                                    setActionMenuCopyId(open ? copy.id : null)
+                                  }
+                                  onEdit={() => {
+                                    openEdit(copy);
+                                    setActionMenuCopyId(null);
+                                  }}
+                                  onTransfer={() => {
+                                    setTransferCopy(copy);
+                                    setTransferEmail("");
+                                    setActionMenuCopyId(null);
+                                  }}
+                                  onDelete={() => {
+                                    setDeleteCopy(copy);
+                                    setActionMenuCopyId(null);
+                                  }}
+                                />
+                              </div>
+                            </div>
+                          </CardContent>
+                        </Card>
+                      ),
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </>
       )}
 
       {/* Edit dialog */}
