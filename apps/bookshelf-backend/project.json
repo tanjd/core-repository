@@ -27,6 +27,13 @@
       },
       "parallelism": false
     },
+    "govulncheck": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "govulncheck ./...",
+        "cwd": "{projectRoot}"
+      }
+    },
     "lint": {
       "executor": "@nx-go/nx-go:lint"
     },
