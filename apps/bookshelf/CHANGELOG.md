@@ -1,3 +1,13 @@
+## 0.38.1 (2026-09-02)
+
+### 🩹 Fixes
+
+- **bookshelf:** truncate admin dashboard stat card labels ([#103](https://github.com/tanjd/core-repository/pull/103))
+
+### ❤️ Thank You
+
+- Jeddy Tan @tanjd
+
 ## 0.38.0 (2026-09-02)
 
 ### 🚀 Features
