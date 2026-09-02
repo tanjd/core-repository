@@ -1,3 +1,13 @@
+## 0.38.0 (2026-09-02)
+
+### 🚀 Features
+
+- **bookshelf,bookshelf-backend:** add sort option to admin users list ([#101](https://github.com/tanjd/core-repository/pull/101))
+
+### ❤️ Thank You
+
+- Jeddy Tan @tanjd
+
 ## 0.37.0 (2026-09-02)
 
 ### 🚀 Features
