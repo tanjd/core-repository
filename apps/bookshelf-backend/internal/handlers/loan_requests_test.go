@@ -439,9 +439,11 @@ func TestUpdateExpectedReturnDate_EitherPartyWhileAccepted(t *testing.T) {
 	created, err := d.handler.createLoanRequest(fakeAuthedCtx(t, borrower.ID, "user"), createInput)
 	require.NoError(t, err)
 
+	futureDate := time.Now().AddDate(0, 0, 14).Format("2006-01-02")
+
 	t.Run("cannot set date while pending", func(t *testing.T) {
 		dateInput := &updateExpectedReturnDateInput{ID: created.Body.ID}
-		dateInput.Body.ExpectedReturnDate = "2026-09-01"
+		dateInput.Body.ExpectedReturnDate = futureDate
 		_, err := d.handler.updateExpectedReturnDate(fakeAuthedCtx(t, borrower.ID, "user"), dateInput)
 		require.Error(t, err)
 		assertStatus(t, err, 400)
@@ -454,7 +456,7 @@ func TestUpdateExpectedReturnDate_EitherPartyWhileAccepted(t *testing.T) {
 
 	t.Run("stranger is forbidden", func(t *testing.T) {
 		dateInput := &updateExpectedReturnDateInput{ID: created.Body.ID}
-		dateInput.Body.ExpectedReturnDate = "2026-09-01"
+		dateInput.Body.ExpectedReturnDate = futureDate
 		_, err := d.handler.updateExpectedReturnDate(fakeAuthedCtx(t, stranger.ID, "user"), dateInput)
 		require.Error(t, err)
 		assertStatus(t, err, 403)
