@@ -725,6 +725,7 @@ export const api = {
     search?: string;
     role?: "user" | "admin";
     status?: "verified" | "unverified" | "pending_approval" | "suspended";
+    sort?: "oldest" | "newest" | "name" | "email" | "role";
   }) => {
     const p: Record<string, string> = {};
     if (params?.page) p.page = String(params.page);
@@ -732,6 +733,7 @@ export const api = {
     if (params?.search?.trim()) p.search = params.search.trim();
     if (params?.role) p.role = params.role;
     if (params?.status) p.status = params.status;
+    if (params?.sort) p.sort = params.sort;
     const qs = new URLSearchParams(p).toString();
     return request<PaginatedResult<User>>(`/admin/users${qs ? "?" + qs : ""}`);
   },
