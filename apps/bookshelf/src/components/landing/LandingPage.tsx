@@ -140,6 +140,7 @@ export function LandingPage({
               height={960}
               className="block dark:hidden w-full h-auto"
               sizes="(max-width: 896px) 100vw, 896px"
+              priority
             />
             <Image
               src="/screenshots/catalog-desktop.png"
@@ -148,6 +149,7 @@ export function LandingPage({
               height={960}
               className="hidden dark:block w-full h-auto"
               sizes="(max-width: 896px) 100vw, 896px"
+              priority
             />
           </div>
           <div className="hidden sm:block absolute -bottom-8 -right-6 w-[26%] overflow-hidden rounded-[1.25rem] border-4 border-background shadow-xl">

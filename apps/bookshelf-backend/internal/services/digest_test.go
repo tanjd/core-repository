@@ -50,14 +50,15 @@ func (r *digestAdminRepo) UpsertSetting(key, value string) error {
 // fakeEmailService records sends without opening a real SMTP connection.
 // errOnNth, if > 0, returns an error for exactly that recipient index (1-based).
 type fakeEmailService struct {
-	mu       sync.Mutex
-	calls    int
-	sent     []string // recipient emails, in order
-	lastHTML string   // body of the most recent successful send
-	errOnNth int
+	mu          sync.Mutex
+	calls       int
+	sent        []string // recipient emails, in order
+	lastHTML    string   // body of the most recent successful send
+	lastSubject string   // subject of the most recent successful send
+	errOnNth    int
 }
 
-func (f *fakeEmailService) SendEmail(_ context.Context, recipient, _, html string) error {
+func (f *fakeEmailService) SendEmail(_ context.Context, recipient, subject, html string) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.calls++
@@ -66,6 +67,7 @@ func (f *fakeEmailService) SendEmail(_ context.Context, recipient, _, html strin
 	}
 	f.sent = append(f.sent, recipient)
 	f.lastHTML = html
+	f.lastSubject = subject
 	return nil
 }
 
@@ -368,4 +370,49 @@ func TestDigestService_SendTestEmail_EmptyContent_ShowsPreviewNote(t *testing.T)
 	_, err := svc.SendTestEmail(context.Background(), adminUser)
 	require.NoError(t, err)
 	assert.Contains(t, email.lastHTML, "Nothing to report for April 2025")
+}
+
+func TestDigestService_Render_ContentAwareSubjectAndPreheader(t *testing.T) {
+	today := time.Date(2025, 5, 15, 9, 0, 0, 0, time.Local)
+	admin := newDigestAdminRepo(digestSettings())
+	email := &fakeEmailService{}
+	users := repotest.NewUserRepository()
+
+	adminUser := models.User{Name: "Admin", Email: "admin@example.com"}
+	require.NoError(t, users.Create(&adminUser))
+
+	books := repotest.NewBookRepository()
+	require.NoError(t, books.Create(&models.Book{Title: "Book 1", Author: "A", CreatedAt: time.Date(2025, 4, 10, 0, 0, 0, 0, time.Local)}))
+	require.NoError(t, books.Create(&models.Book{Title: "Book 2", Author: "B", CreatedAt: time.Date(2025, 4, 11, 0, 0, 0, 0, time.Local)}))
+
+	svc := newDigestService(books, repotest.NewRecommendationRepository(nil), users, admin, email, func() time.Time { return today })
+
+	_, err := svc.SendTestEmail(context.Background(), adminUser)
+	require.NoError(t, err)
+
+	assert.Equal(t, "2 new books added to the library — April 2025", email.lastSubject)
+	assert.Contains(t, email.lastHTML, "2 new books were added to the library this month.")
+	assert.Contains(t, email.lastHTML, "Latest 2 additions")
+	assert.Contains(t, email.lastHTML, "Post it to the wishlist board")
+	assert.Contains(t, email.lastHTML, `href="http://localhost:3000/wishlist"`)
+}
+
+func TestDigestService_Render_IncludesTotalBookCount(t *testing.T) {
+	today := time.Date(2025, 5, 15, 9, 0, 0, 0, time.Local)
+	admin := newDigestAdminRepo(digestSettings())
+	email := &fakeEmailService{}
+	users := repotest.NewUserRepository()
+
+	adminUser := models.User{Name: "Admin", Email: "admin@example.com"}
+	require.NoError(t, users.Create(&adminUser))
+
+	books := repotest.NewBookRepository()
+	require.NoError(t, books.Create(&models.Book{Title: "Book 1", Author: "A", CreatedAt: time.Date(2025, 4, 10, 0, 0, 0, 0, time.Local)}))
+	require.NoError(t, books.Create(&models.Book{Title: "Book 2", Author: "B", CreatedAt: time.Date(2020, 1, 1, 0, 0, 0, 0, time.Local)}))
+
+	svc := newDigestService(books, repotest.NewRecommendationRepository(nil), users, admin, email, func() time.Time { return today })
+
+	_, err := svc.SendTestEmail(context.Background(), adminUser)
+	require.NoError(t, err)
+	assert.Contains(t, email.lastHTML, "The library now has <strong>2</strong> books.")
 }
