@@ -34,9 +34,9 @@ function StatCard({
   return (
     <Card className="py-4 gap-2">
       <CardContent className="px-4 flex flex-col gap-1.5">
-        <div className="flex items-center gap-2 text-muted-foreground">
+        <div className="flex items-center gap-2 text-muted-foreground min-w-0">
           <Icon className="size-4" />
-          <span className="text-xs font-medium">{label}</span>
+          <span className="text-xs font-medium truncate">{label}</span>
         </div>
         <p
           className={cn(
