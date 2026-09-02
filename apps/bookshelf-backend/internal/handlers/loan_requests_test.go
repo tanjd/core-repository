@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -468,19 +469,21 @@ func TestUpdateExpectedReturnDate_EitherPartyWhileAccepted(t *testing.T) {
 	})
 
 	t.Run("borrower can set the date", func(t *testing.T) {
+		newDate := time.Now().AddDate(0, 0, 30).Format("2006-01-02")
 		dateInput := &updateExpectedReturnDateInput{ID: created.Body.ID}
-		dateInput.Body.ExpectedReturnDate = "2026-09-01"
+		dateInput.Body.ExpectedReturnDate = newDate
 		result, err := d.handler.updateExpectedReturnDate(fakeAuthedCtx(t, borrower.ID, "user"), dateInput)
 		require.NoError(t, err)
-		assert.Equal(t, "2026-09-01", result.Body.ExpectedReturnDate.Format("2006-01-02"))
+		assert.Equal(t, newDate, result.Body.ExpectedReturnDate.Format("2006-01-02"))
 	})
 
 	t.Run("owner can update the date", func(t *testing.T) {
+		newDate := time.Now().AddDate(0, 0, 60).Format("2006-01-02")
 		dateInput := &updateExpectedReturnDateInput{ID: created.Body.ID}
-		dateInput.Body.ExpectedReturnDate = "2026-10-15"
+		dateInput.Body.ExpectedReturnDate = newDate
 		result, err := d.handler.updateExpectedReturnDate(fakeAuthedCtx(t, owner.ID, "user"), dateInput)
 		require.NoError(t, err)
-		assert.Equal(t, "2026-10-15", result.Body.ExpectedReturnDate.Format("2006-01-02"))
+		assert.Equal(t, newDate, result.Body.ExpectedReturnDate.Format("2006-01-02"))
 	})
 }
 
