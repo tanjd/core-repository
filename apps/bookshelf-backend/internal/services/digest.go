@@ -3,6 +3,7 @@ package services
 import (
 	"context"
 	"fmt"
+	"html"
 	"strconv"
 	"time"
 
@@ -30,6 +31,7 @@ type DigestContent struct {
 	PreviousMonth  string // human label, e.g. "April 2025"
 	PeriodStart    time.Time
 	PeriodEnd      time.Time
+	TotalBooks     int64 // total unique Book rows in the catalog right now
 }
 
 // DigestService sends the monthly member digest on the configured day.
@@ -173,12 +175,18 @@ func (s *DigestService) assembleContent(now time.Time) (DigestContent, error) {
 		return DigestContent{}, fmt.Errorf("list top books: %w", err)
 	}
 
+	totalBooks, err := s.books.CountAll()
+	if err != nil {
+		return DigestContent{}, fmt.Errorf("count books: %w", err)
+	}
+
 	return DigestContent{
 		NewBooks:       newBooks,
 		TopRecommended: topRecs,
 		PreviousMonth:  prevMonthStart.Format("January 2006"),
 		PeriodStart:    prevMonthStart,
 		PeriodEnd:      prevMonthEnd,
+		TotalBooks:     totalBooks,
 	}, nil
 }
 
@@ -202,18 +210,23 @@ func (s *DigestService) sendAll(ctx context.Context, recipients []models.User, c
 // this function with both sections empty (run() short-circuits before
 // sendAll in that case), so the empty-content note below only ever appears
 // in a preview, never in an email a member actually receives.
-func (s *DigestService) render(recipient models.User, content DigestContent, isPreview bool) (subject, html string) {
-	subject = fmt.Sprintf("Bookshelf digest — %s", content.PreviousMonth)
+func (s *DigestService) render(recipient models.User, content DigestContent, isPreview bool) (subject, body string) {
+	subject = digestSubject(content)
 
-	name := recipient.Name
-	if name == "" {
+	name := html.EscapeString(recipient.Name)
+	if recipient.Name == "" {
 		name = "there"
 	}
 
-	html = fmt.Sprintf("<p>Hi %s,</p>\n<p>Here's your Bookshelf update for <strong>%s</strong>.</p>\n", name, content.PreviousMonth)
+	// Hidden preheader: most inbox lists show this text right after the
+	// subject line, so it's worth tailoring rather than leaving clients to
+	// fall back to the first visible line ("Hi <name>, ...").
+	body = fmt.Sprintf(`<div style="display:none;max-height:0;overflow:hidden;">%s</div>`, digestPreheader(content))
+	body += fmt.Sprintf("<p>Hi %s,</p>\n<p>Here's your Bookshelf update for <strong>%s</strong>.</p>\n", name, content.PreviousMonth)
+	body += fmt.Sprintf("<p>The library now has <strong>%d</strong> books.</p>\n", content.TotalBooks)
 
 	if isPreview && len(content.NewBooks) == 0 && len(content.TopRecommended) == 0 {
-		html += fmt.Sprintf(
+		body += fmt.Sprintf(
 			"<p><em>Nothing to report for %s yet — no books were added that month and there are no "+
 				"community recommendations. A real digest would not be sent for an empty month like this; "+
 				"you're only seeing this because a preview always sends.</em></p>\n",
@@ -222,29 +235,66 @@ func (s *DigestService) render(recipient models.User, content DigestContent, isP
 	}
 
 	if len(content.NewBooks) > 0 {
-		html += "<h2>New additions</h2>\n<ul>\n"
+		body += fmt.Sprintf("<h2>Latest %d additions</h2>\n<ul>\n", len(content.NewBooks))
 		for _, b := range content.NewBooks {
-			html += fmt.Sprintf("  <li><strong>%s</strong> — %s</li>\n", b.Title, b.Author)
+			body += fmt.Sprintf("  <li><strong>%s</strong> — %s</li>\n",
+				html.EscapeString(b.Title), html.EscapeString(b.Author))
 		}
-		html += "</ul>\n"
+		body += "</ul>\n"
 	}
 
 	if len(content.TopRecommended) > 0 {
-		html += "<h2>Top picks from the community</h2>\n<ul>\n"
+		body += "<h2>Top picks from the community</h2>\n<ul>\n"
 		for _, tr := range content.TopRecommended {
-			html += fmt.Sprintf("  <li><strong>%s</strong> — %s (%d recommend)</li>\n",
-				tr.Book.Title, tr.Book.Author, tr.Count)
+			body += fmt.Sprintf("  <li><strong>%s</strong> — %s (%d recommend)</li>\n",
+				html.EscapeString(tr.Book.Title), html.EscapeString(tr.Book.Author), tr.Count)
 		}
-		html += "</ul>\n"
+		body += "</ul>\n"
 	}
 
-	html += s.email.Button("/catalog", "Browse the library")
-	html += fmt.Sprintf(
+	body += s.email.Button("/catalog", "Browse the library")
+	body += fmt.Sprintf(
+		`<p style="font-size:13px;color:#555;">Looking for a book we don't have yet? `+
+			`<a href="%s">Post it to the wishlist board</a>.</p>`,
+		s.email.URL("/wishlist"),
+	)
+	body += fmt.Sprintf(
 		`<p style="font-size:12px;color:#888;">Don't want these emails? `+
 			`<a href="%s">Unsubscribe</a></p>`,
 		s.email.UnsubscribeLink(recipient.ID),
 	)
 	return
+}
+
+// digestSubject builds a subject line reflecting the actual content of the
+// digest, rather than a static "Bookshelf digest" label, since a subject
+// that names what's inside earns more opens.
+func digestSubject(content DigestContent) string {
+	switch {
+	case len(content.NewBooks) > 0 && len(content.TopRecommended) > 0:
+		return fmt.Sprintf("%d new books + this month's top pick — %s", len(content.NewBooks), content.PreviousMonth)
+	case len(content.NewBooks) > 0:
+		return fmt.Sprintf("%d new books added to the library — %s", len(content.NewBooks), content.PreviousMonth)
+	case len(content.TopRecommended) > 0:
+		return fmt.Sprintf("This month's top picks from the community — %s", content.PreviousMonth)
+	default:
+		return fmt.Sprintf("Bookshelf digest — %s", content.PreviousMonth)
+	}
+}
+
+// digestPreheader builds the one-line teaser most inbox lists show right
+// after the subject, mirroring digestSubject's content-aware logic.
+func digestPreheader(content DigestContent) string {
+	switch {
+	case len(content.NewBooks) > 0 && len(content.TopRecommended) > 0:
+		return fmt.Sprintf("%d new books added this month, plus the community's top pick.", len(content.NewBooks))
+	case len(content.NewBooks) > 0:
+		return fmt.Sprintf("%d new books were added to the library this month.", len(content.NewBooks))
+	case len(content.TopRecommended) > 0:
+		return "See what the community's been recommending this month."
+	default:
+		return "Your monthly Bookshelf update."
+	}
 }
 
 // SendTestEmail assembles the previous month's content and sends one email to
