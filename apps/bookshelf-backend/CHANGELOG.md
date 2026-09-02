@@ -1,3 +1,13 @@
+## 0.24.0 (2026-09-02)
+
+### 🚀 Features
+
+- **bookshelf,bookshelf-backend:** expand digest email, fix LCP ([#100](https://github.com/tanjd/core-repository/pull/100))
+
+### ❤️ Thank You
+
+- Jeddy Tan @tanjd
+
 ## 0.23.0 (2026-09-01)
 
 ### 🚀 Features
