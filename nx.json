@@ -145,10 +145,14 @@
     "golangci-lint": {
       "cache": true
     },
+    "govulncheck": {
+      "cache": true
+    },
     "lint": {
       "cache": true,
       "dependsOn": [
         "golangci-lint",
+        "govulncheck",
         "tidy",
         "install"
       ]

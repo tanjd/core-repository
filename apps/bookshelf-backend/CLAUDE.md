@@ -93,9 +93,15 @@ apps/bookshelf-backend/Dockerfile .`) and switched from the source repo's `golan
   (see `.env.example`); `data/` is gitignored via the root `.gitignore`'s catch-all `*.db` rule.
 - Cached book cover images are written to `./data/covers` at runtime (created on boot in
   `cmd/server/main.go`) — also covered by the `data/` directory, not tracked.
-- `nx run bookshelf-backend:lint` depends on `golangci-lint` (see `nx.json` →
-  `targetDefaults.lint.dependsOn`), so a plain `nx affected -t lint` genuinely gates on it, not
+- `nx run bookshelf-backend:lint` depends on `golangci-lint` and `govulncheck` (see `nx.json` →
+  `targetDefaults.lint.dependsOn`), so a plain `nx affected -t lint` genuinely gates on both, not
   just `go vet`/`go fmt`.
+- `govulncheck` also reports `GO-2026-5932` (`golang.org/x/crypto/openpgp` unmaintained/
+  unsafe-by-design) at its lowest-confidence "module required" tier — this app only imports
+  `golang.org/x/crypto/bcrypt` (`go mod why golang.org/x/crypto/openpgp` confirms the module
+  doesn't need it); the finding has no fixed version and persists for as long as `x/crypto` is a
+  dependency at all. Accepted as a known false-positive-for-this-app rather than suppressed
+  (govulncheck has no suppression mechanism).
 - Regenerating `apps/bookshelf`'s landing-page screenshots seeds a disposable `DB_PATH` (e.g.
   `./data/screenshot-seed.db`, gitignored via the same `*.db` rule) against a running instance of
   this server — see `apps/bookshelf-e2e/CLAUDE.md`'s note on `src/tools/generate-landing-screenshots.ts`

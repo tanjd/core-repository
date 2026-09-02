@@ -1,6 +1,6 @@
 MAKEFLAGS += --no-print-directory
 
-.PHONY: help setup setup-ci install-deps install-dev-tools install-goimports install-rtk verify affected new-bot docker-build golangci-verify nx-reset upgrade-nx prune-devcontainer-cache
+.PHONY: help setup setup-ci install-deps install-dev-tools install-goimports install-rtk install-govulncheck verify affected new-bot docker-build golangci-verify nx-reset upgrade-nx prune-devcontainer-cache
 
 .DEFAULT_GOAL := help
 
@@ -9,9 +9,9 @@ help: ## Show this help message
 
 ##@ Development
 
-setup: install-deps install-dev-tools ## Full local dev setup (deps + Playwright + goimports + rtk)
+setup: install-deps install-dev-tools install-govulncheck ## Full local dev setup (deps + Playwright + goimports + rtk + govulncheck)
 
-setup-ci: install-deps ## CI setup: just deps + Playwright, skipping the dev-only Husky/Claude/Cursor tooling that has no business running in CI
+setup-ci: install-deps install-govulncheck ## CI setup: deps + Playwright + govulncheck, skipping the dev-only Husky/Claude/Cursor tooling that has no business running in CI
 
 install-deps: ## Install workspace deps and Playwright's chromium (needed by CI and local dev alike)
 	pnpm install --frozen-lockfile
@@ -29,6 +29,9 @@ install-rtk: ## Install rtk + init Claude/Cursor token-saving hooks
 	rtk init -g --auto-patch
 	mkdir -p $(HOME)/.cursor
 	rtk init -g --agent cursor --auto-patch
+
+install-govulncheck: ## Install govulncheck (Go vulnerability scanner, used by the govulncheck Nx target)
+	go install golang.org/x/vuln/cmd/govulncheck@latest
 
 verify: ## Build, lint, and test every project (full local CI equivalent)
 	pnpm nx run-many -t build lint test

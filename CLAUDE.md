@@ -135,11 +135,18 @@ scratch script, not to block work on one existing everywhere.
 
 ## Nx conventions
 
-- **Caching**: `test`, `lint`, `tidy`, and `golangci-lint` are cached via
+- **Caching**: `test`, `lint`, `tidy`, `golangci-lint`, and `govulncheck` are cached via
   `targetDefaults` in `nx.json`. `neverConnectToCloud: true` keeps caching
   local-only, no remote/distributed cache (there's no `nxCloudId` to connect
   with anyway) — local cache still speeds up repeat `nx affected` runs (both
   pre-commit and CI) when a project's inputs haven't changed.
+- **Vulnerability scanning**: `govulncheck` (Go's vulnerability scanner) runs as an
+  `nx govulncheck <project>` target for both Go apps (`food-maps-backend`,
+  `bookshelf-backend`), and `lint`'s `targetDefaults.dependsOn` includes it — so it's part of
+  `nx affected -t lint` in CI and Husky's pre-commit layer 3, same as `golangci-lint`. Installed
+  via `make install-govulncheck` (`go install golang.org/x/vuln/cmd/govulncheck@latest`), folded
+  into both `make setup` and `make setup-ci` — unlike the Husky-only `goimports`/`rtk`, this needs
+  to be present wherever `nx lint` runs, including CI.
 - `namedInputs.sharedGlobals` includes `.github/workflows/ci.yml` — editing
   that file busts the cache for every project.
 - **Inferred tasks**: `@nx/next`, `@nx/vite`, `@nx/playwright`, `@nx/eslint`,
