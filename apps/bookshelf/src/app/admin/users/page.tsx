@@ -1,7 +1,13 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { Loader2, MoreVertical, Search, X } from "lucide-react";
+import {
+  Loader2,
+  MoreVertical,
+  Search,
+  SlidersHorizontal,
+  X,
+} from "lucide-react";
 import { api } from "@/lib/api";
 import type { User } from "@/lib/api";
 import { Button } from "@/components/ui/button";
@@ -33,6 +39,7 @@ type StatusFilter =
   | "unverified"
   | "pending_approval"
   | "suspended";
+type SortOption = "oldest" | "newest" | "name" | "email" | "role";
 
 export default function AdminUsersPage() {
   const [users, setUsers] = useState<User[]>([]);
@@ -48,6 +55,7 @@ export default function AdminUsersPage() {
   const [search, setSearch] = useState("");
   const [roleFilter, setRoleFilter] = useState<RoleFilter>("all");
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
+  const [sort, setSort] = useState<SortOption>("oldest");
   const hasActiveFilters =
     !!search.trim() || roleFilter !== "all" || statusFilter !== "all";
 
@@ -100,7 +108,7 @@ export default function AdminUsersPage() {
       if (debounceRef.current) clearTimeout(debounceRef.current);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [search, roleFilter, statusFilter]);
+  }, [search, roleFilter, statusFilter, sort]);
 
   async function loadUsers(p: number) {
     setLoading(true);
@@ -111,6 +119,7 @@ export default function AdminUsersPage() {
         search: search.trim() || undefined,
         role: roleFilter === "all" ? undefined : roleFilter,
         status: statusFilter === "all" ? undefined : statusFilter,
+        sort,
       });
       setUsers(data.items);
       setTotalPages(data.total_pages);
@@ -227,6 +236,20 @@ export default function AdminUsersPage() {
             Clear filters
           </Button>
         )}
+
+        <Select value={sort} onValueChange={(v) => setSort(v as SortOption)}>
+          <SelectTrigger className="h-9 w-40 sm:ml-auto">
+            <SlidersHorizontal className="size-3.5 text-muted-foreground" />
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="oldest">Oldest first</SelectItem>
+            <SelectItem value="newest">Newest first</SelectItem>
+            <SelectItem value="name">Name (A–Z)</SelectItem>
+            <SelectItem value="email">Email (A–Z)</SelectItem>
+            <SelectItem value="role">Role</SelectItem>
+          </SelectContent>
+        </Select>
       </div>
 
       <p className="text-sm text-muted-foreground mb-4">

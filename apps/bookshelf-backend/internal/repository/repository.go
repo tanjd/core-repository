@@ -195,6 +195,7 @@ type UserListFilter struct {
 	Search string
 	Role   string
 	Status string
+	Sort   string
 }
 
 // AdminRepository handles admin-level data access for user management and app settings.

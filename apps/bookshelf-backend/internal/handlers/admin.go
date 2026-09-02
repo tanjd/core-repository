@@ -55,6 +55,7 @@ type adminUsersInput struct {
 	Search   string `query:"search" doc:"Filter by name or email (case-insensitive substring match)"`
 	Role     string `query:"role" enum:"user,admin" doc:"Filter by role"`
 	Status   string `query:"status" enum:"verified,unverified,pending_approval,suspended" doc:"Filter by status"`
+	Sort     string `query:"sort" enum:"oldest,newest,name,email,role" doc:"Sort order (default oldest)"`
 }
 
 type adminUsersOutput struct {
@@ -223,6 +224,7 @@ func (h *AdminHandler) listUsers(ctx context.Context, input *adminUsersInput) (*
 		Search: input.Search,
 		Role:   input.Role,
 		Status: input.Status,
+		Sort:   input.Sort,
 	})
 	if err != nil {
 		return nil, huma.Error500InternalServerError("could not list users")

@@ -61,9 +61,21 @@ func (r *AdminRepository) ListUsersPaginated(page, pageSize int, filter reposito
 	}
 	var users []models.User
 	offset := (page - 1) * pageSize
+	switch filter.Sort {
+	case "newest":
+		query = query.Order("created_at desc")
+	case "name":
+		query = query.Order("name asc")
+	case "email":
+		query = query.Order("email asc")
+	case "role":
+		query = query.Order("role asc, name asc")
+	default:
+		query = query.Order("created_at asc")
+	}
 	// Preload InvitedBy so the admin Users table can show an "Invited by"
 	// column without a second request per row — see docs/invite-code-spec.md.
-	if err := query.Preload("InvitedBy").Order("created_at asc").Offset(offset).Limit(pageSize).Find(&users).Error; err != nil {
+	if err := query.Preload("InvitedBy").Offset(offset).Limit(pageSize).Find(&users).Error; err != nil {
 		return nil, err
 	}
 	totalPages := int((total + int64(pageSize) - 1) / int64(pageSize))
