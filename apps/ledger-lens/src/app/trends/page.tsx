@@ -3,6 +3,8 @@
 import { useNavTimeseries } from "@/hooks/useStatement";
 import { PortfolioGrowthChart } from "@/components/trends/PortfolioGrowthChart";
 import { TwrByYearChart } from "@/components/trends/TwrByYearChart";
+import { BenchmarkSection } from "@/components/trends/BenchmarkSection";
+import { Separator } from "@/components/ui/separator";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ApiErrorState } from "@/components/layout/ApiErrorState";
 
@@ -45,6 +47,8 @@ export default function TrendsPage() {
         {navData && <PortfolioGrowthChart data={navData} />}
         {navData && <TwrByYearChart data={navData} />}
       </div>
+      <Separator />
+      <BenchmarkSection />
     </div>
   );
 }

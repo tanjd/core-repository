@@ -4,6 +4,7 @@ import type {
   DividendTimeseriesItem,
   NavTimeseriesItem,
   PnlTimeseriesItem,
+  XirrTimeseriesItem,
 } from "@/lib/types";
 import { fmtUsd, fmtSgd, pnlColor } from "@/lib/formatters";
 import { cn } from "@/lib/utils";
@@ -15,6 +16,7 @@ interface Props {
   dividendData: DividendTimeseriesItem[];
   pnlData: PnlTimeseriesItem[];
   dcaData?: DcaItem[];
+  xirrData?: XirrTimeseriesItem[];
   hasMoomoo?: boolean;
 }
 
@@ -30,9 +32,11 @@ export function AllTimeSummaryCards({
   dividendData,
   pnlData,
   dcaData,
+  xirrData,
   hasMoomoo,
 }: Props) {
   const latestNav = navData.at(-1)?.nav_current ?? 0;
+  const latestXirr = xirrData?.at(-1)?.xirr_pct ?? null;
   const cumulativeTwr = computeCumulativeTwr(navData);
   const totalDeposits = depositData.at(-1)?.cumulative_deposits ?? 0;
   const totalNetDividends = dividendData.reduce((s, d) => s + d.net, 0);
@@ -67,6 +71,16 @@ export function AllTimeSummaryCards({
       subtitle: "Compounded across all years",
       valueClass: pnlColor(cumulativeTwr),
     },
+    ...(latestXirr !== null
+      ? [
+          {
+            title: "Annualized Return (XIRR)",
+            value: `${latestXirr >= 0 ? "+" : ""}${latestXirr.toFixed(2)}%`,
+            subtitle: "Weighted by when you actually deposited/withdrew",
+            valueClass: pnlColor(latestXirr),
+          },
+        ]
+      : []),
     {
       title: "Total Deposits",
       value: fmtUsd(totalDeposits),

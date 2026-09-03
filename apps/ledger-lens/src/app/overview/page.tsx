@@ -10,6 +10,7 @@ import {
   useDividendTimeseries,
   usePnlTimeseries,
   useDcaTimeseries,
+  useXirrTimeseries,
 } from "@/hooks/useStatement";
 import { MoomooOverview } from "@/components/overview/MoomooOverview";
 import { CombinedOverview } from "@/components/overview/CombinedOverview";
@@ -46,6 +47,10 @@ export default function OverviewPage() {
     error: pnlError,
   } = usePnlTimeseries(timeseriesBroker);
   const { data: dcaData } = useDcaTimeseries();
+  // XIRR v1 is IBKR-only (see docs/benchmark-and-money-weighted-returns-spec.md) — always ask
+  // for the IBKR series regardless of the active broker filter; the card hides itself when
+  // there's no IBKR data to compute from.
+  const { data: xirrData } = useXirrTimeseries("ibkr");
 
   // Latest year's holdings for the current portfolio snapshot (combined overview only)
   const latestYear = navData?.at(-1)?.year ?? null;
@@ -119,6 +124,7 @@ export default function OverviewPage() {
       dividendData={dividendData}
       pnlData={pnlData}
       dcaData={dcaData}
+      xirrData={xirrData}
       latestHoldings={latestHoldings}
       latestYear={latestYear}
       yearData={yearData}

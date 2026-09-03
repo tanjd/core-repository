@@ -353,6 +353,49 @@ class UploadResponse(_Base):
     twr_pct: float = 0.0
 
 
+# ---------------------------------------------------------------------------
+# Benchmark comparison
+# ---------------------------------------------------------------------------
+
+
+class BenchmarkInfo(_Base):
+    symbol: str
+    price_count: int
+    first_date: date
+    last_date: date
+
+
+class BenchmarkUploadResponse(_Base):
+    symbol: str
+    ingested: int
+    first_date: date
+    last_date: date
+
+
+class BenchmarkTimeseriesItem(_Base):
+    year: int
+    period_start: date | None
+    period_end: date | None
+    twr_pct: float
+    portfolio_cum_index: float
+    benchmark_return_pct: float | None
+    benchmark_cum_index: float | None
+    # "full" — both endpoints priced; "missing" — no benchmark coverage for this period
+    coverage: str
+
+
+# ---------------------------------------------------------------------------
+# Money-weighted return (XIRR)
+# ---------------------------------------------------------------------------
+
+
+class XirrTimeseriesItem(_Base):
+    year: int
+    as_of_date: date
+    xirr_pct: float | None
+    cash_flow_count: int
+
+
 class UploadLogItem(BaseModel):
     id: int
     uploaded_at: datetime

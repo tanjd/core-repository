@@ -1,4 +1,7 @@
 import type {
+  BenchmarkInfo,
+  BenchmarkTimeseriesItem,
+  BenchmarkUploadResponse,
   CashflowsResponse,
   CommissionTimeseriesItem,
   DcaItem,
@@ -16,6 +19,7 @@ import type {
   UploadLogItem,
   UploadResponse,
   VersionResponse,
+  XirrTimeseriesItem,
 } from "@/lib/types";
 
 // Empty string = relative URL → browser calls /api/... on the same host.
@@ -88,6 +92,18 @@ export const TIMESERIES_URLS = {
   commissions: "/api/timeseries/commissions",
 } as const;
 
+export const BENCHMARKS_URL = "/api/benchmarks";
+
+export function getBenchmarkTimeseriesUrl(symbol: string, broker?: string) {
+  const params = new URLSearchParams({ symbol });
+  if (broker) params.set("broker", broker);
+  return `/api/timeseries/benchmark?${params.toString()}`;
+}
+
+export function getXirrUrl(broker?: string) {
+  return broker ? `/api/returns/xirr?broker=${broker}` : "/api/returns/xirr";
+}
+
 // ---------------------------------------------------------------------------
 // Upload / Preview (imperative — not SWR)
 // ---------------------------------------------------------------------------
@@ -124,8 +140,27 @@ export async function fetchYears(): Promise<number[]> {
   return fetcher<number[]>("/api/years");
 }
 
+export async function uploadBenchmark(
+  symbol: string,
+  file: File,
+): Promise<BenchmarkUploadResponse> {
+  const form = new FormData();
+  form.append("file", file);
+  const res = await fetch(
+    `${BASE_URL}/api/benchmarks/upload?symbol=${encodeURIComponent(symbol)}`,
+    { method: "POST", body: form },
+  );
+  if (!res.ok) {
+    const data = (await res.json().catch(() => ({}))) as { detail?: string };
+    throw new Error(data.detail ?? `Upload failed (${res.status})`);
+  }
+  return res.json() as Promise<BenchmarkUploadResponse>;
+}
+
 // Re-export typed fetchers for SWR
 export {
+  type BenchmarkInfo,
+  type BenchmarkTimeseriesItem,
   type CashflowsResponse,
   type CommissionTimeseriesItem,
   type DcaItem,
@@ -141,4 +176,5 @@ export {
   type TradesResponse,
   type UploadLogItem,
   type VersionResponse,
+  type XirrTimeseriesItem,
 };

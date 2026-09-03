@@ -284,6 +284,47 @@ export interface CommissionTimeseriesItem {
 }
 
 // ---------------------------------------------------------------------------
+// Benchmark comparison
+// ---------------------------------------------------------------------------
+
+export interface BenchmarkInfo {
+  symbol: string;
+  price_count: number;
+  first_date: string;
+  last_date: string;
+}
+
+export interface BenchmarkUploadResponse {
+  symbol: string;
+  ingested: number;
+  first_date: string;
+  last_date: string;
+}
+
+export interface BenchmarkTimeseriesItem {
+  year: number;
+  period_start: string | null;
+  period_end: string | null;
+  twr_pct: number;
+  portfolio_cum_index: number;
+  benchmark_return_pct: number | null;
+  benchmark_cum_index: number | null;
+  /** "full" — both endpoints priced; "missing" — no benchmark coverage for this period */
+  coverage: "full" | "missing";
+}
+
+// ---------------------------------------------------------------------------
+// Money-weighted return (XIRR)
+// ---------------------------------------------------------------------------
+
+export interface XirrTimeseriesItem {
+  year: number;
+  as_of_date: string;
+  xirr_pct: number | null;
+  cash_flow_count: number;
+}
+
+// ---------------------------------------------------------------------------
 // Upload / Preview
 // ---------------------------------------------------------------------------
 

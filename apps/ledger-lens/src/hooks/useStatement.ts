@@ -3,8 +3,10 @@
 import useSWR, { mutate as globalMutate } from "swr";
 import {
   fetcher,
+  BENCHMARKS_URL,
   BROKER_INFO_URL,
   BROKERS_URL,
+  getBenchmarkTimeseriesUrl,
   getCashflowsUrl,
   getHoldingsUrl,
   getIncomeUrl,
@@ -12,11 +14,14 @@ import {
   getPerformanceUrl,
   getTimeseriesUrl,
   getTradesUrl,
+  getXirrUrl,
   TIMESERIES_URLS,
   UPLOAD_HISTORY_URL,
   VERSION_URL,
 } from "@/lib/api";
 import type {
+  BenchmarkInfo,
+  BenchmarkTimeseriesItem,
   BrokerInfo,
   CashflowsResponse,
   CommissionTimeseriesItem,
@@ -33,6 +38,7 @@ import type {
   TradesResponse,
   UploadLogItem,
   VersionResponse,
+  XirrTimeseriesItem,
 } from "@/lib/types";
 
 // ---------------------------------------------------------------------------
@@ -112,6 +118,23 @@ export function useCommissionTimeseries() {
     TIMESERIES_URLS.commissions,
     fetcher,
   );
+}
+
+// ---------------------------------------------------------------------------
+// Benchmark comparison / XIRR
+// ---------------------------------------------------------------------------
+
+export function useBenchmarks() {
+  return useSWR<BenchmarkInfo[]>(BENCHMARKS_URL, fetcher);
+}
+
+export function useBenchmarkTimeseries(symbol: string | null, broker?: string) {
+  const key = symbol ? getBenchmarkTimeseriesUrl(symbol, broker) : null;
+  return useSWR<BenchmarkTimeseriesItem[]>(key, fetcher);
+}
+
+export function useXirrTimeseries(broker?: string) {
+  return useSWR<XirrTimeseriesItem[]>(getXirrUrl(broker), fetcher);
 }
 
 // ---------------------------------------------------------------------------
