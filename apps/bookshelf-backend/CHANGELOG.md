@@ -1,3 +1,13 @@
+## 0.25.1 (2026-09-03)
+
+### 🩹 Fixes
+
+- **bookshelf-backend:** preload book title in loan-request email ([#104](https://github.com/tanjd/core-repository/pull/104))
+
+### ❤️ Thank You
+
+- Jeddy Tan @tanjd
+
 ## 0.25.0 (2026-09-02)
 
 ### 🚀 Features
