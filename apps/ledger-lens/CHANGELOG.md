@@ -1,3 +1,13 @@
+## 1.8.0 (2026-09-03)
+
+### 🚀 Features
+
+- **ledger-lens,ledger-lens-backend:** add benchmark comparison and XIRR return ([#107](https://github.com/tanjd/core-repository/pull/107))
+
+### ❤️ Thank You
+
+- Jeddy Tan @tanjd
+
 ## 1.7.6 (2026-09-03)
 
 ### 🩹 Fixes
