@@ -14,11 +14,13 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.config import settings
 from app.database import create_all_tables, engine, migrate_schema
 from app.routers import (
+    benchmarks,
     cashflows,
     holdings,
     income,
     overview,
     performance,
+    returns,
     timeseries,
     trades,
     upload,
@@ -76,6 +78,8 @@ app.include_router(income.router, prefix="/api")
 app.include_router(cashflows.router, prefix="/api")
 app.include_router(performance.router, prefix="/api")
 app.include_router(timeseries.router, prefix="/api")
+app.include_router(benchmarks.router, prefix="/api")
+app.include_router(returns.router, prefix="/api")
 
 
 @app.get("/health")

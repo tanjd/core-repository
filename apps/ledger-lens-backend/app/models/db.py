@@ -219,6 +219,18 @@ class CorporateAction(SQLModel, table=True):
     realized_pnl: float = 0.0
 
 
+class BenchmarkPrice(SQLModel, table=True):
+    """One (symbol, date) closing price for a user-uploaded benchmark index."""
+
+    __tablename__: ClassVar[str] = "benchmark_price"  # type: ignore
+    __table_args__: ClassVar[tuple[UniqueConstraint]] = (UniqueConstraint("symbol", "price_date"),)
+
+    id: int | None = Field(default=None, primary_key=True)
+    symbol: str
+    price_date: date
+    close: float
+
+
 class UploadLog(SQLModel, table=True):
     """Append-only audit log of every ingest event (upload or watcher)."""
 

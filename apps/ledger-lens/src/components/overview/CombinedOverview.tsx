@@ -18,6 +18,7 @@ import type {
   NavTimeseriesItem,
   OverviewResponse,
   PnlTimeseriesItem,
+  XirrTimeseriesItem,
 } from "@/lib/types";
 
 interface Props {
@@ -31,6 +32,7 @@ interface Props {
   dividendData: DividendTimeseriesItem[] | undefined;
   pnlData: PnlTimeseriesItem[] | undefined;
   dcaData: DcaItem[] | undefined;
+  xirrData: XirrTimeseriesItem[] | undefined;
   latestHoldings: HoldingsResponse | undefined;
   latestYear: number | null;
   yearData: OverviewResponse | undefined;
@@ -49,6 +51,7 @@ export function CombinedOverview({
   dividendData,
   pnlData,
   dcaData,
+  xirrData,
   latestHoldings,
   latestYear,
   yearData,
@@ -102,6 +105,7 @@ export function CombinedOverview({
             dividendData={dividendData}
             pnlData={pnlData}
             dcaData={dcaData}
+            xirrData={xirrData}
             hasMoomoo={hasMoomoo && !selectedBroker}
           />
         )}

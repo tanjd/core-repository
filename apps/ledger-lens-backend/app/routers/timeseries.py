@@ -2,13 +2,16 @@
 
 from __future__ import annotations
 
+import bisect
 from collections import defaultdict
+from datetime import date
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 from sqlmodel import Session, select
 
 from app.database import get_session
 from app.models.api import (
+    BenchmarkTimeseriesItem,
     CommissionTimeseriesItem,
     DcaItem,
     DepositTimeseriesItem,
@@ -18,6 +21,7 @@ from app.models.api import (
     PositionTimeseriesItem,
 )
 from app.models.db import (
+    BenchmarkPrice,
     Deposit,
     Dividend,
     Fee,
@@ -227,6 +231,69 @@ def timeseries_positions(
         )
         for p in positions
     ]
+
+
+@router.get("/timeseries/benchmark", response_model=list[BenchmarkTimeseriesItem])
+def timeseries_benchmark(
+    symbol: str,
+    broker: str = "ibkr",
+    session: Session = Depends(get_session),
+) -> list[BenchmarkTimeseriesItem]:
+    """Portfolio TWR vs. a chosen benchmark index, chain-linked into cumulative indices.
+
+    Only IBKR carries a real per-year `twr_pct` (IBKR computes it; see
+    app/parser/sections/nav.py) — same restriction `timeseries_nav` already applies.
+    """
+    symbol = symbol.strip().upper()
+    statements = session.exec(
+        select(Statement).where(Statement.broker == broker).order_by(Statement.year)  # type: ignore
+    ).all()
+    if not statements:
+        raise HTTPException(status_code=404, detail=f"No statements found for broker={broker}")
+
+    prices = session.exec(
+        select(BenchmarkPrice)
+        .where(BenchmarkPrice.symbol == symbol)
+        .order_by(BenchmarkPrice.price_date)  # type: ignore
+    ).all()
+    price_dates = [p.price_date for p in prices]
+    price_closes = [p.close for p in prices]
+
+    def price_at_or_before(target: date) -> float | None:
+        idx = bisect.bisect_right(price_dates, target) - 1
+        return price_closes[idx] if idx >= 0 else None
+
+    result: list[BenchmarkTimeseriesItem] = []
+    portfolio_index = 100.0
+    benchmark_index: float | None = None
+    for s in statements:
+        portfolio_index *= 1 + s.twr_pct / 100
+
+        benchmark_return_pct: float | None = None
+        coverage = "missing"
+        if s.period_start is not None and s.period_end is not None:
+            price_start = price_at_or_before(s.period_start)
+            price_end = price_at_or_before(s.period_end)
+            if price_start is not None and price_end is not None and price_start != 0:
+                benchmark_return_pct = (price_end / price_start - 1) * 100
+                coverage = "full"
+
+        if benchmark_return_pct is not None:
+            benchmark_index = (benchmark_index or 100.0) * (1 + benchmark_return_pct / 100)
+
+        result.append(
+            BenchmarkTimeseriesItem(
+                year=s.year,
+                period_start=s.period_start,
+                period_end=s.period_end,
+                twr_pct=s.twr_pct,
+                portfolio_cum_index=portfolio_index,
+                benchmark_return_pct=benchmark_return_pct,
+                benchmark_cum_index=benchmark_index,
+                coverage=coverage,
+            )
+        )
+    return result
 
 
 @router.get("/timeseries/commissions", response_model=list[CommissionTimeseriesItem])
