@@ -433,11 +433,6 @@ func (r *CopyRepository) GetByIDWithAssociations(id uint) (*models.Copy, error) 
 	return r.GetByID(id)
 }
 
-// GetByIDWithOwner behaves like GetByID; see GetByIDWithAssociations.
-func (r *CopyRepository) GetByIDWithOwner(id uint) (*models.Copy, error) {
-	return r.GetByID(id)
-}
-
 // ListByOwnerID returns all copies owned by ownerID, ordered by ID.
 func (r *CopyRepository) ListByOwnerID(ownerID uint) ([]models.Copy, error) {
 	r.mu.Lock()

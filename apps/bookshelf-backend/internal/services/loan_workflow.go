@@ -44,7 +44,7 @@ func NewLoanWorkflow(
 // OnRequested fires when a borrower creates a new loan request.
 // It notifies the copy owner.
 func (w *LoanWorkflow) OnRequested(ctx context.Context, lr *models.LoanRequest) error {
-	bookCopy, err := w.copies.GetByIDWithOwner(lr.CopyID)
+	bookCopy, err := w.copies.GetByIDWithAssociations(lr.CopyID)
 	if err != nil {
 		return fmt.Errorf("OnRequested: load copy: %w", err)
 	}

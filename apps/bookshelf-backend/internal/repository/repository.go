@@ -116,7 +116,6 @@ type CopyRepository interface {
 	Create(bookCopy *models.Copy) error
 	GetByID(id uint) (*models.Copy, error)
 	GetByIDWithAssociations(id uint) (*models.Copy, error)
-	GetByIDWithOwner(id uint) (*models.Copy, error)
 	ListByOwnerID(ownerID uint) ([]models.Copy, error)
 	// ListOwnedBookIDs returns the distinct book IDs the owner has at least
 	// one copy of, without loading full Copy/Book rows — for callers that

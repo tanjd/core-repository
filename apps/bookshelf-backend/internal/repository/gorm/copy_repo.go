@@ -45,17 +45,6 @@ func (r *CopyRepository) GetByIDWithAssociations(id uint) (*models.Copy, error) 
 	return &bookCopy, nil
 }
 
-func (r *CopyRepository) GetByIDWithOwner(id uint) (*models.Copy, error) {
-	var bookCopy models.Copy
-	if err := r.db.Preload("Owner").First(&bookCopy, id).Error; err != nil {
-		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return nil, repository.ErrNotFound
-		}
-		return nil, err
-	}
-	return &bookCopy, nil
-}
-
 func (r *CopyRepository) ListByOwnerID(ownerID uint) ([]models.Copy, error) {
 	var copies []models.Copy
 	if err := r.db.Preload("Book").Where("owner_id = ?", ownerID).Find(&copies).Error; err != nil {
