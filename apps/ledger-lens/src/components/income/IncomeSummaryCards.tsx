@@ -30,6 +30,7 @@ export function IncomeSummaryCards({ summary }: Props) {
           </CardHeader>
           <CardContent>
             <p
+              data-val=""
               className={cn(
                 "text-2xl font-bold",
                 c.colored ? pnlColor(c.value) : "",

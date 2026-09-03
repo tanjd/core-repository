@@ -75,6 +75,7 @@ export function TopBar() {
           className="h-8 w-8"
           onClick={togglePrivacyMode}
           title={privacyMode ? "Show values" : "Hide values"}
+          aria-label={privacyMode ? "Show values" : "Hide values"}
         >
           {privacyMode ? (
             <EyeOff className="h-4 w-4 text-muted-foreground" />

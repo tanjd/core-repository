@@ -11,13 +11,14 @@ import { MtmTable } from "@/components/performance/MtmTable";
 import { KpiCard } from "@/components/overview/KpiCard";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Skeleton } from "@/components/ui/skeleton";
+import { ApiErrorState } from "@/components/layout/ApiErrorState";
 import { fmtUsd, fmtPct, pnlColor } from "@/lib/formatters";
 
 export default function PerformancePage() {
   const { selectedYear } = useYear();
-  const { data: perfData, isLoading } = usePerformance(selectedYear);
-  const { data: commTimeseries } = useCommissionTimeseries();
-  const { data: navTimeseries } = useNavTimeseries();
+  const { data: perfData, isLoading, error } = usePerformance(selectedYear);
+  const { data: commTimeseries, error: commError } = useCommissionTimeseries();
+  const { data: navTimeseries, error: navError } = useNavTimeseries();
 
   const totalCommissions = Math.abs(
     (commTimeseries ?? []).reduce((s, c) => s + c.total, 0),
@@ -27,6 +28,11 @@ export default function PerformancePage() {
 
   if (!selectedYear) {
     return <p className="text-muted-foreground">Select a year to view P&L.</p>;
+  }
+
+  const loadError = error ?? commError ?? navError;
+  if (loadError) {
+    return <ApiErrorState error={loadError} />;
   }
 
   if (isLoading || !perfData) {

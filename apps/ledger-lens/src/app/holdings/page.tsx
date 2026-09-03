@@ -8,6 +8,7 @@ import { PortfolioAllocationChart } from "@/components/holdings/PortfolioAllocat
 import { UnrealizedPnlChart } from "@/components/holdings/UnrealizedPnlChart";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Skeleton } from "@/components/ui/skeleton";
+import { ApiErrorState } from "@/components/layout/ApiErrorState";
 import type { PositionItem } from "@/lib/types";
 
 const BROKER_LABELS: Record<string, string> = {
@@ -53,12 +54,16 @@ function PositionView({ positions }: { positions: PositionItem[] }) {
 export default function HoldingsPage() {
   const { selectedYear } = useYear();
   const { selectedBroker } = useBroker();
-  const { data, isLoading } = useHoldings(selectedYear);
+  const { data, isLoading, error } = useHoldings(selectedYear);
 
   if (!selectedYear) {
     return (
       <p className="text-muted-foreground">Select a year to view holdings.</p>
     );
+  }
+
+  if (error) {
+    return <ApiErrorState error={error} />;
   }
 
   if (isLoading || !data) {
