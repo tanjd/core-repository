@@ -4,9 +4,18 @@ import { useNavTimeseries } from "@/hooks/useStatement";
 import { PortfolioGrowthChart } from "@/components/trends/PortfolioGrowthChart";
 import { TwrByYearChart } from "@/components/trends/TwrByYearChart";
 import { Skeleton } from "@/components/ui/skeleton";
+import { ApiErrorState } from "@/components/layout/ApiErrorState";
 
 export default function TrendsPage() {
-  const { data: navData, isLoading: navLoading } = useNavTimeseries();
+  const {
+    data: navData,
+    isLoading: navLoading,
+    error: navError,
+  } = useNavTimeseries();
+
+  if (navError) {
+    return <ApiErrorState error={navError} />;
+  }
 
   if (navLoading) {
     return (

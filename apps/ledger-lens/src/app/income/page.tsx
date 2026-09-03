@@ -23,6 +23,7 @@ import {
 } from "@/components/ui/table";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { KpiCard } from "@/components/overview/KpiCard";
+import { ApiErrorState } from "@/components/layout/ApiErrorState";
 import { fmtUsd, fmtPct, pnlColor } from "@/lib/formatters";
 
 function buildYieldRows(
@@ -48,10 +49,13 @@ function buildYieldRows(
 
 export default function IncomePage() {
   const { selectedYear } = useYear();
-  const { data, isLoading } = useIncome(selectedYear);
+  const { data, isLoading, error } = useIncome(selectedYear);
   const { data: holdingsData } = useHoldings(selectedYear);
-  const { data: dividendTimeseries, isLoading: dividendTsLoading } =
-    useDividendTimeseries();
+  const {
+    data: dividendTimeseries,
+    isLoading: dividendTsLoading,
+    error: dividendTsError,
+  } = useDividendTimeseries();
 
   const costBasisMap = new Map(
     (holdingsData?.positions ?? []).map((p) => [p.symbol, p.cost_basis]),
@@ -79,7 +83,9 @@ export default function IncomePage() {
         <h2 className="mb-3 text-sm font-semibold uppercase tracking-widest text-muted-foreground">
           All Years
         </h2>
-        {dividendTsLoading || !dividendTimeseries ? (
+        {dividendTsError ? (
+          <ApiErrorState error={dividendTsError} compact />
+        ) : dividendTsLoading || !dividendTimeseries ? (
           <div className="space-y-4">
             <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
               {Array.from({ length: 4 }).map((_, i) => (
@@ -139,7 +145,9 @@ export default function IncomePage() {
           <h2 className="text-sm font-semibold uppercase tracking-widest text-muted-foreground">
             {selectedYear} Detail
           </h2>
-          {isLoading || !data ? (
+          {error ? (
+            <ApiErrorState error={error} compact />
+          ) : isLoading || !data ? (
             <div className="space-y-4">
               <Skeleton className="h-24 w-full" />
               <Skeleton className="h-64 w-full" />

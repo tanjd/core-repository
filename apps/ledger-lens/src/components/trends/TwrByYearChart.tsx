@@ -5,6 +5,7 @@ import {
   BarChart,
   CartesianGrid,
   Cell,
+  LabelList,
   ResponsiveContainer,
   Tooltip,
   XAxis,
@@ -49,6 +50,15 @@ export function TwrByYearChart({ data }: Props) {
               {chartData.map((d, i) => (
                 <Cell key={i} fill={d.TWR >= 0 ? "#22c55e" : "#ef4444"} />
               ))}
+              <LabelList
+                dataKey="TWR"
+                position="top"
+                fontSize={11}
+                formatter={(v) => {
+                  const n = Number(v ?? 0);
+                  return `${n >= 0 ? "+" : ""}${n}%`;
+                }}
+              />
             </Bar>
           </BarChart>
         </ResponsiveContainer>

@@ -13,6 +13,7 @@ import {
 } from "@/components/ui/table";
 import { fmtUsd, fmtPct } from "@/lib/formatters";
 import { useUploadHistory } from "@/hooks/useStatement";
+import { ApiErrorState } from "@/components/layout/ApiErrorState";
 import type { UploadLogItem } from "@/lib/types";
 
 const BROKER_LABELS: Record<string, string> = {
@@ -42,7 +43,16 @@ function formatUploadedAt(isoStr: string): string {
 }
 
 export default function HistoryPage() {
-  const { data: logs, isLoading } = useUploadHistory();
+  const { data: logs, isLoading, error } = useUploadHistory();
+
+  if (error) {
+    return (
+      <div className="space-y-6">
+        <h1 className="text-xl font-semibold">Upload History</h1>
+        <ApiErrorState error={error} />
+      </div>
+    );
+  }
 
   if (isLoading) {
     return (

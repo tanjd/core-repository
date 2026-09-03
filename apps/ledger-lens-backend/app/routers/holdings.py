@@ -45,6 +45,13 @@ def get_holdings(
         for p in positions
     ]
 
+    currencies = {p.currency for p in positions}
+    if len(currencies) > 1:
+        raise HTTPException(
+            status_code=409,
+            detail=f"Cannot total holdings across mixed currencies: {sorted(currencies)}",
+        )
+
     totals = HoldingsTotals(
         cost_basis=sum(p.cost_basis for p in positions),
         current_value=sum(p.current_value for p in positions),

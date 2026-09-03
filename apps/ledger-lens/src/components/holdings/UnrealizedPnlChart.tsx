@@ -5,6 +5,7 @@ import {
   BarChart,
   CartesianGrid,
   Cell,
+  LabelList,
   ResponsiveContainer,
   Tooltip,
   XAxis,
@@ -76,6 +77,15 @@ export function UnrealizedPnlChart({ positions }: Props) {
                   fill={d["Unrealized P&L"] >= 0 ? "#22c55e" : "#ef4444"}
                 />
               ))}
+              <LabelList
+                dataKey="Unrealized P&L"
+                position="right"
+                fontSize={11}
+                formatter={(v) => {
+                  const n = Number(v ?? 0);
+                  return `${n >= 0 ? "+" : ""}${fmtUsd(n)}`;
+                }}
+              />
             </Bar>
           </BarChart>
         </ResponsiveContainer>

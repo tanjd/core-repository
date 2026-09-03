@@ -13,21 +13,37 @@ import { KpiCard } from "@/components/overview/KpiCard";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Separator } from "@/components/ui/separator";
+import { ApiErrorState } from "@/components/layout/ApiErrorState";
 import { fmtUsd, pnlColor } from "@/lib/formatters";
 
 export default function TradesPage() {
   const { selectedYear } = useYear();
   const { selectedBroker } = useBroker();
-  const { data: stocks, isLoading: loadingStocks } =
-    useStockTrades(selectedYear);
-  const { data: forex, isLoading: loadingForex } = useForexTrades(selectedYear);
-  const { data: commTimeseries, isLoading: commLoading } =
-    useCommissionTimeseries();
+  const {
+    data: stocks,
+    isLoading: loadingStocks,
+    error: stocksError,
+  } = useStockTrades(selectedYear);
+  const {
+    data: forex,
+    isLoading: loadingForex,
+    error: forexError,
+  } = useForexTrades(selectedYear);
+  const {
+    data: commTimeseries,
+    isLoading: commLoading,
+    error: commError,
+  } = useCommissionTimeseries();
 
   if (!selectedYear) {
     return (
       <p className="text-muted-foreground">Select a year to view trades.</p>
     );
+  }
+
+  const loadError = stocksError ?? forexError ?? commError;
+  if (loadError) {
+    return <ApiErrorState error={loadError} />;
   }
 
   // Apply broker filter client-side (trades already have broker field)

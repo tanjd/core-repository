@@ -65,6 +65,12 @@ def get_overview(
     primary = next((s for s in stmts if s.broker == "ibkr"), stmts[0])
 
     # Aggregate NAV across all brokers
+    currencies = {s.base_currency for s in stmts}
+    if len(currencies) > 1:
+        raise HTTPException(
+            status_code=409,
+            detail=f"Cannot total NAV across mixed currencies: {sorted(currencies)}",
+        )
     nav_current = sum(s.nav_current for s in stmts)
     nav_prior = sum(s.nav_prior for s in stmts)
     nav_change = sum(s.nav_change for s in stmts)
@@ -74,7 +80,14 @@ def get_overview(
     positions = session.exec(
         select(Position).where(Position.statement_id.in_(stmt_ids))  # type: ignore
     ).all()
-    stock_value = sum(p.current_value for p in positions if p.asset_category == "Stocks")
+    stock_positions = [p for p in positions if p.asset_category == "Stocks"]
+    stock_currencies = {p.currency for p in stock_positions}
+    if len(stock_currencies) > 1:
+        raise HTTPException(
+            status_code=409,
+            detail=f"Cannot total stock value across mixed currencies: {sorted(stock_currencies)}",
+        )
+    stock_value = sum(p.current_value for p in stock_positions)
     ibkr_stmt = next((s for s in stmts if s.broker == "ibkr"), None)
     cash_value = ibkr_stmt.nav_cash if ibkr_stmt else 0.0
 

@@ -8,13 +8,17 @@ import { DepositVsGrowthChart } from "@/components/trends/DepositVsGrowthChart";
 import { KpiCard } from "@/components/overview/KpiCard";
 import { Separator } from "@/components/ui/separator";
 import { Skeleton } from "@/components/ui/skeleton";
+import { ApiErrorState } from "@/components/layout/ApiErrorState";
 import { fmtUsd } from "@/lib/formatters";
 
 export default function CashFlowsPage() {
   const { selectedYear } = useYear();
-  const { data, isLoading } = useCashflows(selectedYear);
-  const { data: depositTimeseries, isLoading: depositTsLoading } =
-    useDepositTimeseries();
+  const { data, isLoading, error } = useCashflows(selectedYear);
+  const {
+    data: depositTimeseries,
+    isLoading: depositTsLoading,
+    error: depositTsError,
+  } = useDepositTimeseries();
 
   const currencies = data ? Object.entries(data.by_currency) : [];
 
@@ -25,7 +29,9 @@ export default function CashFlowsPage() {
         <h2 className="mb-3 text-sm font-semibold uppercase tracking-widest text-muted-foreground">
           All Years
         </h2>
-        {depositTsLoading || !depositTimeseries ? (
+        {depositTsError ? (
+          <ApiErrorState error={depositTsError} compact />
+        ) : depositTsLoading || !depositTimeseries ? (
           <Skeleton className="h-56 w-full rounded-lg" />
         ) : depositTimeseries.length > 0 ? (
           <div className="space-y-4">
@@ -61,7 +67,9 @@ export default function CashFlowsPage() {
           <h2 className="text-sm font-semibold uppercase tracking-widest text-muted-foreground">
             {selectedYear} Detail
           </h2>
-          {isLoading || !data ? (
+          {error ? (
+            <ApiErrorState error={error} compact />
+          ) : isLoading || !data ? (
             <Skeleton className="h-64 w-full" />
           ) : (
             <>
