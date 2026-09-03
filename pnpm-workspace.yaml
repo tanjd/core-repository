@@ -18,13 +18,22 @@ minimumReleaseAgeExclude:
 overrides:
   adm-zip: 0.6.0
   esbuild: 0.25.0
-  fast-uri: 3.1.5
+  fast-uri: 3.1.6
   file-type: 21.3.4
   hono: 4.12.34
   js-yaml@3: 3.15.1
   js-yaml@4: 4.3.1
   koa: 3.1.2
   minimatch: 9.0.9
+  # jsdom's own selector-engine dependency. 2.2.26+ has an open upstream
+  # regression where matching `:modal` recurses into repeated
+  # Element.matches() calls under jsdom (~1.3s each) — Radix UI's
+  # Popover/Dialog primitives check `:modal` internally, so opening one in a
+  # jsdom-based test (e.g. RecommendedBy.test.tsx) blows past Jest's default
+  # test timeout. See dperini/nwsapi#171, #172, #177 (all open as of
+  # 2026-09-03). Pinned to 2.2.25, the last version before the regression —
+  # drop this once upstream ships a fix.
+  nwsapi: 2.2.25
   picomatch: 4.0.5
   postcss: 8.5.25
   serialize-javascript: 7.0.7
