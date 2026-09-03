@@ -1,3 +1,13 @@
+## 1.7.4 (2026-09-03)
+
+### 🩹 Fixes
+
+- **ledger-lens,ledger-lens-backend:** currency guard and UX pass ([#106](https://github.com/tanjd/core-repository/pull/106))
+
+### ❤️ Thank You
+
+- Jeddy Tan @tanjd
+
 ## 1.7.3 (2026-08-26)
 
 This was a version bump only for ledger-lens-backend to align it with other projects, there were no code changes.

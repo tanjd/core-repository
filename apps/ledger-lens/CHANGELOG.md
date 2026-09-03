@@ -1,3 +1,13 @@
+## 1.7.6 (2026-09-03)
+
+### 🩹 Fixes
+
+- **ledger-lens,ledger-lens-backend:** currency guard and UX pass ([#106](https://github.com/tanjd/core-repository/pull/106))
+
+### ❤️ Thank You
+
+- Jeddy Tan @tanjd
+
 ## 1.7.5 (2026-08-26)
 
 ### 🚀 Features
