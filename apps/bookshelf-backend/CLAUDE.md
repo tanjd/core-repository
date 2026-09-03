@@ -187,6 +187,14 @@ cp -r /data/. /backup/`.
 
 ## Known gaps
 
+- **`Copy` preload gotcha.** `CopyRepository.GetByIDWithAssociations`
+  (`internal/repository/gorm/copy_repo.go`) is the only method that preloads both `Book` and
+  `Owner` — use it for anything that reads `bookCopy.Book` (e.g. building an email/notification
+  body), not a narrower-named sibling method. A prior bug (`LoanWorkflow.OnRequested` using a
+  since-removed `GetByIDWithOwner`, which preloaded `Owner` only) silently sent "someone wants to
+  borrow your book" emails with a blank book title, because GORM leaves an un-preloaded
+  association as its zero value rather than erroring — caught by
+  `TestCopyRepository_GetByIDWithAssociations_PreloadsBookAndOwner` in `copy_repo_test.go`.
 - **Monthly digest non-goals (intentionally parked).** The digest service
   (`internal/services/digest.go`) sends sequentially with no worker pool, no per-recipient
   delivery ledger, and no daily budget counter. At ~100 members this is fine: even a full send
