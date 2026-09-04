@@ -129,10 +129,11 @@ func seedRecipients(t *testing.T, users *repotest.UserRepository, n int) []model
 	var out []models.User
 	for i := range n {
 		u := models.User{
-			Name:                 fmt.Sprintf("User %d", i),
-			Email:                fmt.Sprintf("user%d@example.com", i),
-			Verified:             true,
-			MonthlyDigestEnabled: true,
+			Name:                      fmt.Sprintf("User %d", i),
+			Email:                     fmt.Sprintf("user%d@example.com", i),
+			Verified:                  true,
+			MonthlyDigestEnabled:      true,
+			EmailNotificationsEnabled: true,
 		}
 		require.NoError(t, users.Create(&u))
 		out = append(out, u)
@@ -308,6 +309,55 @@ func TestDigestService_Run_PushesTelegramToLinkedRecipients(t *testing.T) {
 	assert.Equal(t, linkedChatID, messages[0].ChatID)
 	assert.Contains(t, messages[0].Text, "April Book")
 	assert.Contains(t, messages[0].Text, "Browse the library")
+}
+
+func TestDigestService_Run_RespectsPerChannelPreferences(t *testing.T) {
+	today := time.Date(2025, 5, 1, 9, 0, 0, 0, time.Local)
+	prevMonthStart := time.Date(2025, 4, 1, 0, 0, 0, 0, time.Local)
+
+	books := repotest.NewBookRepository()
+	book := models.Book{Title: "April Book", Author: "A", CreatedAt: prevMonthStart.Add(time.Hour)}
+	require.NoError(t, books.Create(&book))
+
+	users := repotest.NewUserRepository()
+	chatID := int64(777)
+	// Opted into the digest itself, but has turned off email notifications
+	// in general — should get the Telegram push only, no email.
+	telegramOnly := models.User{
+		Name: "TelegramOnly", Email: "telegram-only@example.com", Verified: true,
+		MonthlyDigestEnabled: true, EmailNotificationsEnabled: false,
+		TelegramChatID: &chatID, TelegramNotificationsEnabled: true,
+	}
+	require.NoError(t, users.Create(&telegramOnly))
+	// Opted into the digest but has no channel enabled at all — should get
+	// neither, and shouldn't count as a send failure.
+	noChannel := models.User{
+		Name: "NoChannel", Email: "no-channel@example.com", Verified: true,
+		MonthlyDigestEnabled: true, EmailNotificationsEnabled: false,
+	}
+	require.NoError(t, users.Create(&noChannel))
+
+	admin := newDigestAdminRepo(digestSettings())
+	email := &fakeEmailService{}
+	telegram := repotest.NewTelegramNotifier()
+
+	svc := newDigestService(
+		books,
+		repotest.NewRecommendationRepository(nil),
+		users,
+		admin,
+		email,
+		func() time.Time { return today },
+		telegram,
+	)
+
+	result := svc.Run(context.Background())
+	assert.Equal(t, "sent 0", result)
+	assert.Empty(t, email.sent, "email-disabled recipients must not receive an email")
+
+	messages := telegram.Messages()
+	require.Len(t, messages, 1, "only the Telegram-opted-in recipient should get a push")
+	assert.Equal(t, chatID, messages[0].ChatID)
 }
 
 func TestDigestService_Run_Idempotent_SameMonth(t *testing.T) {

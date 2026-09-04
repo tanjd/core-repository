@@ -37,7 +37,7 @@ const JOB_META: Record<string, { label: string; description: string }> = {
   "monthly-digest": {
     label: "Monthly Digest",
     description:
-      "Sends a monthly email to opted-in members with new books and top recommendations from the previous calendar month.",
+      "Sends a monthly email (plus a Telegram push for members who've linked and enabled that channel) to opted-in members with new books and top recommendations from the previous calendar month.",
   },
   "due-date-reminder": {
     label: "Due-Date Reminder",
@@ -51,7 +51,7 @@ const JOB_META: Record<string, { label: string; description: string }> = {
   },
 };
 
-const INTERVAL_PRESETS = ["1h", "6h", "12h", "24h", "48h", "168h"];
+const INTERVAL_PRESETS = ["1h", "6h", "12h", "24h", "48h", "168h", "720h"];
 const INTERVAL_LABELS: Record<string, string> = {
   "1h": "Every hour",
   "6h": "Every 6 hours",
@@ -59,6 +59,7 @@ const INTERVAL_LABELS: Record<string, string> = {
   "24h": "Every 24 hours",
   "48h": "Every 2 days",
   "168h": "Every week",
+  "720h": "Every month",
 };
 
 const JOB_SETTING_KEYS: Record<string, string> = {

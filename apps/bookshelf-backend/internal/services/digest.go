@@ -195,15 +195,23 @@ func (s *DigestService) assembleContent(now time.Time) (DigestContent, error) {
 }
 
 // sendAll sends the digest to each recipient sequentially. Per-send errors
-// are logged and counted rather than aborting the loop.
+// are logged and counted rather than aborting the loop. MonthlyDigestEnabled
+// (already applied by ListDigestRecipients) is the sole opt-in for the
+// digest itself; which channel(s) actually carry it is then decided per
+// recipient from their own general notification preferences, same as every
+// other notification in this app (see EmailNotificationsEnabled usage in
+// loan_workflow.go/wishlist_workflow.go) rather than always emailing
+// regardless of that setting.
 func (s *DigestService) sendAll(ctx context.Context, recipients []models.User, content DigestContent) (sent, failed int) {
 	for _, r := range recipients {
-		subject, html := s.render(r, content, false)
-		if err := s.email.SendEmail(ctx, r.Email, subject, html); err != nil {
-			log.Ctx(ctx).Error().Err(err).Str("to", r.Email).Msg("monthly-digest: send failed")
-			failed++
-		} else {
-			sent++
+		if r.EmailNotificationsEnabled {
+			subject, html := s.render(r, content, false)
+			if err := s.email.SendEmail(ctx, r.Email, subject, html); err != nil {
+				log.Ctx(ctx).Error().Err(err).Str("to", r.Email).Msg("monthly-digest: send failed")
+				failed++
+			} else {
+				sent++
+			}
 		}
 
 		// Best-effort second channel, same NotifyAsync-fire-and-forget shape
