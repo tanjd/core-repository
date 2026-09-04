@@ -1,6 +1,6 @@
 # Loan Request Flow — UX fixes spec
 
-**Status:** Partially implemented — Fixes 1–4 shipped, Fix 5 outstanding · **Scope:**
+**Status:** Fixes 1–4 shipped, Fix 5 will not be built (see below) · **Scope:**
 `apps/bookshelf` + `apps/bookshelf-backend` · **Depends on:** `Copy`, `LoanRequest`,
 `WaitlistEntry`, `Notification`
 
@@ -123,7 +123,7 @@ uses it today. Reuse it at accept time instead of adding a new endpoint:
   then — only if the owner changed the date — `updateExpectedReturnDate(id, newDate)`.
 - No backend change required.
 
-## Fix 5 — Waitlist is "notify everyone, first click wins," not a queue ⬜ Not built
+## Fix 5 — Waitlist is "notify everyone, first click wins," not a queue ❌ Not doing
 
 **Priority: medium-high, but the largest change · Backend + frontend**
 
@@ -159,11 +159,11 @@ time.
   it," and "someone else is holding it" — instead of today's binary on/off waitlist toggle.
   `getWaitlistStatus` gains a `held: boolean` / `hold_expires_at?: string` on the response.
 
-**Open decision — is this worth the scope?** This is meaningfully bigger than Fixes 1–4 (new
-columns, a new scheduled job, three new UI states) for a self-hosted app with a small community
-catalog where waitlist contention is probably rare. Recommend scoping this one separately and
-confirming there's an actual fairness complaint before building it — the other four fixes stand
-on their own regardless.
+**Decision — not doing.** This is meaningfully bigger than Fixes 1–4 (new columns, a new
+scheduled job, three new UI states) for a self-hosted app with a small community catalog where
+waitlist contention is probably rare. No fairness complaint has surfaced to justify the scope —
+the other four fixes stand on their own regardless. Revisit only if real usage shows the
+"notify everyone, first click wins" behavior is actually causing friction.
 
 ## Build order
 
@@ -171,19 +171,16 @@ on their own regardless.
 2. Fix 1 (requested-state dead end) — small backend guard change + frontend, independent of Fix 2.
 3. Fix 3 (overdue styling) — pure frontend, independent.
 4. Fix 4 (counter-propose date at accept) — pure frontend, independent.
-5. Fix 5 (waitlist holds) — build last, and only after confirming the open decision above; it's
-   the one fix that isn't a same-day change.
+
+Fix 5 (waitlist holds) is not being built — see its "Decision" above.
 
 ## Verification
 
-- Backend changes (Fixes 1 and 5): `pnpm nx test bookshelf-backend`, `pnpm nx lint
-bookshelf-backend` (root `.golangci.yaml` enables `gocognit`/`gosec`/`revive` — keep
-  `promoteNextWaitlisted` and the new sweep job small, same split pattern as `createLoanRequest`).
-- Frontend: exercise manually via `pnpm nx dev bookshelf` against a local backend — for Fix 1 and
-  5 specifically, this needs two logged-in members in different browser profiles/incognito windows
-  to see the second party's view of a `requested`/held copy.
+- Backend changes (Fix 1): `pnpm nx test bookshelf-backend`, `pnpm nx lint bookshelf-backend`.
+- Frontend: exercise manually via `pnpm nx dev bookshelf` against a local backend — for Fix 1
+  specifically, this needs two logged-in members in different browser profiles/incognito windows
+  to see the second party's view of a `requested` copy.
 - End-to-end: extend `apps/bookshelf-e2e` for at minimum Fix 1 (second member sees a Join Waitlist
-  option on a `requested` copy) and Fix 5 (hold expiry promotes the next waitlisted user) — both
-  are the kind of two-actor, state-transition behavior that's easy to silently regress and hard to
-  catch by manual spot-check.
+  option on a `requested` copy) — the kind of two-actor, state-transition behavior that's easy to
+  silently regress and hard to catch by manual spot-check.
 - Full gate: `pnpm nx affected -t lint test` before merging any of the above.

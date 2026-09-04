@@ -1,6 +1,6 @@
 # Telegram notification preferences — spec
 
-**Status:** Proposed (not yet implemented) · **Scope:** `apps/bookshelf` +
+**Status:** Implemented (#109) · **Scope:** `apps/bookshelf` +
 `apps/bookshelf-backend` · **Depends on:** `User.EmailNotificationsEnabled`,
 [`telegram-bot-integration-spec.md`](./telegram-bot-integration-spec.md)
 (`User.TelegramChatID`/`TelegramLinkedAt`)
