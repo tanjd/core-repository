@@ -300,6 +300,12 @@ export interface LenderStat {
   active_loans: number;
 }
 
+export interface ContributorStat {
+  user_id: number;
+  name: string;
+  copy_count: number;
+}
+
 export interface DashboardStats {
   total_books: number;
   total_copies: number;
@@ -313,4 +319,5 @@ export interface DashboardStats {
   completed_loans_count: number;
   most_borrowed_books: BookBorrowStat[];
   active_lenders: LenderStat[];
+  top_contributors: ContributorStat[];
 }
