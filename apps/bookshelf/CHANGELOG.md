@@ -1,3 +1,13 @@
+## 0.39.1 (2026-09-04)
+
+### 🩹 Fixes
+
+- **bookshelf:** reduce notification poll interval to 60s ([#110](https://github.com/tanjd/core-repository/pull/110))
+
+### ❤️ Thank You
+
+- Jeddy Tan @tanjd
+
 ## 0.39.0 (2026-09-04)
 
 ### 🚀 Features
