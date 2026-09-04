@@ -1,6 +1,6 @@
 # Telegram bot integration — spec
 
-**Status:** Proposed (not yet implemented) · **Scope:** `apps/bookshelf` +
+**Status:** Implemented (#109) · **Scope:** `apps/bookshelf` +
 `apps/bookshelf-backend` + new `apps/bookshelf-bot` · **Depends on:** `User`, `LoanRequest`,
 `Notification`, `EmailService`, `Scheduler`, `AppSetting`, `telegram-bot-shared`
 

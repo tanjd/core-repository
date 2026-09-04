@@ -162,7 +162,7 @@ export default function AdminDashboardPage() {
         </div>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
         <div className="rounded-md border overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
@@ -232,6 +232,42 @@ export default function AdminDashboardPage() {
                     <td className="px-4 py-3 font-medium">{l.name}</td>
                     <td className="px-4 py-3 text-right text-muted-foreground whitespace-nowrap">
                       {l.active_loans} out
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+
+        <div className="rounded-md border overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b bg-muted/50">
+                <th className="px-4 py-3 text-left font-medium" colSpan={2}>
+                  Top contributors
+                </th>
+              </tr>
+            </thead>
+            <tbody>
+              {stats.top_contributors.length === 0 ? (
+                <tr>
+                  <td
+                    className="px-4 py-6 text-center text-muted-foreground"
+                    colSpan={2}
+                  >
+                    No copies added yet.
+                  </td>
+                </tr>
+              ) : (
+                stats.top_contributors.map((c) => (
+                  <tr
+                    key={c.user_id}
+                    className="border-b last:border-0 hover:bg-muted/30"
+                  >
+                    <td className="px-4 py-3 font-medium">{c.name}</td>
+                    <td className="px-4 py-3 text-right text-muted-foreground whitespace-nowrap">
+                      {c.copy_count} book{c.copy_count !== 1 ? "s" : ""}
                     </td>
                   </tr>
                 ))

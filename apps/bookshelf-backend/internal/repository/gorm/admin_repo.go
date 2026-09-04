@@ -212,5 +212,16 @@ func (r *AdminRepository) GetDashboardStats() (*repository.DashboardStats, error
 		return nil, err
 	}
 
+	stats.TopContributors = []repository.ContributorStat{}
+	if err := r.db.Table("copies").
+		Select("users.id AS user_id, users.name AS name, COUNT(*) AS copy_count").
+		Joins("JOIN users ON users.id = copies.owner_id").
+		Group("users.id, users.name").
+		Order("copy_count DESC").
+		Limit(dashboardRankingLimit).
+		Scan(&stats.TopContributors).Error; err != nil {
+		return nil, err
+	}
+
 	return &stats, nil
 }
