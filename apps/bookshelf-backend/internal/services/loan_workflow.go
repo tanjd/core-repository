@@ -20,6 +20,7 @@ type LoanWorkflow struct {
 	users     repository.UserRepository
 	waitlists repository.WaitlistRepository
 	email     *EmailService
+	telegram  TelegramNotifier
 }
 
 // NewLoanWorkflow creates a new LoanWorkflow.
@@ -30,6 +31,7 @@ func NewLoanWorkflow(
 	users repository.UserRepository,
 	waitlists repository.WaitlistRepository,
 	email *EmailService,
+	telegram TelegramNotifier,
 ) *LoanWorkflow {
 	return &LoanWorkflow{
 		copies:    copies,
@@ -38,6 +40,17 @@ func NewLoanWorkflow(
 		users:     users,
 		waitlists: waitlists,
 		email:     email,
+		telegram:  telegram,
+	}
+}
+
+// notifyTelegram sends text to recipient's linked Telegram chat, if any, and
+// if they haven't turned Telegram notifications off — the same gate every
+// call site below applies before pushing. Not to be confused with
+// recipient.TelegramUsername, an unrelated free-text contact field.
+func (w *LoanWorkflow) notifyTelegram(ctx context.Context, recipient models.User, text string) {
+	if recipient.WantsTelegram() {
+		w.telegram.NotifyAsync(ctx, *recipient.TelegramChatID, text)
 	}
 }
 
@@ -72,6 +85,13 @@ func (w *LoanWorkflow) OnRequested(ctx context.Context, lr *models.LoanRequest) 
 	if bookCopy.Owner.EmailNotificationsEnabled {
 		w.email.SendEmailAsync(ctx, bookCopy.Owner.Email, subject, body)
 	}
+
+	telegramText := fmt.Sprintf(
+		"<b>%s</b> has requested to borrow your copy of <i>%s</i>.\n<a href=\"%s\">View request</a>",
+		html.EscapeString(borrower.Name), html.EscapeString(bookCopy.Book.Title),
+		w.email.URL(fmt.Sprintf("/my-books/%d/requests", bookCopy.ID)),
+	)
+	w.notifyTelegram(ctx, bookCopy.Owner, telegramText)
 	return nil
 }
 
@@ -118,6 +138,12 @@ func (w *LoanWorkflow) OnAccepted(ctx context.Context, lr *models.LoanRequest) e
 	if borrower.EmailNotificationsEnabled {
 		w.email.SendEmailAsync(ctx, borrower.Email, subject, body)
 	}
+
+	telegramText := fmt.Sprintf(
+		"Your request to borrow <i>%s</i> has been accepted by %s. Please get in touch to arrange collection.\n<a href=\"%s\">View your loans</a>",
+		html.EscapeString(bookCopy.Book.Title), html.EscapeString(bookCopy.Owner.Name), w.email.URL("/my-requests"),
+	)
+	w.notifyTelegram(ctx, *borrower, telegramText)
 	return nil
 }
 
@@ -258,6 +284,11 @@ func (w *LoanWorkflow) sendReturnedEmail(ctx context.Context, recipientID uint, 
 		if borrower.EmailNotificationsEnabled {
 			w.email.SendEmailAsync(ctx, borrower.Email, subject, body)
 		}
+		telegramText := fmt.Sprintf(
+			"Your loan of <i>%s</i> has been marked as returned. Thank you!\n<a href=\"%s\">View your loans</a>",
+			html.EscapeString(bookCopy.Book.Title), w.email.URL("/my-requests"),
+		)
+		w.notifyTelegram(ctx, *borrower, telegramText)
 		return
 	}
 
@@ -270,6 +301,11 @@ func (w *LoanWorkflow) sendReturnedEmail(ctx context.Context, recipientID uint, 
 	if owner.EmailNotificationsEnabled {
 		w.email.SendEmailAsync(ctx, owner.Email, subject, body)
 	}
+	telegramText := fmt.Sprintf(
+		"%s marked your copy of <i>%s</i> as returned.\n<a href=\"%s\">View your books</a>",
+		html.EscapeString(borrower.Name), html.EscapeString(bookCopy.Book.Title), w.email.URL("/my-books"),
+	)
+	w.notifyTelegram(ctx, owner, telegramText)
 }
 
 // OnReturnUndone fires when the owner reverses a "returned" loan back to
@@ -309,6 +345,12 @@ func (w *LoanWorkflow) OnReturnUndone(ctx context.Context, lr *models.LoanReques
 	if borrower.EmailNotificationsEnabled {
 		w.email.SendEmailAsync(ctx, borrower.Email, subject, body)
 	}
+
+	telegramText := fmt.Sprintf(
+		"%s undid the return of <i>%s</i> — your loan is active again.\n<a href=\"%s\">View your loans</a>",
+		html.EscapeString(bookCopy.Owner.Name), html.EscapeString(bookCopy.Book.Title), w.email.URL("/my-requests"),
+	)
+	w.notifyTelegram(ctx, *borrower, telegramText)
 	return nil
 }
 

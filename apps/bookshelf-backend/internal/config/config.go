@@ -58,6 +58,29 @@ type Config struct {
 	// in one run), so a single account can legitimately exceed 5 UI logins
 	// well before any brute-force pattern would.
 	LoginRateLimitAttempts int `env:"LOGIN_RATE_LIMIT_ATTEMPTS" envDefault:"5"`
+	// TelegramBotToken authenticates outbound calls to the Telegram Bot API
+	// (services.TelegramService). Empty means Telegram notifications are
+	// disabled — same "unset means skip" contract as SMTPHost for email.
+	TelegramBotToken string `env:"TELEGRAM_BOT_TOKEN" sensitive:"true"`
+	// TelegramBotUsername (no leading @) is returned to the frontend by
+	// POST /profile/telegram/link-token, which builds the t.me deep link
+	// from it. Deliberately a runtime env var read server-side, not a
+	// NEXT_PUBLIC_ Next.js var — the frontend Docker image is built once and
+	// reused across deployments (see apps/bookshelf/CLAUDE.md's
+	// BACKEND_URL note), and NEXT_PUBLIC_ values get baked in at that build
+	// step rather than read at container startup, which would break that.
+	TelegramBotUsername string `env:"TELEGRAM_BOT_USERNAME"`
+	// TelegramInternalSecret guards POST /internal/telegram/confirm-link,
+	// the one endpoint apps/bookshelf-bot calls directly (bot->backend, not
+	// user-facing) — see docs/telegram-bot-integration-spec.md. Must match
+	// the bot's BOOKSHELF_INTERNAL_TOKEN.
+	TelegramInternalSecret string `env:"TELEGRAM_INTERNAL_SECRET" sensitive:"true"`
+	// TelegramBotHealthURL, if set, is polled by the admin Jobs page to show
+	// whether apps/bookshelf-bot's own process is up (distinct from whether
+	// Telegram push delivery works, which needs only TelegramBotToken).
+	// Local dev: http://localhost:8080/health. Empty means "not configured"
+	// — the admin UI shows that rather than a false "offline".
+	TelegramBotHealthURL string `env:"TELEGRAM_BOT_HEALTH_URL"`
 }
 
 // Load reads configuration from environment variables, applying envDefault

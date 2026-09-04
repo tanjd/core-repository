@@ -95,9 +95,10 @@ func main() {
 	// Services
 	emailSvc := services.NewEmailService(cfg.SMTPHost, cfg.SMTPPort, cfg.SMTPUsername, cfg.SMTPPassword, cfg.EmailFrom, cfg.Env, cfg.DevEmailOverride, cfg.FrontendOrigin)
 	smsSvc := services.NewMockSMSService()
-	workflow := services.NewLoanWorkflow(copyRepo, loanRepo, notifRepo, userRepo, waitlistRepo, emailSvc)
-	wishlistWorkflow := services.NewWishlistWorkflow(wishlistRepo, notifRepo, userRepo, emailSvc)
-	registrationWorkflow := services.NewRegistrationWorkflow(adminRepo, notifRepo, bookRepo, emailSvc)
+	telegramSvc := services.NewTelegramService(cfg.TelegramBotToken)
+	workflow := services.NewLoanWorkflow(copyRepo, loanRepo, notifRepo, userRepo, waitlistRepo, emailSvc, telegramSvc)
+	wishlistWorkflow := services.NewWishlistWorkflow(wishlistRepo, notifRepo, userRepo, emailSvc, telegramSvc)
+	registrationWorkflow := services.NewRegistrationWorkflow(adminRepo, notifRepo, bookRepo, emailSvc, telegramSvc)
 
 	sqlDB, err := database.DB()
 	if err != nil {
@@ -113,7 +114,8 @@ func main() {
 	coverBackfillSvc := services.NewCoverBackfillService(bookRepo, coversDir, googleBooksKeyPool)
 
 	digestSvc := services.NewDigestService(bookRepo, recommendationRepo, userRepo, adminRepo,
-		emailSvc.WithJWTSecret(cfg.JWTSecret))
+		emailSvc.WithJWTSecret(cfg.JWTSecret), telegramSvc)
+	dueReminderSvc := services.NewDueReminderService(loanRepo, notifRepo, adminRepo, telegramSvc, emailSvc)
 
 	scheduler := services.NewScheduler(bookRepo, adminRepo, coversDir, cfg.MetadataRefreshInterval)
 	scheduler.RegisterJob("backup", "backup_interval", 24*time.Hour, backupSvc.CreateSnapshot)
@@ -128,6 +130,7 @@ func main() {
 	scheduler.RegisterJob("registration-prune", "registration_prune_interval", time.Hour,
 		pruneRegistrationVerifications(regVerificationRepo))
 	scheduler.RegisterJob("monthly-digest", "monthly_digest_interval", 24*time.Hour, digestSvc.Run)
+	scheduler.RegisterJob("due-date-reminder", "due_date_reminder_interval", 24*time.Hour, dueReminderSvc.Run)
 
 	seedYAMLConfig(cfg.AppConfigPath, adminRepo)
 
@@ -143,7 +146,8 @@ func main() {
 	loanH := handlers.NewLoanRequestHandler(copyRepo, loanRepo, adminRepo, userRepo, workflow)
 	notifH := handlers.NewNotificationHandler(notifRepo)
 	adminH := handlers.NewAdminHandler(adminRepo, copyRepo, loanRepo, googleBooksKeyPool, registrationWorkflow, recommendationRepo, inviteCodeRepo)
-	jobsH := handlers.NewJobsHandler(scheduler, digestSvc, userRepo)
+	botHealthChecker := services.NewTelegramBotHealthChecker(cfg.TelegramBotHealthURL)
+	jobsH := handlers.NewJobsHandler(scheduler, digestSvc, userRepo, botHealthChecker)
 	backupH := handlers.NewBackupHandler(backupSvc)
 	waitlistH := handlers.NewWaitlistHandler(copyRepo, waitlistRepo)
 	announcementH := handlers.NewAnnouncementHandler(announcementRepo)
@@ -151,6 +155,7 @@ func main() {
 	recommendationH := handlers.NewRecommendationHandler(recommendationRepo)
 	unsubscribeH := handlers.NewUnsubscribeHandler(userRepo, cfg.JWTSecret, cfg.Env)
 	inviteCodeH := handlers.NewInviteCodeHandler(inviteCodeRepo, adminRepo, userRepo, emailSvc)
+	telegramH := handlers.NewTelegramHandler(userRepo, telegramSvc, cfg.JWTSecret, cfg.TelegramInternalSecret, cfg.TelegramBotUsername)
 
 	// Router
 	mux := http.NewServeMux()
@@ -209,6 +214,7 @@ func main() {
 	recommendationH.RegisterRoutes(api)
 	unsubscribeH.RegisterRoutes(api)
 	inviteCodeH.RegisterRoutes(api)
+	telegramH.RegisterRoutes(api)
 
 	// Middleware chain: security headers → request logging → CORS → auth enrichment → mux
 	corsHandler := cors.New(cors.Options{

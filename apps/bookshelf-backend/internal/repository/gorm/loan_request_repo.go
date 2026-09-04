@@ -2,6 +2,7 @@ package gorm
 
 import (
 	"errors"
+	"time"
 
 	"gorm.io/gorm"
 
@@ -173,6 +174,20 @@ func (r *LoanRequestRepository) ListActiveByBorrowerID(borrowerID uint) ([]model
 
 func (r *LoanRequestRepository) Save(lr *models.LoanRequest) error {
 	return r.db.Save(lr).Error
+}
+
+// ListDueForReminder returns accepted loans due back on dueDate's calendar
+// day (UTC) that haven't already had a reminder sent.
+func (r *LoanRequestRepository) ListDueForReminder(dueDate time.Time) ([]models.LoanRequest, error) {
+	dayStart := time.Date(dueDate.Year(), dueDate.Month(), dueDate.Day(), 0, 0, 0, 0, time.UTC)
+	dayEnd := dayStart.Add(24 * time.Hour)
+
+	var requests []models.LoanRequest
+	err := r.db.Preload("Copy.Book").Preload("Borrower").
+		Where("status = ? AND due_reminder_sent_at IS NULL AND expected_return_date >= ? AND expected_return_date < ?",
+			"accepted", dayStart, dayEnd).
+		Find(&requests).Error
+	return requests, err
 }
 
 // RejectCompetingAndUpdateCopy atomically rejects all pending requests for

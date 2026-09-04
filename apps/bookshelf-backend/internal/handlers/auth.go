@@ -486,7 +486,11 @@ func (h *AuthHandler) verifyOTP(ctx context.Context, input *verifyOTPInput) (*me
 		return nil, huma.Error500InternalServerError("could not update user")
 	}
 
-	return &meOutput{Body: meBody{User: *user, GoogleBooksKeyConfigured: user.GoogleBooksAPIKey != ""}}, nil
+	return &meOutput{Body: meBody{
+		User:                     *user,
+		GoogleBooksKeyConfigured: user.GoogleBooksAPIKey != "",
+		TelegramLinked:           user.TelegramChatID != nil,
+	}}, nil
 }
 
 // issueToken creates a signed HS256 JWT for the given user with a 24-hour expiry.

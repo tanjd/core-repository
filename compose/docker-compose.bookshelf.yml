@@ -18,6 +18,10 @@ services:
       - SMTP_USERNAME=${SMTP_USERNAME}
       - SMTP_PASSWORD=${SMTP_PASSWORD}
       - EMAIL_FROM=${EMAIL_FROM:-noreply@yourdomain.com}
+      - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN:-}
+      - TELEGRAM_INTERNAL_SECRET=${TELEGRAM_INTERNAL_SECRET:-}
+      - TELEGRAM_BOT_USERNAME=${TELEGRAM_BOT_USERNAME:-}
+      - TELEGRAM_BOT_HEALTH_URL=${TELEGRAM_BOT_HEALTH_URL:-http://bookshelf-bot:8080/health}
       - GOOGLE_BOOKS_API_KEY=${GOOGLE_BOOKS_API_KEY:-}
       - METADATA_REFRESH_INTERVAL=${METADATA_REFRESH_INTERVAL:-}
     networks:
@@ -74,6 +78,35 @@ services:
       timeout: 10s
       retries: 3
       start_period: 15s
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  bookshelf-bot:
+    image: ghcr.io/tanjd/bookshelf-bot:latest
+    container_name: bookshelf-bot
+    restart: unless-stopped
+    environment:
+      # Same bot, same token/secret as bookshelf-backend above — one bot
+      # serves both roles (backend pushes notifications directly to
+      # Telegram; this service only long-polls for the /start link command).
+      - ENV=${ENV}
+      - BOT_TOKEN=${TELEGRAM_BOT_TOKEN}
+      - BOOKSHELF_BACKEND_URL=http://bookshelf-backend:8000
+      - BOOKSHELF_INTERNAL_TOKEN=${TELEGRAM_INTERNAL_SECRET}
+    networks:
+      - bookshelf
+    depends_on:
+      bookshelf-backend:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
     logging:
       driver: "json-file"
       options:

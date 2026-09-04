@@ -23,7 +23,7 @@ permissions:
 
 jobs:
   main:
-    timeout-minutes: 15
+    timeout-minutes: 20
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -73,7 +73,7 @@ jobs:
             npx nx affected --base=${{ env.NX_BASE }} --head=${{ env.NX_HEAD }} -t e2e --verbose
 
   docker-build:
-    timeout-minutes: 15
+    timeout-minutes: 20
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7

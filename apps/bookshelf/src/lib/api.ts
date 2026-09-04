@@ -14,6 +14,7 @@ import type {
   WaitlistStatus,
   PaginatedResult,
   JobStatus,
+  TelegramBotStatus,
   BackupInfo,
   VerificationStatus,
   DashboardStats,
@@ -393,6 +394,7 @@ export const api = {
     google_books_api_key?: string;
     email_notifications_enabled?: boolean;
     monthly_digest_enabled?: boolean;
+    telegram_notifications_enabled?: boolean;
     telegram_username?: string;
     whatsapp_username?: string;
     contact_note?: string;
@@ -405,6 +407,19 @@ export const api = {
     request<{ email: string }>("/unsubscribe/digest", {
       method: "POST",
       body: JSON.stringify({ token }),
+    }),
+  linkTelegramToken: () =>
+    request<{ token: string; bot_username: string }>(
+      "/profile/telegram/link-token",
+      { method: "POST" },
+    ),
+  unlinkTelegram: () =>
+    request<void>("/profile/telegram/link", {
+      method: "DELETE",
+    }),
+  sendTelegramTestNotification: () =>
+    request<void>("/profile/telegram/test", {
+      method: "POST",
     }),
   changePassword: (data: {
     current_password: string;
@@ -772,6 +787,12 @@ export const api = {
       "/admin/jobs/monthly-digest/test-email",
       { method: "POST" },
     ),
+  adminDigestTestTelegram: () =>
+    request<void>("/admin/jobs/monthly-digest/test-telegram", {
+      method: "POST",
+    }),
+  adminTelegramBotStatus: () =>
+    request<TelegramBotStatus>("/admin/telegram-bot/status"),
 
   // Backups
   adminListBackups: () => request<BackupInfo[]>("/admin/backups"),

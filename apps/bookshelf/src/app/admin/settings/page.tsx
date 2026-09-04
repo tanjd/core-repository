@@ -82,6 +82,13 @@ const SETTING_LABELS: Record<string, SettingMeta> = {
     type: "number",
     min: 1,
   },
+  due_date_reminder_days_before: {
+    label: "Reminder Days Before Due",
+    description:
+      "How many days before a loan's expected return date the due-date reminder (in-app, plus email/Telegram per each borrower's own preferences) fires.",
+    type: "number",
+    min: 0,
+  },
 };
 
 // Grouped the same way Sonarr/Jellyfin group related settings under one
@@ -120,6 +127,12 @@ const SETTING_GROUPS: {
       "monthly_digest_new_books_limit",
       "monthly_digest_top_recommended_limit",
     ],
+  },
+  {
+    title: "Due-Date Reminders",
+    description:
+      'Use the interval "Change" control on the Jobs page for how often this job runs — this setting only shapes how far ahead it looks.',
+    keys: ["due_date_reminder_days_before"],
   },
 ];
 

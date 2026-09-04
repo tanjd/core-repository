@@ -56,8 +56,18 @@ func (r *UserRepository) FindByID(id uint) (*models.User, error) {
 	return &user, nil
 }
 
+// Save persists user, mapping a unique-constraint violation (e.g. a
+// TelegramChatID already linked to a different account) to
+// repository.ErrConflict so callers can distinguish it from a generic
+// failure.
 func (r *UserRepository) Save(user *models.User) error {
-	return r.db.Save(user).Error
+	if err := r.db.Save(user).Error; err != nil {
+		if isUniqueViolation(err) {
+			return repository.ErrConflict
+		}
+		return err
+	}
+	return nil
 }
 
 func (r *UserRepository) HasAdmin() (bool, error) {

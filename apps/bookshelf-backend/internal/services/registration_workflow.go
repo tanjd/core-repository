@@ -14,10 +14,11 @@ import (
 // RegistrationWorkflow orchestrates the side-effects (notification, email)
 // of a new registration being held for admin approval.
 type RegistrationWorkflow struct {
-	admin  repository.AdminRepository
-	notifs repository.NotificationRepository
-	books  repository.BookRepository
-	email  *EmailService
+	admin    repository.AdminRepository
+	notifs   repository.NotificationRepository
+	books    repository.BookRepository
+	email    *EmailService
+	telegram TelegramNotifier
 }
 
 // NewRegistrationWorkflow creates a new RegistrationWorkflow.
@@ -26,14 +27,18 @@ func NewRegistrationWorkflow(
 	notifs repository.NotificationRepository,
 	books repository.BookRepository,
 	email *EmailService,
+	telegram TelegramNotifier,
 ) *RegistrationWorkflow {
-	return &RegistrationWorkflow{admin: admin, notifs: notifs, books: books, email: email}
+	return &RegistrationWorkflow{admin: admin, notifs: notifs, books: books, email: email, telegram: telegram}
 }
 
 // OnPendingApproval fires when a new registration is held for admin
-// approval (User.PendingApproval == true). It notifies every admin, both
-// in-app and by best-effort email — never fails the caller, since this is a
-// side-effect of a registration that has already been persisted.
+// approval (User.PendingApproval == true). It notifies every admin — in-app,
+// by best-effort email, and by best-effort Telegram (an admin is a User like
+// any other, so the same TelegramChatID/TelegramNotificationsEnabled fields
+// and gate apply — no separate admin-notification preference exists or is
+// needed). Never fails the caller, since this is a side-effect of a
+// registration that has already been persisted.
 func (w *RegistrationWorkflow) OnPendingApproval(ctx context.Context, user *models.User) {
 	admins, err := w.admin.ListByRole("admin")
 	if err != nil {
@@ -47,6 +52,11 @@ func (w *RegistrationWorkflow) OnPendingApproval(ctx context.Context, user *mode
 		html.EscapeString(user.Name), html.EscapeString(user.Email),
 	) + w.email.Button("/admin/users", "Review pending users")
 
+	telegramText := fmt.Sprintf(
+		"<b>%s</b> (%s) signed up and needs an admin to approve their account before they can sign in.\n<a href=\"%s\">Review pending users</a>",
+		html.EscapeString(user.Name), html.EscapeString(user.Email), w.email.URL("/admin/users"),
+	)
+
 	for _, admin := range admins {
 		n := models.Notification{
 			RecipientID:   admin.ID,
@@ -59,6 +69,9 @@ func (w *RegistrationWorkflow) OnPendingApproval(ctx context.Context, user *mode
 
 		if admin.EmailNotificationsEnabled {
 			w.email.SendEmailAsync(ctx, admin.Email, subject, body)
+		}
+		if admin.WantsTelegram() {
+			w.telegram.NotifyAsync(ctx, *admin.TelegramChatID, telegramText)
 		}
 	}
 }

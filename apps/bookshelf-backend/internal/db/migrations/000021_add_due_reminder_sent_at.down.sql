@@ -1,0 +1,2 @@
+-- SQLite has no DROP COLUMN before 3.35.0; intentional no-op, same pattern
+-- as 000011_users_email_nocase_index.down.sql.

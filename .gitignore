@@ -149,3 +149,7 @@ apps/bookshelf-backend/data/backups/
 .nx/polygraph
 
 .nx/self-healing
+
+# bookshelf-bot: local reference copy of the avatar uploaded to BotFather via
+# /setuserpic (a one-time manual step, not something the running app serves)
+apps/bookshelf-bot/bookshelf-bot-avatar.png

@@ -3,6 +3,7 @@ paths:
   - "apps/index-watch/**"
   - "apps/table-talks/**"
   - "apps/ledger-lens-backend/**"
+  - "apps/bookshelf-bot/**"
   - "libs/telegram-bot-shared/**"
   - "tools/generators/telegram-bot/**"
 ---

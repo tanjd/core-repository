@@ -21,6 +21,7 @@ type WishlistWorkflow struct {
 	notifs   repository.NotificationRepository
 	users    repository.UserRepository
 	email    *EmailService
+	telegram TelegramNotifier
 }
 
 // NewWishlistWorkflow creates a new WishlistWorkflow.
@@ -29,8 +30,9 @@ func NewWishlistWorkflow(
 	notifs repository.NotificationRepository,
 	users repository.UserRepository,
 	email *EmailService,
+	telegram TelegramNotifier,
 ) *WishlistWorkflow {
-	return &WishlistWorkflow{requests: requests, notifs: notifs, users: users, email: email}
+	return &WishlistWorkflow{requests: requests, notifs: notifs, users: users, email: email, telegram: telegram}
 }
 
 // OnBookCreated auto-matches a newly created Book against open
@@ -103,5 +105,13 @@ func (w *WishlistWorkflow) fulfill(ctx context.Context, req *models.WishlistRequ
 	) + w.email.Button(fmt.Sprintf("/catalog/%d", book.ID), "View book")
 	if requester.EmailNotificationsEnabled {
 		w.email.SendEmailAsync(ctx, requester.Email, subject, body)
+	}
+
+	if requester.WantsTelegram() {
+		telegramText := fmt.Sprintf(
+			"<b>%s</b> by %s, which you were looking for, has been added to the catalog.\n<a href=\"%s\">View book</a>",
+			html.EscapeString(book.Title), html.EscapeString(book.Author), w.email.URL(fmt.Sprintf("/catalog/%d", book.ID)),
+		)
+		w.telegram.NotifyAsync(ctx, *requester.TelegramChatID, telegramText)
 	}
 }

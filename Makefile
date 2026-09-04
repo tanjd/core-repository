@@ -1,6 +1,6 @@
 MAKEFLAGS += --no-print-directory
 
-.PHONY: help setup setup-ci install-deps install-dev-tools install-goimports install-rtk install-govulncheck verify affected new-bot docker-build golangci-verify nx-reset upgrade-nx prune-devcontainer-cache
+.PHONY: help setup setup-ci install-deps install-dev-tools install-goimports install-rtk install-govulncheck verify affected new-bot docker-build golangci-verify nx-reset upgrade-nx prune-devcontainer-cache kill-dev-servers
 
 .DEFAULT_GOAL := help
 
@@ -41,6 +41,9 @@ affected: ## Lint and test only what changed vs main (what CI actually runs)
 
 nx-reset: ## Clear the Nx cache (use when a target result looks stale)
 	pnpm nx reset
+
+kill-dev-servers: ## Kill any locally running `nx serve` dev servers (Next.js, Vite, Go, uv/Python bots) and their child processes
+	@bash tools/kill-dev-servers.sh
 
 ##@ Telegram Bots
 

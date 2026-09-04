@@ -104,7 +104,8 @@
       "ledger-lens",
       "bookshelf-backend",
       "bookshelf",
-      "otobr-buddy"
+      "otobr-buddy",
+      "bookshelf-bot"
     ],
     "projectsRelationship": "independent",
     "version": {

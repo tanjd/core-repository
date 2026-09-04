@@ -13,6 +13,12 @@ export interface User {
   pending_email?: string;
   email_notifications_enabled: boolean;
   monthly_digest_enabled: boolean;
+  // telegram_linked/telegram_notifications_enabled: the bot-linked push
+  // notification channel (see docs/telegram-bot-integration-spec.md) — not
+  // to be confused with telegram_username below, a free-text contact field
+  // shown to the other party in an accepted loan.
+  telegram_linked: boolean;
+  telegram_notifications_enabled: boolean;
   telegram_username?: string;
   whatsapp_username?: string;
   contact_note?: string;
@@ -200,6 +206,14 @@ export interface JobStatus {
   last_run_at: string | null;
   next_run_at: string | null;
   last_result: string;
+}
+
+// TelegramBotStatus is whether apps/bookshelf-bot's own process is up —
+// distinct from a member's own Telegram link (User.telegram_linked), and
+// from whether push delivery works (needs only the backend's bot token).
+export interface TelegramBotStatus {
+  configured: boolean;
+  online: boolean;
 }
 
 export interface BackupInfo {
