@@ -220,7 +220,7 @@ class CorporateAction(SQLModel, table=True):
 
 
 class BenchmarkPrice(SQLModel, table=True):
-    """One (symbol, date) closing price for a user-uploaded benchmark index."""
+    """One (symbol, date) closing price for a benchmark index, cached from Stooq on demand."""
 
     __tablename__: ClassVar[str] = "benchmark_price"  # type: ignore
     __table_args__: ClassVar[tuple[UniqueConstraint]] = (UniqueConstraint("symbol", "price_date"),)

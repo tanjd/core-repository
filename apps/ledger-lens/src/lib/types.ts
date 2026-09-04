@@ -287,18 +287,9 @@ export interface CommissionTimeseriesItem {
 // Benchmark comparison
 // ---------------------------------------------------------------------------
 
-export interface BenchmarkInfo {
+export interface BenchmarkOption {
   symbol: string;
-  price_count: number;
-  first_date: string;
-  last_date: string;
-}
-
-export interface BenchmarkUploadResponse {
-  symbol: string;
-  ingested: number;
-  first_date: string;
-  last_date: string;
+  label: string;
 }
 
 export interface BenchmarkTimeseriesItem {

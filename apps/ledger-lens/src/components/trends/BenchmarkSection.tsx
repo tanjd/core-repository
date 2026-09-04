@@ -10,7 +10,6 @@ import {
 } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ApiErrorState } from "@/components/layout/ApiErrorState";
-import { BenchmarkUploadDialog } from "@/components/trends/BenchmarkUploadDialog";
 import { BenchmarkComparisonChart } from "@/components/trends/BenchmarkComparisonChart";
 import { TwrVsBenchmarkChart } from "@/components/trends/TwrVsBenchmarkChart";
 import { useBenchmarks, useBenchmarkTimeseries } from "@/hooks/useStatement";
@@ -18,7 +17,7 @@ import { useBenchmarks, useBenchmarkTimeseries } from "@/hooks/useStatement";
 export function BenchmarkSection() {
   const { data: benchmarks, isLoading: benchmarksLoading } = useBenchmarks();
   const [selected, setSelected] = useState<string | null>(null);
-  // Default to the first uploaded symbol until the user picks one explicitly.
+  // Default to the first catalog entry until the user picks one explicitly.
   const symbol = selected ?? benchmarks?.[0]?.symbol ?? null;
 
   const {
@@ -46,20 +45,18 @@ export function BenchmarkSection() {
               <SelectContent>
                 {benchmarks!.map((b) => (
                   <SelectItem key={b.symbol} value={b.symbol}>
-                    {b.symbol}
+                    {b.label}
                   </SelectItem>
                 ))}
               </SelectContent>
             </Select>
           )}
-          <BenchmarkUploadDialog />
         </div>
       </div>
 
       {!hasBenchmarks && (
         <p className="text-sm text-muted-foreground">
-          No index price data uploaded yet — add a benchmark (e.g. an S&amp;P
-          500 CSV export) to compare it against your portfolio&apos;s return.
+          No benchmark indices available.
         </p>
       )}
 

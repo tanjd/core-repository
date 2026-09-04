@@ -20,7 +20,7 @@ import {
   VERSION_URL,
 } from "@/lib/api";
 import type {
-  BenchmarkInfo,
+  BenchmarkOption,
   BenchmarkTimeseriesItem,
   BrokerInfo,
   CashflowsResponse,
@@ -125,7 +125,7 @@ export function useCommissionTimeseries() {
 // ---------------------------------------------------------------------------
 
 export function useBenchmarks() {
-  return useSWR<BenchmarkInfo[]>(BENCHMARKS_URL, fetcher);
+  return useSWR<BenchmarkOption[]>(BENCHMARKS_URL, fetcher);
 }
 
 export function useBenchmarkTimeseries(symbol: string | null, broker?: string) {

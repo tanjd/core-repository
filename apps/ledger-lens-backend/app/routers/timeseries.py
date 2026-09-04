@@ -31,6 +31,7 @@ from app.models.db import (
     Trade,
     WithholdingTax,
 )
+from app.services.benchmarks import ensure_benchmark_prices
 
 router = APIRouter()
 
@@ -250,6 +251,12 @@ def timeseries_benchmark(
     ).all()
     if not statements:
         raise HTTPException(status_code=404, detail=f"No statements found for broker={broker}")
+
+    period_bounds = [s.period_start for s in statements if s.period_start is not None] + [
+        s.period_end for s in statements if s.period_end is not None
+    ]
+    if period_bounds:
+        ensure_benchmark_prices(symbol, session, min(period_bounds), max(period_bounds))
 
     prices = session.exec(
         select(BenchmarkPrice)

@@ -358,18 +358,9 @@ class UploadResponse(_Base):
 # ---------------------------------------------------------------------------
 
 
-class BenchmarkInfo(_Base):
+class BenchmarkOption(_Base):
     symbol: str
-    price_count: int
-    first_date: date
-    last_date: date
-
-
-class BenchmarkUploadResponse(_Base):
-    symbol: str
-    ingested: int
-    first_date: date
-    last_date: date
+    label: str
 
 
 class BenchmarkTimeseriesItem(_Base):
