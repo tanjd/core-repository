@@ -1,3 +1,13 @@
+## 0.40.0 (2026-09-04)
+
+### 🚀 Features
+
+- **bookshelf,bookshelf-backend:** add top contributors stat to admin dashboard ([#111](https://github.com/tanjd/core-repository/pull/111), [#109](https://github.com/tanjd/core-repository/issues/109))
+
+### ❤️ Thank You
+
+- Jeddy Tan @tanjd
+
 ## 0.39.1 (2026-09-04)
 
 ### 🩹 Fixes
