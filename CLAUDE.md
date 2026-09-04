@@ -40,6 +40,8 @@ release process); the list below is just an index into the per-app files.
   `apps/bookshelf/CLAUDE.md`.
 - `apps/bookshelf-e2e` — Playwright E2E tests for `bookshelf` + `bookshelf-backend`, against real
   servers rather than mocks. See `apps/bookshelf-e2e/CLAUDE.md`.
+- `apps/bookshelf-bot` — Telegram bot (links a member's Telegram account to their bookshelf
+  account for push notifications), Python/uv. See `apps/bookshelf-bot/CLAUDE.md`.
 - `tools/generators/telegram-bot` — local Nx generator for scaffolding new bots.
 
 ## Common commands

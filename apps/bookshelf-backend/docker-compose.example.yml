@@ -31,6 +31,7 @@ services:
       TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
       TELEGRAM_INTERNAL_SECRET: ${TELEGRAM_INTERNAL_SECRET:-}
       TELEGRAM_BOT_USERNAME: ${TELEGRAM_BOT_USERNAME:-}
+      TELEGRAM_BOT_HEALTH_URL: ${TELEGRAM_BOT_HEALTH_URL:-http://bookshelf-bot:8080/health}
       GOOGLE_BOOKS_API_KEY: ${GOOGLE_BOOKS_API_KEY:-}
     volumes:
       - bookshelf-data:/app/data
@@ -51,6 +52,28 @@ services:
       BACKEND_URL: http://bookshelf-backend:8000
     ports:
       - "3000:3000"
+
+  # Optional — only needed if you want Telegram push notifications (see
+  # apps/bookshelf/docs/telegram-bot-integration-spec.md). Leave
+  # TELEGRAM_BOT_TOKEN unset above and remove this service if you don't.
+  bookshelf-bot:
+    image: ghcr.io/tanjd/bookshelf-bot:latest
+    restart: unless-stopped
+    environment:
+      ENV: ${ENV:-dev}
+      BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
+      BOT_TOKEN_DEV: ${TELEGRAM_BOT_TOKEN:-}
+      BOOKSHELF_BACKEND_URL: http://bookshelf-backend:8000
+      BOOKSHELF_INTERNAL_TOKEN: ${TELEGRAM_INTERNAL_SECRET:-}
+    depends_on:
+      bookshelf-backend:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 5s
+      start_period: 10s
+      retries: 3
 
 volumes:
   bookshelf-data:

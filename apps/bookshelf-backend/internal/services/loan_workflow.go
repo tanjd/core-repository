@@ -49,7 +49,7 @@ func NewLoanWorkflow(
 // call site below applies before pushing. Not to be confused with
 // recipient.TelegramUsername, an unrelated free-text contact field.
 func (w *LoanWorkflow) notifyTelegram(ctx context.Context, recipient models.User, text string) {
-	if recipient.TelegramChatID != nil && recipient.TelegramNotificationsEnabled {
+	if recipient.WantsTelegram() {
 		w.telegram.NotifyAsync(ctx, *recipient.TelegramChatID, text)
 	}
 }

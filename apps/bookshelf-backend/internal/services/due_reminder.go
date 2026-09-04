@@ -77,6 +77,17 @@ func (s *DueReminderService) Run(ctx context.Context) string {
 func (s *DueReminderService) remindOne(ctx context.Context, lr *models.LoanRequest) bool {
 	borrower := lr.Borrower
 
+	// Persist the reminded marker before sending: ListDueForReminder's next
+	// run only re-selects loans where this is still nil, so marking first
+	// guarantees a Save failure can't leave a loan re-eligible for a
+	// duplicate reminder after notifications already went out.
+	now := time.Now()
+	lr.DueReminderSentAt = &now
+	if err := s.loanReqs.Save(lr); err != nil {
+		log.Warn().Err(err).Uint("loan_request_id", lr.ID).Msg("due-date-reminder: failed to mark reminded")
+		return false
+	}
+
 	n := models.Notification{
 		RecipientID:   borrower.ID,
 		Type:          "loan_due_soon",
@@ -95,7 +106,7 @@ func (s *DueReminderService) remindOne(ctx context.Context, lr *models.LoanReque
 		s.email.SendEmailAsync(ctx, borrower.Email, subject, body)
 	}
 
-	if borrower.TelegramChatID != nil && borrower.TelegramNotificationsEnabled {
+	if borrower.WantsTelegram() {
 		text := fmt.Sprintf(
 			"<i>%s</i> is due back %s — don't forget!\n<a href=\"%s\">View your loans</a>",
 			html.EscapeString(lr.Copy.Book.Title), lr.ExpectedReturnDate.Format("Jan 2"), s.email.URL("/my-requests"),
@@ -103,12 +114,6 @@ func (s *DueReminderService) remindOne(ctx context.Context, lr *models.LoanReque
 		s.telegram.NotifyAsync(ctx, *borrower.TelegramChatID, text)
 	}
 
-	now := time.Now()
-	lr.DueReminderSentAt = &now
-	if err := s.loanReqs.Save(lr); err != nil {
-		log.Warn().Err(err).Uint("loan_request_id", lr.ID).Msg("due-date-reminder: failed to mark reminded")
-		return false
-	}
 	return true
 }
 

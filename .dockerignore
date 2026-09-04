@@ -11,6 +11,12 @@
 .vscode
 .cursor
 
+# devcontainer-persisted tool caches (~10GB combined) — gitignored, never referenced by any
+# Dockerfile, but not excluded by default like node_modules/.venv, so every build context (all
+# builds use the repo root as context) paid to hash and transfer them
+.cache
+.pnpm-store
+
 # secrets — real env files must never enter a build context (apps/*/.env.example and
 # apps/*/.env.compose.example are checked-in templates, not secrets, and are unaffected —
 # their filenames don't end in ".env")

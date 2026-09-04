@@ -305,6 +305,8 @@ importers:
 
   apps/bookshelf-backend: {}
 
+  apps/bookshelf-bot: {}
+
   apps/food-maps-backend: {}
 
   apps/index-watch: {}

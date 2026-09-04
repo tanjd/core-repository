@@ -209,7 +209,7 @@ func (s *DigestService) sendAll(ctx context.Context, recipients []models.User, c
 		// Best-effort second channel, same NotifyAsync-fire-and-forget shape
 		// every other event notification uses — a failed Telegram push
 		// doesn't affect the email-based sent/failed counts above.
-		if r.TelegramChatID != nil && r.TelegramNotificationsEnabled {
+		if r.WantsTelegram() {
 			s.telegram.NotifyAsync(ctx, *r.TelegramChatID, s.renderTelegram(content))
 		}
 	}

@@ -2,12 +2,13 @@ package handlers
 
 import (
 	"context"
-	"crypto/rand"
+	"crypto/hmac"
+	"crypto/sha256"
 	"crypto/subtle"
 	"encoding/base64"
+	"encoding/binary"
 	"errors"
 	"net/http"
-	"sync"
 	"time"
 
 	"github.com/danielgtaylor/huma/v2"
@@ -23,92 +24,100 @@ import (
 // "Linking flow" section), unlike the 1-year digest unsubscribe link.
 const telegramLinkTokenTTL = 10 * time.Minute
 
-// telegramLinkTokenBytes is the random token's entropy, before base64url
-// encoding. 16 bytes (128 bits) is far more than enough for a 10-minute,
-// single-use token.
-const telegramLinkTokenBytes = 16
+// telegramLinkTokenPayloadLen is the fixed-size signed payload: an 8-byte
+// big-endian user ID plus a 4-byte big-endian Unix expiry (seconds — good
+// until year 2106, plenty for a 10-minute token).
+const telegramLinkTokenPayloadLen = 8 + 4
 
-// telegramLinkTokenEntry is what a link token resolves to while it's live.
-type telegramLinkTokenEntry struct {
-	userID    uint
-	expiresAt time.Time
-}
+// telegramLinkTokenTagLen truncates the HMAC-SHA256 tag to 128 bits — ample
+// for a token that's only ever valid for 10 minutes, and keeps the whole
+// encoded token well under Telegram's 64-character deep-link limit.
+const telegramLinkTokenTagLen = 16
 
 // TelegramHandler handles linking/unlinking a member's Telegram account
 // (apps/bookshelf-bot's counterpart lives in that app, not here). See
 // docs/telegram-bot-integration-spec.md.
 //
-// Link tokens are opaque random strings held in an in-memory map, not a
-// signed JWT like every other magic-link flow in this app (see
-// otp_link_token.go/unsubscribe.go). Telegram's deep-link `start` parameter
-// only allows [A-Za-z0-9_-], max 64 characters — a compact JWT's `.`
-// separators and typical length blow straight through that, so the bot
-// receives no payload at all and silently can't complete the link. A random
-// token base64url-encoded (RawURLEncoding, no padding) produces exactly
-// Telegram's allowed alphabet at a fraction of the length. In-memory (not
-// persisted) is an acceptable tradeoff for a 10-minute, single-use,
-// single-instance-backend token: a mid-flow restart just means the member
-// taps "Connect Telegram" again.
+// Link tokens are a stateless HMAC-signed payload (user ID + expiry + tag),
+// not a JWT like otp_link_token.go/unsubscribe.go use — a compact JWT's
+// `header.payload.signature` shape uses `.` separators, which fall outside
+// the alphabet Telegram's deep-link `start` parameter allows
+// ([A-Za-z0-9_-], max 64 characters); the bot would receive no payload at
+// all and /start would silently have nothing to link. Verification is a
+// signature check plus an expiry comparison, no server-side state: no table,
+// no cleanup job, and a token survives a backend restart or works correctly
+// behind more than one replica for the same reason otp_link_token.go's JWTs
+// do. This does mean a token isn't strictly single-use — replaying it
+// within its 10-minute window just re-confirms the same (idempotent) link,
+// the same tradeoff unsubscribeClaims already accepts for its long-lived
+// unsubscribe link.
 type TelegramHandler struct {
 	users          repository.UserRepository
 	telegram       services.TelegramNotifier
+	jwtSecret      string
 	internalSecret string
 	botUsername    string
-
-	mu         sync.Mutex
-	linkTokens map[string]telegramLinkTokenEntry
 
 	// now is overridden in tests to exercise expiry without a real sleep.
 	now func() time.Time
 }
 
 // NewTelegramHandler creates a new TelegramHandler.
-func NewTelegramHandler(users repository.UserRepository, telegram services.TelegramNotifier, internalSecret, botUsername string) *TelegramHandler {
+func NewTelegramHandler(
+	users repository.UserRepository,
+	telegram services.TelegramNotifier,
+	jwtSecret, internalSecret, botUsername string,
+) *TelegramHandler {
 	return &TelegramHandler{
 		users:          users,
 		telegram:       telegram,
+		jwtSecret:      jwtSecret,
 		internalSecret: internalSecret,
 		botUsername:    botUsername,
-		linkTokens:     make(map[string]telegramLinkTokenEntry),
 		now:            time.Now,
 	}
 }
 
-// issueLinkToken mints a random opaque token for userID and stores it,
-// pruning any other expired tokens while it's already holding the lock.
-func (h *TelegramHandler) issueLinkToken(userID uint) (string, error) {
-	buf := make([]byte, telegramLinkTokenBytes)
-	if _, err := rand.Read(buf); err != nil {
-		return "", err
-	}
-	token := base64.RawURLEncoding.EncodeToString(buf)
+// issueLinkToken mints a signed, self-contained token for userID: an 8-byte
+// user ID and a 4-byte expiry, HMAC-tagged and base64url-encoded
+// (RawURLEncoding, no padding — Telegram's deep-link alphabet has no room
+// for `=` padding either).
+func (h *TelegramHandler) issueLinkToken(userID uint) string {
+	payload := make([]byte, telegramLinkTokenPayloadLen)
+	binary.BigEndian.PutUint64(payload[:8], uint64(userID))
+	binary.BigEndian.PutUint32(payload[8:], uint32(h.now().Add(telegramLinkTokenTTL).Unix())) //nolint:gosec // fits until year 2106
 
-	h.mu.Lock()
-	defer h.mu.Unlock()
-	now := h.now()
-	for t, entry := range h.linkTokens {
-		if now.After(entry.expiresAt) {
-			delete(h.linkTokens, t)
-		}
-	}
-	h.linkTokens[token] = telegramLinkTokenEntry{userID: userID, expiresAt: now.Add(telegramLinkTokenTTL)}
-	return token, nil
+	tag := h.linkTokenTag(payload)
+	return base64.RawURLEncoding.EncodeToString(append(payload, tag...))
 }
 
-// verifyLinkToken looks up tokenStr and, if found, consumes it (deletes it
-// regardless of outcome — single-use, and there's no reason to keep an
-// expired entry around either).
+// verifyLinkToken decodes tokenStr, checks its HMAC tag in constant time,
+// and rejects it if the embedded expiry has passed.
 func (h *TelegramHandler) verifyLinkToken(tokenStr string) (uint, error) {
-	h.mu.Lock()
-	defer h.mu.Unlock()
-	entry, ok := h.linkTokens[tokenStr]
-	if ok {
-		delete(h.linkTokens, tokenStr)
+	invalid := errors.New("invalid or expired link")
+
+	raw, err := base64.RawURLEncoding.DecodeString(tokenStr)
+	if err != nil || len(raw) != telegramLinkTokenPayloadLen+telegramLinkTokenTagLen {
+		return 0, invalid
 	}
-	if !ok || h.now().After(entry.expiresAt) {
-		return 0, errors.New("invalid or expired link")
+	payload, tag := raw[:telegramLinkTokenPayloadLen], raw[telegramLinkTokenPayloadLen:]
+	if !hmac.Equal(tag, h.linkTokenTag(payload)) {
+		return 0, invalid
 	}
-	return entry.userID, nil
+
+	userID := uint(binary.BigEndian.Uint64(payload[:8]))
+	expiresAt := time.Unix(int64(binary.BigEndian.Uint32(payload[8:])), 0)
+	if h.now().After(expiresAt) {
+		return 0, invalid
+	}
+	return userID, nil
+}
+
+// linkTokenTag computes the truncated HMAC-SHA256 tag authenticating payload.
+func (h *TelegramHandler) linkTokenTag(payload []byte) []byte {
+	mac := hmac.New(sha256.New, []byte(h.jwtSecret))
+	mac.Write(payload) //nolint:errcheck // hash.Hash.Write never returns an error
+	return mac.Sum(nil)[:telegramLinkTokenTagLen]
 }
 
 // --- Input / Output types ---
@@ -143,13 +152,8 @@ func (h *TelegramHandler) createLinkToken(ctx context.Context, _ *struct{}) (*li
 		return nil, huma.Error401Unauthorized("authentication required")
 	}
 
-	token, err := h.issueLinkToken(userID)
-	if err != nil {
-		return nil, huma.Error500InternalServerError("could not mint link token")
-	}
-
 	out := &linkTokenOutput{}
-	out.Body.Token = token
+	out.Body.Token = h.issueLinkToken(userID)
 	out.Body.BotUsername = h.botUsername
 	return out, nil
 }
@@ -177,6 +181,9 @@ func (h *TelegramHandler) confirmLink(_ context.Context, input *confirmLinkInput
 	user.TelegramLinkedAt = &now
 	user.TelegramNotificationsEnabled = true
 	if err := h.users.Save(user); err != nil {
+		if errors.Is(err, repository.ErrConflict) {
+			return nil, huma.Error409Conflict("this Telegram chat is already linked to another account")
+		}
 		return nil, huma.Error500InternalServerError("could not save link")
 	}
 

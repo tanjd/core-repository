@@ -60,6 +60,13 @@ type User struct {
 	InvitedBy   *User `gorm:"foreignKey:InvitedByID" json:"invited_by,omitempty"`
 }
 
+// WantsTelegram reports whether u has a linked Telegram chat and hasn't
+// turned Telegram notifications off — the single gate every Telegram push
+// site in this app applies before calling TelegramNotifier.
+func (u User) WantsTelegram() bool {
+	return u.TelegramChatID != nil && u.TelegramNotificationsEnabled
+}
+
 // RegistrationVerification holds a short-lived OTP code proving control of an
 // email address or phone number before a User row exists to attach it to
 // (unlike User.OTPCode, which verifies an already-registered account). One

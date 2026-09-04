@@ -32,6 +32,7 @@ export function ProfileForm() {
   const router = useRouter();
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
+  const [activeTab, setActiveTab] = useState("profile");
   const [verificationStatus, setVerificationStatus] =
     useState<VerificationStatus | null>(null);
 
@@ -453,7 +454,7 @@ export function ProfileForm() {
         </div>
       </div>
 
-      <Tabs defaultValue="profile">
+      <Tabs value={activeTab} onValueChange={setActiveTab}>
         <TabsList>
           <TabsTrigger value="profile">Profile</TabsTrigger>
           <TabsTrigger value="security">Security</TabsTrigger>
@@ -698,13 +699,7 @@ export function ProfileForm() {
                             <button
                               type="button"
                               className="underline underline-offset-2 hover:text-foreground"
-                              onClick={() =>
-                                document
-                                  .querySelector<HTMLElement>(
-                                    '[data-value="integrations"]',
-                                  )
-                                  ?.click()
-                              }
+                              onClick={() => setActiveTab("integrations")}
                             >
                               Integrations tab
                             </button>{" "}
@@ -871,7 +866,11 @@ export function ProfileForm() {
                           : "Verifying your email helps other members trust that you're reachable."}
                     </p>
                   </div>
-                  {!user.verified && (
+                  {user.verified ? (
+                    <Badge variant="success" className="shrink-0">
+                      Verified
+                    </Badge>
+                  ) : (
                     <Badge variant="secondary" className="shrink-0">
                       Unverified
                     </Badge>
@@ -987,13 +986,7 @@ export function ProfileForm() {
                                 <button
                                   type="button"
                                   className="underline underline-offset-2 hover:text-foreground"
-                                  onClick={() =>
-                                    document
-                                      .querySelector<HTMLElement>(
-                                        '[data-value="profile"]',
-                                      )
-                                      ?.click()
-                                  }
+                                  onClick={() => setActiveTab("profile")}
                                 >
                                   Profile tab
                                 </button>

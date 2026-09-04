@@ -155,7 +155,7 @@ func main() {
 	recommendationH := handlers.NewRecommendationHandler(recommendationRepo)
 	unsubscribeH := handlers.NewUnsubscribeHandler(userRepo, cfg.JWTSecret, cfg.Env)
 	inviteCodeH := handlers.NewInviteCodeHandler(inviteCodeRepo, adminRepo, userRepo, emailSvc)
-	telegramH := handlers.NewTelegramHandler(userRepo, telegramSvc, cfg.TelegramInternalSecret, cfg.TelegramBotUsername)
+	telegramH := handlers.NewTelegramHandler(userRepo, telegramSvc, cfg.JWTSecret, cfg.TelegramInternalSecret, cfg.TelegramBotUsername)
 
 	// Router
 	mux := http.NewServeMux()

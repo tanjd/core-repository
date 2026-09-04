@@ -70,7 +70,7 @@ func (w *RegistrationWorkflow) OnPendingApproval(ctx context.Context, user *mode
 		if admin.EmailNotificationsEnabled {
 			w.email.SendEmailAsync(ctx, admin.Email, subject, body)
 		}
-		if admin.TelegramChatID != nil && admin.TelegramNotificationsEnabled {
+		if admin.WantsTelegram() {
 			w.telegram.NotifyAsync(ctx, *admin.TelegramChatID, telegramText)
 		}
 	}

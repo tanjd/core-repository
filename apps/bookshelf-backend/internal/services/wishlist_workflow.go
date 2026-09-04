@@ -107,7 +107,7 @@ func (w *WishlistWorkflow) fulfill(ctx context.Context, req *models.WishlistRequ
 		w.email.SendEmailAsync(ctx, requester.Email, subject, body)
 	}
 
-	if requester.TelegramChatID != nil && requester.TelegramNotificationsEnabled {
+	if requester.WantsTelegram() {
 		telegramText := fmt.Sprintf(
 			"<b>%s</b> by %s, which you were looking for, has been added to the catalog.\n<a href=\"%s\">View book</a>",
 			html.EscapeString(book.Title), html.EscapeString(book.Author), w.email.URL(fmt.Sprintf("/catalog/%d", book.ID)),

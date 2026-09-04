@@ -92,14 +92,16 @@ func (s *TelegramService) Notify(ctx context.Context, chatID int64, text string)
 // NotifyAsync sends a message in a background goroutine so callers on the
 // HTTP request path don't block on the Telegram API round trip. Errors are
 // logged rather than returned — every call site already treats Telegram
-// delivery as best-effort, same as EmailService.SendEmailAsync. ctx is only
-// used for its logger (carried into the goroutine for request correlation)
-// and to build the outbound request; the send isn't cancelled if ctx ends
-// before the goroutine runs.
+// delivery as best-effort, same as EmailService.SendEmailAsync. The
+// goroutine runs with context.WithoutCancel(ctx): it keeps ctx's logger (for
+// request correlation) but is detached from ctx's cancellation, since the
+// originating HTTP handler — and huma's request context along with it — has
+// typically already returned by the time this goroutine gets scheduled.
 func (s *TelegramService) NotifyAsync(ctx context.Context, chatID int64, text string) {
+	detached := context.WithoutCancel(ctx)
 	go func() {
-		if err := s.Notify(ctx, chatID, text); err != nil {
-			zerolog.Ctx(ctx).Error().Err(err).Int64("chat_id", chatID).Msg("async telegram send failed")
+		if err := s.Notify(detached, chatID, text); err != nil {
+			zerolog.Ctx(detached).Error().Err(err).Int64("chat_id", chatID).Msg("async telegram send failed")
 		}
 	}()
 }
