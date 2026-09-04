@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState, useRef } from "react";
 import { api } from "@/lib/api";
 
-const POLL_INTERVAL_MS = 30_000;
+const POLL_INTERVAL_MS = 60_000;
 
 export function useUnreadNotifications() {
   const [unreadCount, setUnreadCount] = useState(0);

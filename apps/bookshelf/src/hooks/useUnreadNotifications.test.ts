@@ -55,7 +55,7 @@ describe("useUnreadNotifications", () => {
     renderHook(() => useUnreadNotifications());
     await waitFor(() => expect(api.getNotifications).toHaveBeenCalledTimes(1));
 
-    jest.advanceTimersByTime(30_000);
+    jest.advanceTimersByTime(60_000);
     await waitFor(() => expect(api.getNotifications).toHaveBeenCalledTimes(2));
   });
 
@@ -67,7 +67,7 @@ describe("useUnreadNotifications", () => {
     await waitFor(() => expect(api.getNotifications).toHaveBeenCalledTimes(1));
 
     unmount();
-    jest.advanceTimersByTime(60_000);
+    jest.advanceTimersByTime(120_000);
 
     expect(api.getNotifications).toHaveBeenCalledTimes(1);
   });
