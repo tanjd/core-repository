@@ -1,3 +1,7 @@
+## 1.1.2 (2026-09-04)
+
+This was a version bump only for otobr-buddy to align it with other projects, there were no code changes.
+
 ## 1.1.1 (2026-08-26)
 
 This was a version bump only for otobr-buddy to align it with other projects, there were no code changes.

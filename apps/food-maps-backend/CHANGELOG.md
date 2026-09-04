@@ -1,3 +1,7 @@
+## 0.4.4 (2026-09-04)
+
+This was a version bump only for food-maps-backend to align it with other projects, there were no code changes.
+
 ## 0.4.3 (2026-08-26)
 
 This was a version bump only for food-maps-backend to align it with other projects, there were no code changes.

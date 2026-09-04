@@ -1,3 +1,17 @@
+## 0.26.0 (2026-09-04)
+
+### 🚀 Features
+
+- **bookshelf,bookshelf-backend,bookshelf-bot:** add Telegram bot integration ([#109](https://github.com/tanjd/core-repository/pull/109))
+
+### Database migrations
+
+Includes migration **000020**, **000021** — automatic on startup; no manual SQL required.
+
+### ❤️ Thank You
+
+- Jeddy Tan @tanjd
+
 ## 0.25.1 (2026-09-03)
 
 ### 🩹 Fixes
