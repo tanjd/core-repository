@@ -1,3 +1,13 @@
+## 0.40.1 (2026-09-04)
+
+### 🩹 Fixes
+
+- **bookshelf,bookshelf-backend:** respect notification channel prefs in monthly digest ([#112](https://github.com/tanjd/core-repository/pull/112))
+
+### ❤️ Thank You
+
+- Jeddy Tan @tanjd
+
 ## 0.40.0 (2026-09-04)
 
 ### 🚀 Features
