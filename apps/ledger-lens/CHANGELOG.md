@@ -1,3 +1,13 @@
+## 1.9.0 (2026-09-04)
+
+### 🚀 Features
+
+- **ledger-lens,ledger-lens-backend:** fetch and cache benchmark prices instead of CSV upload ([#108](https://github.com/tanjd/core-repository/pull/108))
+
+### ❤️ Thank You
+
+- Jeddy Tan @tanjd
+
 ## 1.8.0 (2026-09-03)
 
 ### 🚀 Features
