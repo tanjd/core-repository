@@ -1,7 +1,6 @@
 import type {
-  BenchmarkInfo,
+  BenchmarkOption,
   BenchmarkTimeseriesItem,
-  BenchmarkUploadResponse,
   CashflowsResponse,
   CommissionTimeseriesItem,
   DcaItem,
@@ -140,26 +139,9 @@ export async function fetchYears(): Promise<number[]> {
   return fetcher<number[]>("/api/years");
 }
 
-export async function uploadBenchmark(
-  symbol: string,
-  file: File,
-): Promise<BenchmarkUploadResponse> {
-  const form = new FormData();
-  form.append("file", file);
-  const res = await fetch(
-    `${BASE_URL}/api/benchmarks/upload?symbol=${encodeURIComponent(symbol)}`,
-    { method: "POST", body: form },
-  );
-  if (!res.ok) {
-    const data = (await res.json().catch(() => ({}))) as { detail?: string };
-    throw new Error(data.detail ?? `Upload failed (${res.status})`);
-  }
-  return res.json() as Promise<BenchmarkUploadResponse>;
-}
-
 // Re-export typed fetchers for SWR
 export {
-  type BenchmarkInfo,
+  type BenchmarkOption,
   type BenchmarkTimeseriesItem,
   type CashflowsResponse,
   type CommissionTimeseriesItem,
