@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import Link from "next/link";
-import { CheckCircle2, XCircle } from "lucide-react";
+import { AlertTriangle, CheckCircle2, XCircle } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { api, emailLocalPart, validatePassword } from "@/lib/api";
@@ -16,6 +16,7 @@ import type { User, VerificationStatus } from "@/lib/types";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Separator } from "@/components/ui/separator";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
@@ -422,6 +423,15 @@ export function ProfileForm() {
 
   if (!user) return null;
 
+  const telegramActive = telegramLinked && telegramNotificationsEnabled;
+  const digestChannelsSummary = [
+    emailNotificationsEnabled ? "email" : null,
+    telegramActive ? "Telegram" : null,
+  ]
+    .filter(Boolean)
+    .join(" and ");
+  const digestHasNoChannel = !emailNotificationsEnabled && !telegramActive;
+
   return (
     <div className="flex flex-col gap-6 max-w-2xl mx-auto">
       {/* Hero */}
@@ -719,14 +729,21 @@ export function ProfileForm() {
                       }
                     />
                   </div>
+                  <Separator />
+                  <div>
+                    <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                      Monthly digest
+                    </p>
+                  </div>
                   <div className="flex items-center justify-between">
                     <div>
-                      <p className="text-sm font-medium">Monthly digest</p>
+                      <p className="text-sm font-medium">Send it to me</p>
                       <p className="text-xs text-muted-foreground mt-0.5">
                         A once-a-month update with new books and top recommended
-                        books in the community, sent by email
-                        {telegramLinked && telegramNotificationsEnabled
-                          ? " and to your linked Telegram"
+                        books in the community, delivered through whichever
+                        notification channels above are turned on
+                        {digestChannelsSummary
+                          ? ` (currently: ${digestChannelsSummary})`
                           : ""}
                         .
                       </p>
@@ -741,6 +758,16 @@ export function ProfileForm() {
                       }
                     />
                   </div>
+                  {monthlyDigestEnabled && digestHasNoChannel && (
+                    <Alert variant="warning">
+                      <AlertTriangle />
+                      <AlertDescription>
+                        Email and Telegram notifications are both off, so the
+                        monthly digest won&apos;t actually be sent. Turn on at
+                        least one of them above to receive it.
+                      </AlertDescription>
+                    </Alert>
+                  )}
                   <div>
                     <Button type="submit" disabled={saving}>
                       {saving ? "Saving…" : "Save changes"}
