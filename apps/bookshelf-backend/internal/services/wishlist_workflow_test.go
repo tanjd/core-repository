@@ -16,6 +16,7 @@ type wishlistWorkflowDeps struct {
 	requests *repotest.WishlistRequestRepository
 	notifs   *repotest.NotificationRepository
 	users    *repotest.UserRepository
+	telegram *repotest.TelegramNotifier
 }
 
 func newWishlistWorkflow() *wishlistWorkflowDeps {
@@ -23,9 +24,10 @@ func newWishlistWorkflow() *wishlistWorkflowDeps {
 	notifs := repotest.NewNotificationRepository()
 	users := repotest.NewUserRepository()
 	email := NewEmailService("", "", "", "", "", "", "", "http://localhost:3000")
+	telegram := repotest.NewTelegramNotifier()
 	return &wishlistWorkflowDeps{
-		workflow: NewWishlistWorkflow(requests, notifs, users, email),
-		requests: requests, notifs: notifs, users: users,
+		workflow: NewWishlistWorkflow(requests, notifs, users, email, telegram),
+		requests: requests, notifs: notifs, users: users, telegram: telegram,
 	}
 }
 
@@ -46,6 +48,34 @@ func TestOnBookCreated_AutoMatchesByOLKey(t *testing.T) {
 	assert.Equal(t, book.ID, *reloaded.FulfilledBookID)
 	require.NotNil(t, reloaded.FulfilledAt)
 	assert.Equal(t, 1, d.notifs.Count())
+}
+
+func TestOnBookCreated_NotifiesTelegram_WhenLinkedAndEnabled(t *testing.T) {
+	d := newWishlistWorkflow()
+	chatID := int64(999)
+	requester := &models.User{Name: "Requester", Email: "req@example.com", TelegramChatID: &chatID, TelegramNotificationsEnabled: true}
+	require.NoError(t, d.users.Create(requester))
+	req := &models.WishlistRequest{RequesterID: requester.ID, Title: "Wanted Book", Author: "A", OLKey: "OL123", Status: "open"}
+	require.NoError(t, d.requests.Create(req))
+
+	book := &models.Book{ID: 42, Title: "Wanted Book", Author: "A", OLKey: "OL123"}
+	d.workflow.OnBookCreated(context.Background(), book)
+
+	require.Equal(t, 1, d.telegram.Count())
+	assert.Equal(t, chatID, d.telegram.Messages()[0].ChatID)
+}
+
+func TestOnBookCreated_SkipsTelegram_WhenNotLinked(t *testing.T) {
+	d := newWishlistWorkflow()
+	requester := &models.User{Name: "Requester", Email: "req@example.com"}
+	require.NoError(t, d.users.Create(requester))
+	req := &models.WishlistRequest{RequesterID: requester.ID, Title: "Wanted Book", Author: "A", OLKey: "OL123", Status: "open"}
+	require.NoError(t, d.requests.Create(req))
+
+	book := &models.Book{ID: 42, Title: "Wanted Book", Author: "A", OLKey: "OL123"}
+	d.workflow.OnBookCreated(context.Background(), book)
+
+	assert.Equal(t, 0, d.telegram.Count())
 }
 
 func TestOnBookCreated_AutoMatchesByGoogleBooksID(t *testing.T) {

@@ -16,11 +16,12 @@ type JobsHandler struct {
 	scheduler *services.Scheduler
 	digest    *services.DigestService
 	users     repository.UserRepository
+	botHealth services.BotHealthChecker
 }
 
 // NewJobsHandler creates a new JobsHandler.
-func NewJobsHandler(scheduler *services.Scheduler, digest *services.DigestService, users repository.UserRepository) *JobsHandler {
-	return &JobsHandler{scheduler: scheduler, digest: digest, users: users}
+func NewJobsHandler(scheduler *services.Scheduler, digest *services.DigestService, users repository.UserRepository, botHealth services.BotHealthChecker) *JobsHandler {
+	return &JobsHandler{scheduler: scheduler, digest: digest, users: users, botHealth: botHealth}
 }
 
 // --- Input / Output types ---
@@ -37,6 +38,13 @@ type digestTestEmailOutput struct {
 	Body struct {
 		Sent      bool   `json:"sent"`
 		Recipient string `json:"recipient"`
+	}
+}
+
+type telegramBotStatusOutput struct {
+	Body struct {
+		Configured bool `json:"configured" doc:"Whether TELEGRAM_BOT_HEALTH_URL is set on the backend."`
+		Online     bool `json:"online" doc:"Whether the bot's own /health endpoint responded OK just now. Always false when configured is false."`
 	}
 }
 
@@ -73,6 +81,24 @@ func (h *JobsHandler) RegisterRoutes(api huma.API) {
 		Summary:     "Send a preview monthly digest to the calling admin's email address",
 		Security:    security,
 	}, h.digestTestEmail)
+
+	huma.Register(api, huma.Operation{
+		OperationID: "admin-digest-test-telegram",
+		Method:      "POST",
+		Path:        "/admin/jobs/monthly-digest/test-telegram",
+		Tags:        []string{"admin"},
+		Summary:     "Send a preview monthly digest to the calling admin's linked Telegram chat",
+		Security:    security,
+	}, h.digestTestTelegram)
+
+	huma.Register(api, huma.Operation{
+		OperationID: "admin-telegram-bot-status",
+		Method:      "GET",
+		Path:        "/admin/telegram-bot/status",
+		Tags:        []string{"admin"},
+		Summary:     "Check whether apps/bookshelf-bot's own process is online",
+		Security:    security,
+	}, h.telegramBotStatus)
 }
 
 // --- Handlers ---
@@ -113,6 +139,40 @@ func (h *JobsHandler) digestTestEmail(ctx context.Context, _ *struct{}) (*digest
 	out := &digestTestEmailOutput{}
 	out.Body.Sent = true
 	out.Body.Recipient = recipient
+	return out, nil
+}
+
+func (h *JobsHandler) digestTestTelegram(ctx context.Context, _ *struct{}) (*struct{}, error) {
+	if err := middleware.RequireAdmin(ctx); err != nil {
+		return nil, jobsAdminError(err)
+	}
+	adminID, err := middleware.GetRequiredUserID(ctx)
+	if err != nil {
+		return nil, huma.Error401Unauthorized("authentication required")
+	}
+	adminUser, err := h.users.FindByID(adminID)
+	if err != nil {
+		return nil, huma.Error404NotFound("admin user not found")
+	}
+	if err := h.digest.SendTestTelegram(ctx, *adminUser); err != nil {
+		if errors.Is(err, services.ErrTelegramNotLinked) {
+			return nil, huma.Error400BadRequest("link Telegram in your profile before sending a test message")
+		}
+		return nil, huma.Error502BadGateway("could not reach Telegram — check the bot is still linked and try again")
+	}
+	return nil, nil
+}
+
+func (h *JobsHandler) telegramBotStatus(ctx context.Context, _ *struct{}) (*telegramBotStatusOutput, error) {
+	if err := middleware.RequireAdmin(ctx); err != nil {
+		return nil, jobsAdminError(err)
+	}
+
+	out := &telegramBotStatusOutput{}
+	out.Body.Configured = h.botHealth.Configured()
+	if out.Body.Configured {
+		out.Body.Online = h.botHealth.Online(ctx)
+	}
 	return out, nil
 }
 

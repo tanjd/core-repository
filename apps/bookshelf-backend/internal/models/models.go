@@ -39,6 +39,19 @@ type User struct {
 	WhatsAppUsername          string `gorm:"column:whatsapp_username" json:"whatsapp_username,omitempty"`
 	ContactNote               string `gorm:"column:contact_note" json:"contact_note,omitempty"`
 
+	// TelegramChatID is the bot-linked Telegram chat used for push
+	// notification delivery (see docs/telegram-bot-integration-spec.md) —
+	// not to be confused with TelegramUsername above, a free-text field
+	// shown to the other party for manually arranging pickup. Nil means
+	// Telegram isn't linked. TelegramNotificationsEnabled has no GORM
+	// "default" tag, for the same reason EmailNotificationsEnabled/
+	// MonthlyDigestEnabled above don't: the link/unlink handlers explicitly
+	// set it, and the migration's SQL-level DEFAULT is the safety net for
+	// direct inserts that bypass application code.
+	TelegramChatID               *int64     `gorm:"column:telegram_chat_id;uniqueIndex" json:"-"`
+	TelegramLinkedAt             *time.Time `gorm:"column:telegram_linked_at" json:"telegram_linked_at,omitempty"`
+	TelegramNotificationsEnabled bool       `gorm:"column:telegram_notifications_enabled;not null" json:"telegram_notifications_enabled"`
+
 	// InvitedByID is a permanent record of which member's invite link this
 	// account registered through — survives regeneration or revocation of
 	// that link (see docs/invite-code-spec.md). Nil for accounts that
@@ -157,8 +170,13 @@ type LoanRequest struct {
 	// never touched. Last-write-wins, no history kept.
 	ExpectedReturnDateChangedBy *uint      `json:"expected_return_date_changed_by,omitempty"`
 	ExpectedReturnDateChangedAt *time.Time `json:"expected_return_date_changed_at,omitempty"`
-	Copy                        Copy       `json:"copy,omitempty"`
-	Borrower                    User       `json:"borrower,omitempty"`
+	// DueReminderSentAt records when the due-date-reminder scheduler job
+	// (see docs/telegram-bot-integration-spec.md) pushed a reminder for this
+	// loan, so a later run doesn't remind the borrower twice. Nil means no
+	// reminder has been sent yet.
+	DueReminderSentAt *time.Time `gorm:"column:due_reminder_sent_at" json:"due_reminder_sent_at,omitempty"`
+	Copy              Copy       `json:"copy,omitempty"`
+	Borrower          User       `json:"borrower,omitempty"`
 }
 
 // WaitlistEntry tracks users waiting for a loaned copy to become available.

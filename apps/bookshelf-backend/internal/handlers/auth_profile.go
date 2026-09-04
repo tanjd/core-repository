@@ -22,6 +22,11 @@ import (
 type meBody struct {
 	models.User
 	GoogleBooksKeyConfigured bool `json:"google_books_key_configured"`
+	// TelegramLinked is computed from User.TelegramChatID, which itself
+	// carries json:"-" (no reason to expose the raw chat ID to the
+	// frontend) — same "expose a derived bool, not the underlying secret
+	// field" shape as GoogleBooksKeyConfigured above.
+	TelegramLinked bool `json:"telegram_linked"`
 }
 
 type meOutput struct{ Body meBody }
@@ -30,6 +35,7 @@ type updateMeOutput struct {
 	Body struct {
 		models.User
 		GoogleBooksKeyConfigured bool   `json:"google_books_key_configured"`
+		TelegramLinked           bool   `json:"telegram_linked"`
 		PendingEmailDebugCode    string `json:"pending_email_debug_code,omitempty" doc:"Only present when ENV=dev: the code sent to confirm a pending email change, so local development doesn't require SMTP"`
 	}
 }
@@ -45,9 +51,14 @@ type updateMeBody struct {
 	GoogleBooksAPIKey         *string `json:"google_books_api_key,omitempty" doc:"Your Google Books API key. Set to empty string to remove."`
 	EmailNotificationsEnabled *bool   `json:"email_notifications_enabled,omitempty" doc:"Whether to receive non-transactional notification emails (loan requests, wishlist matches). Account/security emails are unaffected."`
 	MonthlyDigestEnabled      *bool   `json:"monthly_digest_enabled,omitempty" doc:"Whether to receive the monthly community digest email (new books, top recommended)."`
-	TelegramUsername          *string `json:"telegram_username,omitempty" maxLength:"100" doc:"Telegram username, for other members to reach you. Set to empty string to remove."`
-	WhatsAppUsername          *string `json:"whatsapp_username,omitempty" maxLength:"100" doc:"WhatsApp username, for other members to reach you. Set to empty string to remove."`
-	ContactNote               *string `json:"contact_note,omitempty" maxLength:"500" doc:"Free-text note on the best way/times to arrange pickup, shown to the other party once a loan request is accepted. Set to empty string to remove."`
+	// TelegramNotificationsEnabled is rejected with 400 unless the member
+	// has already linked Telegram (see POST /profile/telegram/link-token) —
+	// there's nothing to toggle before that. Unrelated to TelegramUsername
+	// below.
+	TelegramNotificationsEnabled *bool   `json:"telegram_notifications_enabled,omitempty" doc:"Whether to receive Telegram push notifications. Requires Telegram to already be linked."`
+	TelegramUsername             *string `json:"telegram_username,omitempty" maxLength:"100" doc:"Telegram username, for other members to reach you. Set to empty string to remove."`
+	WhatsAppUsername             *string `json:"whatsapp_username,omitempty" maxLength:"100" doc:"WhatsApp username, for other members to reach you. Set to empty string to remove."`
+	ContactNote                  *string `json:"contact_note,omitempty" maxLength:"500" doc:"Free-text note on the best way/times to arrange pickup, shown to the other party once a loan request is accepted. Set to empty string to remove."`
 }
 
 type testGoogleBooksKeyInput struct {
@@ -94,7 +105,11 @@ func (h *AuthHandler) me(ctx context.Context, _ *struct{}) (*meOutput, error) {
 		return nil, huma.Error403Forbidden("this account is pending admin approval")
 	}
 
-	return &meOutput{Body: meBody{User: *user, GoogleBooksKeyConfigured: user.GoogleBooksAPIKey != ""}}, nil
+	return &meOutput{Body: meBody{
+		User:                     *user,
+		GoogleBooksKeyConfigured: user.GoogleBooksAPIKey != "",
+		TelegramLinked:           user.TelegramChatID != nil,
+	}}, nil
 }
 
 func (h *AuthHandler) updateMe(ctx context.Context, input *updateMeInput) (*updateMeOutput, error) {
@@ -119,26 +134,10 @@ func (h *AuthHandler) updateMe(ctx context.Context, input *updateMeInput) (*upda
 		return nil, huma.Error403Forbidden("this account is pending admin approval")
 	}
 
-	if input.Body.Name != nil {
-		user.Name = *input.Body.Name
+	pendingEmailDebugCode, err := h.applyUpdateMeFields(ctx, user, input.Body)
+	if err != nil {
+		return nil, err
 	}
-	if input.Body.Phone != nil {
-		applyPhoneUpdate(user, *input.Body.Phone)
-	}
-	var pendingEmailDebugCode string
-	if input.Body.Email != nil {
-		code, err := h.handleEmailUpdateRequest(ctx, user, *input.Body.Email)
-		if err != nil {
-			return nil, err
-		}
-		pendingEmailDebugCode = code
-	}
-	if input.Body.GoogleBooksAPIKey != nil {
-		if err := h.applyGoogleBooksKeyUpdate(user, *input.Body.GoogleBooksAPIKey); err != nil {
-			return nil, err
-		}
-	}
-	applyContactPrefsUpdate(user, input.Body)
 
 	if err := h.users.Save(user); err != nil {
 		return nil, huma.Error500InternalServerError("could not update user")
@@ -147,19 +146,57 @@ func (h *AuthHandler) updateMe(ctx context.Context, input *updateMeInput) (*upda
 	out := &updateMeOutput{}
 	out.Body.User = *user
 	out.Body.GoogleBooksKeyConfigured = user.GoogleBooksAPIKey != ""
+	out.Body.TelegramLinked = user.TelegramChatID != nil
 	out.Body.PendingEmailDebugCode = pendingEmailDebugCode
 	return out, nil
+}
+
+// applyUpdateMeFields applies every field of an updateMe request to user
+// (except the Suspended/PendingApproval guards, already checked by the
+// caller). Split out from updateMe to keep its cognitive complexity under
+// the repo's gocognit threshold — see apps/bookshelf-backend/CLAUDE.md's
+// "Go tooling" section for the same pattern applied to createLoanRequest.
+func (h *AuthHandler) applyUpdateMeFields(ctx context.Context, user *models.User, body updateMeBody) (pendingEmailDebugCode string, err error) {
+	if body.Name != nil {
+		user.Name = *body.Name
+	}
+	if body.Phone != nil {
+		applyPhoneUpdate(user, *body.Phone)
+	}
+	if body.Email != nil {
+		pendingEmailDebugCode, err = h.handleEmailUpdateRequest(ctx, user, *body.Email)
+		if err != nil {
+			return "", err
+		}
+	}
+	if body.GoogleBooksAPIKey != nil {
+		if err := h.applyGoogleBooksKeyUpdate(user, *body.GoogleBooksAPIKey); err != nil {
+			return "", err
+		}
+	}
+	if err := applyContactPrefsUpdate(user, body); err != nil {
+		return "", err
+	}
+	return pendingEmailDebugCode, nil
 }
 
 // applyContactPrefsUpdate applies the notification-preference and
 // messaging-username fields of an updateMe request. Split out from updateMe
 // to keep its cognitive complexity under the repo's gocognit threshold.
-func applyContactPrefsUpdate(user *models.User, body updateMeBody) {
+// Returns an error only for TelegramNotificationsEnabled's link-required
+// guard — every other field is unconditionally applicable.
+func applyContactPrefsUpdate(user *models.User, body updateMeBody) error {
 	if body.EmailNotificationsEnabled != nil {
 		user.EmailNotificationsEnabled = *body.EmailNotificationsEnabled
 	}
 	if body.MonthlyDigestEnabled != nil {
 		user.MonthlyDigestEnabled = *body.MonthlyDigestEnabled
+	}
+	if body.TelegramNotificationsEnabled != nil {
+		if user.TelegramChatID == nil {
+			return huma.Error400BadRequest("link Telegram before changing this setting")
+		}
+		user.TelegramNotificationsEnabled = *body.TelegramNotificationsEnabled
 	}
 	if body.TelegramUsername != nil {
 		user.TelegramUsername = *body.TelegramUsername
@@ -170,6 +207,7 @@ func applyContactPrefsUpdate(user *models.User, body updateMeBody) {
 	if body.ContactNote != nil {
 		user.ContactNote = strings.TrimSpace(*body.ContactNote)
 	}
+	return nil
 }
 
 // applyPhoneUpdate sets the user's phone number, clearing PhoneVerified when
@@ -368,5 +406,9 @@ func (h *AuthHandler) confirmEmailChange(ctx context.Context, input *confirmEmai
 		return nil, huma.Error500InternalServerError("could not update user")
 	}
 
-	return &meOutput{Body: meBody{User: *user, GoogleBooksKeyConfigured: user.GoogleBooksAPIKey != ""}}, nil
+	return &meOutput{Body: meBody{
+		User:                     *user,
+		GoogleBooksKeyConfigured: user.GoogleBooksAPIKey != "",
+		TelegramLinked:           user.TelegramChatID != nil,
+	}}, nil
 }

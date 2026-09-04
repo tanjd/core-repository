@@ -96,6 +96,10 @@ func digestSettings() map[string]string {
 }
 
 // newDigestService builds a DigestService with the given clock and repos.
+// telegram is variadic so the many existing call sites that don't care about
+// Telegram delivery don't need to pass one — they get a fresh, unasserted
+// fake; tests exercising the Telegram push pass their own to inspect
+// Messages() afterward.
 func newDigestService(
 	books repository.BookRepository,
 	recs repository.RecommendationRepository,
@@ -103,13 +107,19 @@ func newDigestService(
 	admin repository.AdminRepository,
 	email digestEmailer,
 	clock func() time.Time,
+	telegram ...TelegramNotifier,
 ) *DigestService {
+	tg := TelegramNotifier(repotest.NewTelegramNotifier())
+	if len(telegram) > 0 {
+		tg = telegram[0]
+	}
 	return &DigestService{
 		books:           books,
 		recommendations: recs,
 		users:           users,
 		admin:           admin,
 		email:           email,
+		telegram:        tg,
 		clock:           clock,
 	}
 }
@@ -252,6 +262,54 @@ func TestDigestService_Run_SendsToAllRecipients(t *testing.T) {
 	assert.Equal(t, "2025-05", handled)
 }
 
+func TestDigestService_Run_PushesTelegramToLinkedRecipients(t *testing.T) {
+	today := time.Date(2025, 5, 1, 9, 0, 0, 0, time.Local)
+	prevMonthStart := time.Date(2025, 4, 1, 0, 0, 0, 0, time.Local)
+
+	books := repotest.NewBookRepository()
+	book := models.Book{Title: "April Book", Author: "A", CreatedAt: prevMonthStart.Add(time.Hour)}
+	require.NoError(t, books.Create(&book))
+
+	users := repotest.NewUserRepository()
+	linkedChatID := int64(555)
+	linked := models.User{
+		Name: "Linked", Email: "linked@example.com", Verified: true,
+		MonthlyDigestEnabled: true, TelegramChatID: &linkedChatID, TelegramNotificationsEnabled: true,
+	}
+	require.NoError(t, users.Create(&linked))
+	optedOut := models.User{
+		Name: "OptedOut", Email: "optedout@example.com", Verified: true,
+		MonthlyDigestEnabled: true, TelegramChatID: &linkedChatID, TelegramNotificationsEnabled: false,
+	}
+	require.NoError(t, users.Create(&optedOut))
+	unlinked := models.User{
+		Name: "Unlinked", Email: "unlinked@example.com", Verified: true, MonthlyDigestEnabled: true,
+	}
+	require.NoError(t, users.Create(&unlinked))
+
+	admin := newDigestAdminRepo(digestSettings())
+	telegram := repotest.NewTelegramNotifier()
+
+	svc := newDigestService(
+		books,
+		repotest.NewRecommendationRepository(nil),
+		users,
+		admin,
+		&fakeEmailService{},
+		func() time.Time { return today },
+		telegram,
+	)
+
+	result := svc.Run(context.Background())
+	assert.True(t, strings.HasPrefix(result, "sent"), "result should start with 'sent': "+result)
+
+	messages := telegram.Messages()
+	require.Len(t, messages, 1, "only the linked-and-enabled recipient should get a Telegram push")
+	assert.Equal(t, linkedChatID, messages[0].ChatID)
+	assert.Contains(t, messages[0].Text, "April Book")
+	assert.Contains(t, messages[0].Text, "Browse the library")
+}
+
 func TestDigestService_Run_Idempotent_SameMonth(t *testing.T) {
 	today := time.Date(2025, 5, 1, 9, 0, 0, 0, time.Local)
 	admin := newDigestAdminRepo(digestSettings())
@@ -348,6 +406,55 @@ func TestDigestService_SendTestEmail(t *testing.T) {
 	// last_handled_month must NOT be updated by a test email
 	handled, _ := admin.GetSetting("monthly_digest_last_handled_month")
 	assert.Equal(t, "2025-05", handled, "SendTestEmail must not update last_handled_month")
+}
+
+func TestDigestService_SendTestTelegram(t *testing.T) {
+	today := time.Date(2025, 5, 15, 9, 0, 0, 0, time.Local)
+	admin := newDigestAdminRepo(map[string]string{
+		// feature disabled + month already handled — SendTestTelegram must bypass both
+		"monthly_digest_enabled":               "false",
+		"monthly_digest_last_handled_month":    "2025-05",
+		"monthly_digest_new_books_limit":       "10",
+		"monthly_digest_top_recommended_limit": "5",
+	})
+	users := repotest.NewUserRepository()
+	telegram := repotest.NewTelegramNotifier()
+
+	chatID := int64(999)
+	adminUser := models.User{Name: "Admin", Email: "admin@example.com", TelegramChatID: &chatID}
+	require.NoError(t, users.Create(&adminUser))
+
+	books := repotest.NewBookRepository()
+	book := models.Book{Title: "April Book", Author: "A", CreatedAt: time.Date(2025, 4, 15, 0, 0, 0, 0, time.Local)}
+	require.NoError(t, books.Create(&book))
+
+	svc := newDigestService(
+		books, repotest.NewRecommendationRepository(nil), users, admin,
+		&fakeEmailService{}, func() time.Time { return today }, telegram,
+	)
+
+	err := svc.SendTestTelegram(context.Background(), adminUser)
+	require.NoError(t, err)
+
+	messages := telegram.Messages()
+	require.Len(t, messages, 1)
+	assert.Equal(t, chatID, messages[0].ChatID)
+	assert.Contains(t, messages[0].Text, "April Book")
+
+	// last_handled_month must NOT be updated by a test message
+	handled, _ := admin.GetSetting("monthly_digest_last_handled_month")
+	assert.Equal(t, "2025-05", handled, "SendTestTelegram must not update last_handled_month")
+}
+
+func TestDigestService_SendTestTelegram_NotLinked(t *testing.T) {
+	svc := newDigestService(
+		repotest.NewBookRepository(), repotest.NewRecommendationRepository(nil),
+		repotest.NewUserRepository(), newDigestAdminRepo(digestSettings()),
+		&fakeEmailService{}, time.Now,
+	)
+
+	err := svc.SendTestTelegram(context.Background(), models.User{Name: "Admin"})
+	require.ErrorIs(t, err, ErrTelegramNotLinked)
 }
 
 func TestDigestService_SendTestEmail_EmptyContent_ShowsPreviewNote(t *testing.T) {

@@ -2,6 +2,7 @@ package services
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"html"
 	"strconv"
@@ -41,6 +42,7 @@ type DigestService struct {
 	users           repository.UserRepository
 	admin           repository.AdminRepository
 	email           digestEmailer
+	telegram        TelegramNotifier
 	clock           func() time.Time // injectable for tests; defaults to time.Now
 }
 
@@ -51,6 +53,7 @@ func NewDigestService(
 	users repository.UserRepository,
 	admin repository.AdminRepository,
 	email *EmailService,
+	telegram TelegramNotifier,
 ) *DigestService {
 	return &DigestService{
 		books:           books,
@@ -58,6 +61,7 @@ func NewDigestService(
 		users:           users,
 		admin:           admin,
 		email:           email,
+		telegram:        telegram,
 		clock:           time.Now,
 	}
 }
@@ -201,6 +205,13 @@ func (s *DigestService) sendAll(ctx context.Context, recipients []models.User, c
 		} else {
 			sent++
 		}
+
+		// Best-effort second channel, same NotifyAsync-fire-and-forget shape
+		// every other event notification uses — a failed Telegram push
+		// doesn't affect the email-based sent/failed counts above.
+		if r.TelegramChatID != nil && r.TelegramNotificationsEnabled {
+			s.telegram.NotifyAsync(ctx, *r.TelegramChatID, s.renderTelegram(content))
+		}
 	}
 	return
 }
@@ -266,6 +277,34 @@ func (s *DigestService) render(recipient models.User, content DigestContent, isP
 	return
 }
 
+// renderTelegram builds the Telegram-formatted counterpart to render's email
+// body — same content, restyled for Telegram's much smaller HTML subset
+// (<b>, <i>, <a href>; no <ul>/<li>/<h2>/inline styles), matching the plain,
+// line-based message shape every other Telegram push in this app uses (see
+// due_reminder.go, loan_workflow.go).
+func (s *DigestService) renderTelegram(content DigestContent) string {
+	text := fmt.Sprintf("<b>Bookshelf update — %s</b>\n", content.PreviousMonth)
+	text += fmt.Sprintf("The library now has %d books.\n", content.TotalBooks)
+
+	if len(content.NewBooks) > 0 {
+		text += fmt.Sprintf("\n<b>Latest %d additions</b>\n", len(content.NewBooks))
+		for _, b := range content.NewBooks {
+			text += fmt.Sprintf("• <b>%s</b> — %s\n", html.EscapeString(b.Title), html.EscapeString(b.Author))
+		}
+	}
+
+	if len(content.TopRecommended) > 0 {
+		text += "\n<b>Top picks from the community</b>\n"
+		for _, tr := range content.TopRecommended {
+			text += fmt.Sprintf("• <b>%s</b> — %s (%d recommend)\n",
+				html.EscapeString(tr.Book.Title), html.EscapeString(tr.Book.Author), tr.Count)
+		}
+	}
+
+	text += fmt.Sprintf("\n<a href=\"%s\">Browse the library</a>", s.email.URL("/catalog"))
+	return text
+}
+
 // digestSubject builds a subject line reflecting the actual content of the
 // digest, rather than a static "Bookshelf digest" label, since a subject
 // that names what's inside earns more opens.
@@ -311,4 +350,30 @@ func (s *DigestService) SendTestEmail(ctx context.Context, adminUser models.User
 		return "", fmt.Errorf("send: %w", err)
 	}
 	return adminUser.Email, nil
+}
+
+// ErrTelegramNotLinked is returned by SendTestTelegram when adminUser has no
+// linked Telegram chat to send the preview to.
+var ErrTelegramNotLinked = errors.New("telegram not linked")
+
+// SendTestTelegram is SendTestEmail's Telegram counterpart: assembles the
+// previous month's content and pushes one preview message to adminUser's
+// linked Telegram chat. Same bypass-all-gating, preview-only contract —
+// doesn't touch monthly_digest_last_handled_month. Uses the synchronous
+// Notify (not NotifyAsync) so the caller learns whether delivery actually
+// succeeded, same as the profile "send test notification" action.
+func (s *DigestService) SendTestTelegram(ctx context.Context, adminUser models.User) error {
+	if adminUser.TelegramChatID == nil {
+		return ErrTelegramNotLinked
+	}
+
+	content, err := s.assembleContent(s.clock())
+	if err != nil {
+		return fmt.Errorf("assemble content: %w", err)
+	}
+
+	if err := s.telegram.Notify(ctx, *adminUser.TelegramChatID, s.renderTelegram(content)); err != nil {
+		return fmt.Errorf("send: %w", err)
+	}
+	return nil
 }

@@ -27,7 +27,7 @@ func newAuthHandlerWithVerifications() (*AuthHandler, *repotest.UserRepository, 
 	admin := repotest.NewAdminRepository()
 	copies := repotest.NewCopyRepository()
 	regVerifications := repotest.NewRegistrationVerificationRepository()
-	registration := services.NewRegistrationWorkflow(admin, repotest.NewNotificationRepository(), repotest.NewBookRepository(), noopEmail())
+	registration := services.NewRegistrationWorkflow(admin, repotest.NewNotificationRepository(), repotest.NewBookRepository(), noopEmail(), repotest.NewTelegramNotifier())
 	h := NewAuthHandler(users, admin, copies, regVerifications, testJWTSecret, "encryption-secret", noopEmail(), noopSMS(), registration, "dev", 20, 30, 5, nil)
 	return h, users, admin, regVerifications
 }
@@ -185,7 +185,7 @@ func TestRegisterViaEmailOTP(t *testing.T) {
 		copies := repotest.NewCopyRepository()
 		regVerifications := repotest.NewRegistrationVerificationRepository()
 		notifs := repotest.NewNotificationRepository()
-		registration := services.NewRegistrationWorkflow(admin, notifs, repotest.NewBookRepository(), noopEmail())
+		registration := services.NewRegistrationWorkflow(admin, notifs, repotest.NewBookRepository(), noopEmail(), repotest.NewTelegramNotifier())
 		h := NewAuthHandler(users, admin, copies, regVerifications, testJWTSecret, "encryption-secret", noopEmail(), noopSMS(), registration, "dev", 20, 30, 5, nil)
 		require.NoError(t, admin.UpsertSetting("require_registration_approval", "true"))
 		require.NoError(t, admin.SaveUser(&models.User{ID: 1, Name: "Site Admin", Email: "admin@example.com", Role: "admin"}))
@@ -220,7 +220,7 @@ func newAuthHandlerWithInvites() (*AuthHandler, *repotest.UserRepository, *repot
 	copies := repotest.NewCopyRepository()
 	regVerifications := repotest.NewRegistrationVerificationRepository()
 	inviteCodes := repotest.NewInviteCodeRepository(users)
-	registration := services.NewRegistrationWorkflow(admin, repotest.NewNotificationRepository(), repotest.NewBookRepository(), noopEmail())
+	registration := services.NewRegistrationWorkflow(admin, repotest.NewNotificationRepository(), repotest.NewBookRepository(), noopEmail(), repotest.NewTelegramNotifier())
 	h := NewAuthHandler(users, admin, copies, regVerifications, testJWTSecret, "encryption-secret", noopEmail(), noopSMS(), registration, "dev", 20, 30, 5, inviteCodes)
 	return h, users, admin, inviteCodes
 }
@@ -1061,6 +1061,37 @@ func TestUpdateMeContactPrefs(t *testing.T) {
 		assert.Empty(t, out.Body.ContactNote)
 	})
 
+	t.Run("toggling telegram_notifications_enabled requires Telegram to already be linked", func(t *testing.T) {
+		h, users, _ := newAuthHandler()
+		user := &models.User{Name: "Ada", Email: "ada5@example.com", Password: "x"}
+		require.NoError(t, users.Create(user))
+
+		input := &updateMeInput{}
+		enabled := false
+		input.Body.TelegramNotificationsEnabled = &enabled
+
+		_, err := h.updateMe(fakeAuthedCtx(t, user.ID, "user"), input)
+
+		assertStatus(t, err, 400)
+	})
+
+	t.Run("toggles telegram_notifications_enabled once linked", func(t *testing.T) {
+		h, users, _ := newAuthHandler()
+		chatID := int64(555)
+		user := &models.User{Name: "Ada", Email: "ada6@example.com", Password: "x", TelegramChatID: &chatID, TelegramNotificationsEnabled: true}
+		require.NoError(t, users.Create(user))
+
+		input := &updateMeInput{}
+		disabled := false
+		input.Body.TelegramNotificationsEnabled = &disabled
+
+		out, err := h.updateMe(fakeAuthedCtx(t, user.ID, "user"), input)
+
+		require.NoError(t, err)
+		assert.False(t, out.Body.TelegramNotificationsEnabled)
+		assert.True(t, out.Body.TelegramLinked)
+	})
+
 	t.Run("leaves fields untouched when omitted", func(t *testing.T) {
 		h, users, _ := newAuthHandler()
 		user := &models.User{
@@ -1218,7 +1249,7 @@ func TestSendVerifyRegisterEmailOTP(t *testing.T) {
 		admin := repotest.NewAdminRepository()
 		copies := repotest.NewCopyRepository()
 		regVerifications := repotest.NewRegistrationVerificationRepository()
-		registration := services.NewRegistrationWorkflow(admin, repotest.NewNotificationRepository(), repotest.NewBookRepository(), noopEmail())
+		registration := services.NewRegistrationWorkflow(admin, repotest.NewNotificationRepository(), repotest.NewBookRepository(), noopEmail(), repotest.NewTelegramNotifier())
 		h := NewAuthHandler(users, admin, copies, regVerifications, testJWTSecret, "encryption-secret", noopEmail(), noopSMS(), registration, "prd", 20, 30, 5, nil)
 
 		sendIn := &sendRegisterEmailOTPInput{}

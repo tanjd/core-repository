@@ -152,6 +152,12 @@ type LoanRequestRepository interface {
 	// ListActiveByBorrowerID returns borrowerID's currently-held loans
 	// (status "accepted"), due-soonest first with no-due-date requests last.
 	ListActiveByBorrowerID(borrowerID uint) ([]models.LoanRequest, error)
+	// ListDueForReminder returns accepted loans whose expected_return_date
+	// falls on dueDate (UTC calendar day) and that haven't already had a
+	// due-date reminder sent (DueReminderSentAt is nil) — the due-date
+	// reminder scheduler job's query. See
+	// docs/telegram-bot-integration-spec.md.
+	ListDueForReminder(dueDate time.Time) ([]models.LoanRequest, error)
 	Save(lr *models.LoanRequest) error
 	// RejectCompetingAndUpdateCopy atomically rejects all other pending requests
 	// for copyID, creates rejection notifications for their borrowers, and sets

@@ -6,6 +6,7 @@ import { CheckCircle2, XCircle } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { api, emailLocalPart, validatePassword } from "@/lib/api";
+import { openNewTab } from "@/lib/navigate";
 import { PasswordStrengthMeter } from "@/components/PasswordStrengthMeter";
 import { PasswordInput } from "@/components/PasswordInput";
 import { PasswordMatchIndicator } from "@/components/PasswordMatchIndicator";
@@ -41,6 +42,12 @@ export function ProfileForm() {
   const [emailNotificationsEnabled, setEmailNotificationsEnabled] =
     useState(true);
   const [monthlyDigestEnabled, setMonthlyDigestEnabled] = useState(true);
+  const [telegramNotificationsEnabled, setTelegramNotificationsEnabled] =
+    useState(true);
+  const [telegramLinked, setTelegramLinked] = useState(false);
+  const [connectingTelegram, setConnectingTelegram] = useState(false);
+  const [unlinkingTelegram, setUnlinkingTelegram] = useState(false);
+  const [sendingTestNotification, setSendingTestNotification] = useState(false);
   const [telegramUsername, setTelegramUsername] = useState("");
   const [whatsappUsername, setWhatsappUsername] = useState("");
   const [contactNote, setContactNote] = useState("");
@@ -87,6 +94,8 @@ export function ProfileForm() {
         setPhone(u.phone ?? "");
         setEmailNotificationsEnabled(u.email_notifications_enabled);
         setMonthlyDigestEnabled(u.monthly_digest_enabled);
+        setTelegramNotificationsEnabled(u.telegram_notifications_enabled);
+        setTelegramLinked(u.telegram_linked);
         setTelegramUsername(u.telegram_username ?? "");
         setWhatsappUsername(u.whatsapp_username ?? "");
         setContactNote(u.contact_note ?? "");
@@ -132,6 +141,11 @@ export function ProfileForm() {
         phone: fullPhone,
         email_notifications_enabled: emailNotificationsEnabled,
         monthly_digest_enabled: monthlyDigestEnabled,
+        // Omitted (rather than sent false) when not linked — the backend
+        // rejects this field entirely unless Telegram is already linked.
+        telegram_notifications_enabled: telegramLinked
+          ? telegramNotificationsEnabled
+          : undefined,
         telegram_username: telegramUsername.trim(),
         whatsapp_username: whatsappUsername.trim(),
         contact_note: contactNote.trim(),
@@ -155,6 +169,77 @@ export function ProfileForm() {
       );
     } finally {
       setSaving(false);
+    }
+  }
+
+  async function handleConnectTelegram() {
+    setConnectingTelegram(true);
+    // Open the tab synchronously, before the await below, so browsers treat
+    // it as part of this click and don't block it as a popup — we redirect
+    // it to the real deep link once the token comes back.
+    const tab = openNewTab("about:blank");
+    try {
+      const { token, bot_username } = await api.linkTelegramToken();
+      if (!bot_username) {
+        toast.error("Telegram isn't configured on this deployment");
+        tab?.close();
+        return;
+      }
+      const url = `https://t.me/${bot_username}?start=${token}`;
+      if (tab) {
+        tab.location.href = url;
+      } else {
+        // Popup was blocked despite the synchronous open (e.g. a strict
+        // blocker) — fall back to a same-tab redirect so the flow still
+        // completes.
+        window.location.assign(url);
+      }
+    } catch (err) {
+      tab?.close();
+      toast.error(
+        err instanceof Error ? err.message : "Failed to connect Telegram",
+      );
+    } finally {
+      setConnectingTelegram(false);
+    }
+  }
+
+  async function handleUnlinkTelegram() {
+    setUnlinkingTelegram(true);
+    try {
+      await api.unlinkTelegram();
+      setTelegramLinked(false);
+      setTelegramNotificationsEnabled(true);
+      setUser((prev) =>
+        prev
+          ? {
+              ...prev,
+              telegram_linked: false,
+              telegram_notifications_enabled: true,
+            }
+          : prev,
+      );
+      toast.success("Telegram disconnected");
+    } catch (err) {
+      toast.error(
+        err instanceof Error ? err.message : "Failed to disconnect Telegram",
+      );
+    } finally {
+      setUnlinkingTelegram(false);
+    }
+  }
+
+  async function handleSendTestNotification() {
+    setSendingTestNotification(true);
+    try {
+      await api.sendTelegramTestNotification();
+      toast.success("Test message sent — check Telegram");
+    } catch (err) {
+      toast.error(
+        err instanceof Error ? err.message : "Failed to send test message",
+      );
+    } finally {
+      setSendingTestNotification(false);
     }
   }
 
@@ -382,8 +467,8 @@ export function ProfileForm() {
             <CardHeader>
               <CardTitle className="text-base">Personal information</CardTitle>
               <CardDescription>
-                Update your name, email, phone number, and messaging contact
-                info
+                Your identity, how other members can reach you, and how
+                you&apos;d like to be notified
               </CardDescription>
             </CardHeader>
             <CardContent>
@@ -457,6 +542,11 @@ export function ProfileForm() {
                   onSubmit={handleSaveProfile}
                   className="flex flex-col gap-4"
                 >
+                  <div>
+                    <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                      Identity
+                    </p>
+                  </div>
                   <div className="flex flex-col gap-1.5">
                     <label
                       htmlFor="profile-name"
@@ -486,6 +576,16 @@ export function ProfileForm() {
                       onChange={(e) => setEmail(e.target.value)}
                       placeholder="you@example.com"
                     />
+                  </div>
+                  <Separator />
+                  <div>
+                    <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                      Contact &amp; messaging
+                    </p>
+                    <p className="text-xs text-muted-foreground mt-0.5">
+                      Shown to members you&apos;re lending to or borrowing from,
+                      so they can reach you.
+                    </p>
                   </div>
                   <div className="flex flex-col gap-1.5">
                     <label
@@ -546,6 +646,12 @@ export function ProfileForm() {
                       maxLength={500}
                     />
                   </div>
+                  <Separator />
+                  <div>
+                    <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                      Notification preferences
+                    </p>
+                  </div>
                   <div className="flex items-center justify-between">
                     <div>
                       <p className="text-sm font-medium">Email notifications</p>
@@ -567,10 +673,67 @@ export function ProfileForm() {
                   </div>
                   <div className="flex items-center justify-between">
                     <div>
+                      <p className="text-sm font-medium">
+                        Telegram notifications
+                      </p>
+                      <p className="text-xs text-muted-foreground mt-0.5">
+                        {telegramLinked ? (
+                          <>
+                            Push notifications to your linked Telegram account
+                            for the same events as email.{" "}
+                            <button
+                              type="button"
+                              onClick={handleSendTestNotification}
+                              disabled={sendingTestNotification}
+                              className="underline underline-offset-2 hover:no-underline disabled:opacity-50"
+                            >
+                              {sendingTestNotification
+                                ? "Sending…"
+                                : "Send test message"}
+                            </button>
+                          </>
+                        ) : (
+                          <>
+                            Connect Telegram in the{" "}
+                            <button
+                              type="button"
+                              className="underline underline-offset-2 hover:text-foreground"
+                              onClick={() =>
+                                document
+                                  .querySelector<HTMLElement>(
+                                    '[data-value="integrations"]',
+                                  )
+                                  ?.click()
+                              }
+                            >
+                              Integrations tab
+                            </button>{" "}
+                            to enable this.
+                          </>
+                        )}
+                      </p>
+                    </div>
+                    <Switch
+                      checked={telegramLinked && telegramNotificationsEnabled}
+                      onCheckedChange={setTelegramNotificationsEnabled}
+                      disabled={!telegramLinked}
+                      aria-label={
+                        telegramLinked && telegramNotificationsEnabled
+                          ? "Disable Telegram notifications"
+                          : "Enable Telegram notifications"
+                      }
+                    />
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <div>
                       <p className="text-sm font-medium">Monthly digest</p>
                       <p className="text-xs text-muted-foreground mt-0.5">
-                        A once-a-month email with new books and top recommended
-                        books in the community.
+                        A once-a-month update with new books and top recommended
+                        books in the community, sent by email
+                        {telegramLinked && telegramNotificationsEnabled
+                          ? " and to your linked Telegram"
+                          : ""}
+                        .
                       </p>
                     </div>
                     <Switch
@@ -595,7 +758,7 @@ export function ProfileForm() {
         </TabsContent>
 
         {/* Security tab */}
-        <TabsContent value="security" className="mt-4">
+        <TabsContent value="security" className="mt-4 flex flex-col gap-4">
           <Card>
             <CardHeader>
               <CardTitle className="text-base">Change password</CardTitle>
@@ -681,94 +844,18 @@ export function ProfileForm() {
               </form>
             </CardContent>
           </Card>
-        </TabsContent>
 
-        {/* Integrations tab */}
-        <TabsContent value="integrations" className="mt-4">
           <Card>
             <CardHeader>
-              <CardTitle className="text-base">Integrations</CardTitle>
+              <CardTitle className="text-base">
+                Verification &amp; borrowing requirements
+              </CardTitle>
               <CardDescription>
-                Manage external services connected to your account.
+                Verifying your identity helps other members trust that
+                you&apos;re reachable, and unlocks borrowing.
               </CardDescription>
             </CardHeader>
             <CardContent className="flex flex-col gap-6">
-              {/* Google Books API key */}
-              <div className="flex flex-col gap-3">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-sm font-medium">Google Books API Key</p>
-                    <p className="text-xs text-muted-foreground mt-0.5">
-                      Use your personal quota during book searches. The key is
-                      stored encrypted and never exposed.
-                    </p>
-                    <Link
-                      href="/about#google-books-api-key"
-                      className="text-xs text-primary underline-offset-2 hover:underline mt-0.5 inline-block"
-                    >
-                      How to get a Google Books API key →
-                    </Link>
-                  </div>
-                  {user.google_books_key_configured ? (
-                    <Badge variant="success" className="shrink-0">
-                      Configured
-                    </Badge>
-                  ) : (
-                    <Badge variant="secondary" className="shrink-0">
-                      Not configured
-                    </Badge>
-                  )}
-                </div>
-                <form
-                  onSubmit={handleSaveGBKey}
-                  className="flex flex-col gap-3"
-                >
-                  <PasswordInput
-                    id="gb-api-key"
-                    autoComplete="off"
-                    value={gbKey}
-                    onChange={(e) => setGbKey(e.target.value)}
-                    placeholder={
-                      user.google_books_key_configured
-                        ? "Enter new key to replace"
-                        : "Paste your API key"
-                    }
-                  />
-                  <div className="flex gap-2">
-                    <Button
-                      type="button"
-                      variant="outline"
-                      disabled={
-                        testingGbKey ||
-                        savingGbKey ||
-                        (!gbKey.trim() && !user.google_books_key_configured)
-                      }
-                      onClick={handleTestGBKey}
-                    >
-                      {testingGbKey ? "Testing…" : "Test"}
-                    </Button>
-                    <Button
-                      type="submit"
-                      disabled={savingGbKey || !gbKey.trim()}
-                    >
-                      {savingGbKey ? "Saving…" : "Save key"}
-                    </Button>
-                    {user.google_books_key_configured && (
-                      <Button
-                        type="button"
-                        variant="outline"
-                        disabled={savingGbKey}
-                        onClick={handleRemoveGBKey}
-                      >
-                        Remove
-                      </Button>
-                    )}
-                  </div>
-                </form>
-              </div>
-
-              <Separator />
-
               {/* Email verification */}
               <div className="flex flex-col gap-3">
                 <div className="flex items-center justify-between">
@@ -784,11 +871,7 @@ export function ProfileForm() {
                           : "Verifying your email helps other members trust that you're reachable."}
                     </p>
                   </div>
-                  {user.verified ? (
-                    <Badge variant="success" className="shrink-0">
-                      Verified
-                    </Badge>
-                  ) : (
+                  {!user.verified && (
                     <Badge variant="secondary" className="shrink-0">
                       Unverified
                     </Badge>
@@ -932,6 +1015,141 @@ export function ProfileForm() {
                   </div>
                 </>
               )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        {/* Integrations tab */}
+        <TabsContent value="integrations" className="mt-4">
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base">Integrations</CardTitle>
+              <CardDescription>
+                Manage external services connected to your account.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="flex flex-col gap-6">
+              {/* Telegram connection */}
+              <div className="flex flex-col gap-3">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm font-medium">Telegram</p>
+                    <p className="text-xs text-muted-foreground mt-0.5">
+                      Connect Telegram to get push notifications for loan
+                      requests, approvals, and wishlist matches. Enable or
+                      disable those notifications from the Profile tab.
+                    </p>
+                  </div>
+                  {telegramLinked ? (
+                    <Badge variant="success" className="shrink-0">
+                      Connected
+                    </Badge>
+                  ) : (
+                    <Badge variant="secondary" className="shrink-0">
+                      Not connected
+                    </Badge>
+                  )}
+                </div>
+                {telegramLinked ? (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="w-fit"
+                    onClick={handleUnlinkTelegram}
+                    disabled={unlinkingTelegram}
+                  >
+                    {unlinkingTelegram
+                      ? "Disconnecting…"
+                      : "Disconnect Telegram"}
+                  </Button>
+                ) : (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="w-fit"
+                    onClick={handleConnectTelegram}
+                    disabled={connectingTelegram}
+                  >
+                    {connectingTelegram ? "Connecting…" : "Connect"}
+                  </Button>
+                )}
+              </div>
+
+              <Separator />
+
+              {/* Google Books API key */}
+              <div className="flex flex-col gap-3">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm font-medium">Google Books API Key</p>
+                    <p className="text-xs text-muted-foreground mt-0.5">
+                      Use your personal quota during book searches. The key is
+                      stored encrypted and never exposed.
+                    </p>
+                    <Link
+                      href="/about#google-books-api-key"
+                      className="text-xs text-primary underline-offset-2 hover:underline mt-0.5 inline-block"
+                    >
+                      How to get a Google Books API key →
+                    </Link>
+                  </div>
+                  {user.google_books_key_configured ? (
+                    <Badge variant="success" className="shrink-0">
+                      Configured
+                    </Badge>
+                  ) : (
+                    <Badge variant="secondary" className="shrink-0">
+                      Not configured
+                    </Badge>
+                  )}
+                </div>
+                <form
+                  onSubmit={handleSaveGBKey}
+                  className="flex flex-col gap-3"
+                >
+                  <PasswordInput
+                    id="gb-api-key"
+                    autoComplete="off"
+                    value={gbKey}
+                    onChange={(e) => setGbKey(e.target.value)}
+                    placeholder={
+                      user.google_books_key_configured
+                        ? "Enter new key to replace"
+                        : "Paste your API key"
+                    }
+                  />
+                  <div className="flex gap-2">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      disabled={
+                        testingGbKey ||
+                        savingGbKey ||
+                        (!gbKey.trim() && !user.google_books_key_configured)
+                      }
+                      onClick={handleTestGBKey}
+                    >
+                      {testingGbKey ? "Testing…" : "Test"}
+                    </Button>
+                    <Button
+                      type="submit"
+                      disabled={savingGbKey || !gbKey.trim()}
+                    >
+                      {savingGbKey ? "Saving…" : "Save key"}
+                    </Button>
+                    {user.google_books_key_configured && (
+                      <Button
+                        type="button"
+                        variant="outline"
+                        disabled={savingGbKey}
+                        onClick={handleRemoveGBKey}
+                      >
+                        Remove
+                      </Button>
+                    )}
+                  </div>
+                </form>
+              </div>
             </CardContent>
           </Card>
         </TabsContent>

@@ -22,7 +22,7 @@ func newAdminHandlerWithCopiesAndLoans() (*AdminHandler, *repotest.AdminReposito
 	copies := repotest.NewCopyRepository()
 	loans := repotest.NewLoanRequestRepository(copies, repotest.NewNotificationRepository(), repotest.NewUserRepository())
 	email := services.NewEmailService("", "", "", "", "", "", "", "http://localhost:3000")
-	registration := services.NewRegistrationWorkflow(admin, repotest.NewNotificationRepository(), repotest.NewBookRepository(), email)
+	registration := services.NewRegistrationWorkflow(admin, repotest.NewNotificationRepository(), repotest.NewBookRepository(), email, repotest.NewTelegramNotifier())
 	return NewAdminHandler(admin, copies, loans, services.NewGoogleBooksKeyPool(nil), registration, nil, nil), admin, copies, loans
 }
 
@@ -153,7 +153,7 @@ func TestUpdateUser_SuspensionRevokesInviteCode(t *testing.T) {
 	copies := repotest.NewCopyRepository()
 	loans := repotest.NewLoanRequestRepository(copies, repotest.NewNotificationRepository(), repotest.NewUserRepository())
 	email := services.NewEmailService("", "", "", "", "", "", "", "http://localhost:3000")
-	registration := services.NewRegistrationWorkflow(admin, repotest.NewNotificationRepository(), repotest.NewBookRepository(), email)
+	registration := services.NewRegistrationWorkflow(admin, repotest.NewNotificationRepository(), repotest.NewBookRepository(), email, repotest.NewTelegramNotifier())
 	inviteCodes := repotest.NewInviteCodeRepository(repotest.NewUserRepository())
 	h := NewAdminHandler(admin, copies, loans, services.NewGoogleBooksKeyPool(nil), registration, nil, inviteCodes)
 
@@ -207,7 +207,7 @@ func TestUpdateUser_ApprovalNotifiesUser(t *testing.T) {
 	loans := repotest.NewLoanRequestRepository(copies, repotest.NewNotificationRepository(), repotest.NewUserRepository())
 	notifs := repotest.NewNotificationRepository()
 	email := services.NewEmailService("", "", "", "", "", "", "", "http://localhost:3000")
-	registration := services.NewRegistrationWorkflow(admin, notifs, repotest.NewBookRepository(), email)
+	registration := services.NewRegistrationWorkflow(admin, notifs, repotest.NewBookRepository(), email, repotest.NewTelegramNotifier())
 	h := NewAdminHandler(admin, copies, loans, services.NewGoogleBooksKeyPool(nil), registration, nil, nil)
 
 	require.NoError(t, admin.SaveUser(&models.User{ID: 1, Role: "admin"}))
@@ -313,7 +313,7 @@ func TestDeleteUser(t *testing.T) {
 		copies := repotest.NewCopyRepository()
 		loans := repotest.NewLoanRequestRepository(copies, repotest.NewNotificationRepository(), repotest.NewUserRepository())
 		email := services.NewEmailService("", "", "", "", "", "", "", "http://localhost:3000")
-		registration := services.NewRegistrationWorkflow(admin, repotest.NewNotificationRepository(), repotest.NewBookRepository(), email)
+		registration := services.NewRegistrationWorkflow(admin, repotest.NewNotificationRepository(), repotest.NewBookRepository(), email, repotest.NewTelegramNotifier())
 		recommendations := repotest.NewRecommendationRepository(repotest.NewUserRepository())
 		h := NewAdminHandler(admin, copies, loans, services.NewGoogleBooksKeyPool(nil), registration, recommendations, nil)
 
@@ -333,7 +333,7 @@ func TestDeleteUser(t *testing.T) {
 		copies := repotest.NewCopyRepository()
 		loans := repotest.NewLoanRequestRepository(copies, repotest.NewNotificationRepository(), repotest.NewUserRepository())
 		email := services.NewEmailService("", "", "", "", "", "", "", "http://localhost:3000")
-		registration := services.NewRegistrationWorkflow(admin, repotest.NewNotificationRepository(), repotest.NewBookRepository(), email)
+		registration := services.NewRegistrationWorkflow(admin, repotest.NewNotificationRepository(), repotest.NewBookRepository(), email, repotest.NewTelegramNotifier())
 		inviteCodes := repotest.NewInviteCodeRepository(repotest.NewUserRepository())
 		h := NewAdminHandler(admin, copies, loans, services.NewGoogleBooksKeyPool(nil), registration, nil, inviteCodes)
 

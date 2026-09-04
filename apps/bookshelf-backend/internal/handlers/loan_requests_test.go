@@ -28,7 +28,7 @@ func newLoanRequestHandler() *loanTestDeps {
 	loanReqs := repotest.NewLoanRequestRepository(copies, notifs, users)
 	admin := repotest.NewAdminRepository()
 	waitlists := repotest.NewWaitlistRepository()
-	workflow := services.NewLoanWorkflow(copies, loanReqs, notifs, users, waitlists, noopEmail())
+	workflow := services.NewLoanWorkflow(copies, loanReqs, notifs, users, waitlists, noopEmail(), repotest.NewTelegramNotifier())
 	handler := NewLoanRequestHandler(copies, loanReqs, admin, users, workflow)
 	return &loanTestDeps{handler: handler, copies: copies, loanReqs: loanReqs, admin: admin, users: users, notifs: notifs}
 }

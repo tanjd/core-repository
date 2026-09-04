@@ -18,6 +18,7 @@ type workflowDeps struct {
 	notifs    *repotest.NotificationRepository
 	users     *repotest.UserRepository
 	waitlists *repotest.WaitlistRepository
+	telegram  *repotest.TelegramNotifier
 }
 
 func newWorkflow() *workflowDeps {
@@ -27,9 +28,11 @@ func newWorkflow() *workflowDeps {
 	loanReqs := repotest.NewLoanRequestRepository(copies, notifs, users)
 	waitlists := repotest.NewWaitlistRepository()
 	email := NewEmailService("", "", "", "", "", "", "", "http://localhost:3000")
+	telegram := repotest.NewTelegramNotifier()
 	return &workflowDeps{
-		workflow: NewLoanWorkflow(copies, loanReqs, notifs, users, waitlists, email),
+		workflow: NewLoanWorkflow(copies, loanReqs, notifs, users, waitlists, email, telegram),
 		copies:   copies, loanReqs: loanReqs, notifs: notifs, users: users, waitlists: waitlists,
+		telegram: telegram,
 	}
 }
 
@@ -47,6 +50,44 @@ func TestOnRequested_NotifiesOwner(t *testing.T) {
 
 	require.NoError(t, err)
 	assert.Equal(t, 1, d.notifs.Count())
+}
+
+func TestOnRequested_TelegramGate(t *testing.T) {
+	chatID := int64(12345)
+
+	tests := []struct {
+		name        string
+		chatID      *int64
+		enabled     bool
+		wantMessage bool
+	}{
+		{"sends when linked and enabled", &chatID, true, true},
+		{"skips when not linked", nil, true, false},
+		{"skips when linked but disabled", &chatID, false, false},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			d := newWorkflow()
+			owner := &models.User{Name: "Owner", Email: "owner@example.com", TelegramChatID: tc.chatID, TelegramNotificationsEnabled: tc.enabled}
+			require.NoError(t, d.users.Create(owner))
+			borrower := &models.User{Name: "Borrower", Email: "borrower@example.com"}
+			require.NoError(t, d.users.Create(borrower))
+			bookCopy := &models.Copy{OwnerID: owner.ID, Owner: *owner, Book: models.Book{Title: "Some Book"}, Status: "requested"}
+			require.NoError(t, d.copies.Create(bookCopy))
+			lr := &models.LoanRequest{ID: 1, CopyID: bookCopy.ID, BorrowerID: borrower.ID}
+
+			err := d.workflow.OnRequested(context.Background(), lr)
+
+			require.NoError(t, err)
+			if tc.wantMessage {
+				require.Equal(t, 1, d.telegram.Count())
+				assert.Equal(t, chatID, d.telegram.Messages()[0].ChatID)
+			} else {
+				assert.Equal(t, 0, d.telegram.Count())
+			}
+		})
+	}
 }
 
 func TestOnAccepted_RejectsCompetingRequestsAndMarksLoaned(t *testing.T) {

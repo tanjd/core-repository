@@ -599,6 +599,84 @@ func (r *NotificationRepository) Count() int {
 	return len(r.byID)
 }
 
+// TelegramMessage records one call to TelegramNotifier's fake implementation.
+type TelegramMessage struct {
+	ChatID int64
+	Text   string
+}
+
+// TelegramNotifier is a fake implementation of services.TelegramNotifier
+// (in-memory, synchronous — unlike the real implementation's fire-and-forget
+// goroutine, so assertions right after a workflow call don't need to wait)
+// for use in workflow unit tests.
+type TelegramNotifier struct {
+	mu       sync.Mutex
+	messages []TelegramMessage
+	// NotifyErr, if set, is returned by Notify (not NotifyAsync, which has
+	// no error to return) without recording the message — lets tests
+	// exercise the "delivery actually failed" path of the one call site
+	// that checks it.
+	NotifyErr error
+}
+
+// NewTelegramNotifier creates an empty fake TelegramNotifier.
+func NewTelegramNotifier() *TelegramNotifier {
+	return &TelegramNotifier{}
+}
+
+// NotifyAsync records the call. Named/shaped to satisfy
+// services.TelegramNotifier; synchronous despite the name, for the same
+// reason described on the type above.
+func (t *TelegramNotifier) NotifyAsync(_ context.Context, chatID int64, text string) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	t.messages = append(t.messages, TelegramMessage{ChatID: chatID, Text: text})
+}
+
+// Notify records the call and returns NotifyErr (nil by default).
+func (t *TelegramNotifier) Notify(_ context.Context, chatID int64, text string) error {
+	if t.NotifyErr != nil {
+		return t.NotifyErr
+	}
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	t.messages = append(t.messages, TelegramMessage{ChatID: chatID, Text: text})
+	return nil
+}
+
+// Messages returns every message sent so far, in send order.
+func (t *TelegramNotifier) Messages() []TelegramMessage {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	return append([]TelegramMessage{}, t.messages...)
+}
+
+// Count returns the number of messages sent so far.
+func (t *TelegramNotifier) Count() int {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	return len(t.messages)
+}
+
+// BotHealthChecker is a fake implementation of services.BotHealthChecker.
+// Both return values are plain fields, not stateful — this only stands in
+// for the live HTTP check, it doesn't model the bot process itself.
+type BotHealthChecker struct {
+	IsConfigured bool
+	IsOnline     bool
+}
+
+// NewBotHealthChecker creates a fake BotHealthChecker reporting configured
+// and online by default (the common case in tests that don't care about
+// this axis).
+func NewBotHealthChecker() *BotHealthChecker {
+	return &BotHealthChecker{IsConfigured: true, IsOnline: true}
+}
+
+func (c *BotHealthChecker) Configured() bool { return c.IsConfigured }
+
+func (c *BotHealthChecker) Online(_ context.Context) bool { return c.IsOnline }
+
 // AnnouncementRepository is an in-memory fake of repository.AnnouncementRepository.
 type AnnouncementRepository struct {
 	mu     sync.Mutex
@@ -1000,6 +1078,30 @@ func (r *LoanRequestRepository) ListActiveByBorrowerID(borrowerID uint) ([]model
 		}
 		return a.Before(b)
 	})
+	return out, nil
+}
+
+// ListDueForReminder returns accepted loans due back on dueDate's calendar
+// day (UTC) that haven't already had a reminder sent.
+func (r *LoanRequestRepository) ListDueForReminder(dueDate time.Time) ([]models.LoanRequest, error) {
+	dayStart := time.Date(dueDate.Year(), dueDate.Month(), dueDate.Day(), 0, 0, 0, 0, time.UTC)
+	dayEnd := dayStart.Add(24 * time.Hour)
+
+	r.mu.Lock()
+	out := []models.LoanRequest{}
+	for _, lr := range r.byID {
+		if lr.Status != "accepted" || lr.DueReminderSentAt != nil {
+			continue
+		}
+		if lr.ExpectedReturnDate.Before(dayStart) || !lr.ExpectedReturnDate.Before(dayEnd) {
+			continue
+		}
+		out = append(out, *lr)
+	}
+	r.mu.Unlock()
+	for i := range out {
+		r.hydrate(&out[i])
+	}
 	return out, nil
 }
 

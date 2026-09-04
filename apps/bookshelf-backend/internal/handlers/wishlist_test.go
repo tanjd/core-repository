@@ -17,7 +17,7 @@ func newWishlistHandler() (*WishlistHandler, *repotest.WishlistRequestRepository
 	users := repotest.NewUserRepository()
 	books := repotest.NewBookRepository()
 	email := noopEmail()
-	workflow := services.NewWishlistWorkflow(requests, notifs, users, email)
+	workflow := services.NewWishlistWorkflow(requests, notifs, users, email, repotest.NewTelegramNotifier())
 	return NewWishlistHandler(requests, books, workflow), requests, notifs, users, books
 }
 

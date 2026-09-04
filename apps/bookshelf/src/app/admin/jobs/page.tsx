@@ -4,8 +4,9 @@ import { useEffect, useState, useCallback, useRef } from "react";
 import { RefreshCw } from "lucide-react";
 import { toast } from "sonner";
 import { api } from "@/lib/api";
-import type { JobStatus } from "@/lib/types";
+import type { JobStatus, TelegramBotStatus } from "@/lib/types";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Switch } from "@/components/ui/switch";
 import { ScheduledTaskCard } from "@/components/admin/ScheduledTaskCard";
@@ -38,6 +39,16 @@ const JOB_META: Record<string, { label: string; description: string }> = {
     description:
       "Sends a monthly email to opted-in members with new books and top recommendations from the previous calendar month.",
   },
+  "due-date-reminder": {
+    label: "Due-Date Reminder",
+    description:
+      "Notifies borrowers whose loan is due back soon (in-app always, plus email/Telegram per their own notification preferences). Runs automatically on the configured interval.",
+  },
+  backup: {
+    label: "Backup",
+    description:
+      "Creates a compressed snapshot of the database and cover images, pruning old snapshots beyond the retention count. Runs automatically on the configured interval.",
+  },
 };
 
 const INTERVAL_PRESETS = ["1h", "6h", "12h", "24h", "48h", "168h"];
@@ -56,14 +67,18 @@ const JOB_SETTING_KEYS: Record<string, string> = {
   "cover-backfill": "cover_backfill_interval",
   "registration-prune": "registration_prune_interval",
   "monthly-digest": "monthly_digest_interval",
+  "due-date-reminder": "due_date_reminder_interval",
 };
 
 export default function AdminJobsPage() {
   const [jobs, setJobs] = useState<JobStatus[]>([]);
+  const [telegramBotStatus, setTelegramBotStatus] =
+    useState<TelegramBotStatus | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [triggering, setTriggering] = useState<string | null>(null);
   const [sendingTestEmail, setSendingTestEmail] = useState(false);
+  const [sendingTestTelegram, setSendingTestTelegram] = useState(false);
   const [digestEnabled, setDigestEnabled] = useState(true);
   const [savingDigestEnabled, setSavingDigestEnabled] = useState(false);
 
@@ -84,6 +99,18 @@ export default function AdminJobsPage() {
     } finally {
       setLoading(false);
     }
+
+    // Deliberately outside the try/catch above and its own call, not part
+    // of the Promise.all: this is a "nice to have" status indicator, not
+    // core job data — a failure here (network hiccup, backend that hasn't
+    // picked up this route yet) must never block the actual jobs list from
+    // rendering. Silently leaves telegramBotStatus at its previous value on
+    // failure rather than surfacing a second error banner for a secondary
+    // indicator.
+    api
+      .adminTelegramBotStatus()
+      .then(setTelegramBotStatus)
+      .catch(() => {});
   }, []);
 
   const loadedRef = useRef(false);
@@ -96,7 +123,7 @@ export default function AdminJobsPage() {
 
     function startPolling() {
       if (interval !== null) return;
-      interval = setInterval(loadJobs, 3_000);
+      interval = setInterval(loadJobs, 60_000);
     }
     function stopPolling() {
       if (interval === null) return;
@@ -182,6 +209,20 @@ export default function AdminJobsPage() {
     }
   }
 
+  async function handleDigestTestTelegram() {
+    setSendingTestTelegram(true);
+    try {
+      await api.adminDigestTestTelegram();
+      toast.success("Test Telegram message sent");
+    } catch (err) {
+      toast.error(
+        err instanceof Error ? err.message : "Failed to send test message",
+      );
+    } finally {
+      setSendingTestTelegram(false);
+    }
+  }
+
   if (loading) {
     return (
       <div className="flex flex-col gap-3 ">
@@ -220,6 +261,22 @@ export default function AdminJobsPage() {
         </Button>
       </div>
 
+      {telegramBotStatus?.configured && (
+        <div className="flex items-center justify-between rounded-lg border p-4">
+          <div>
+            <p className="text-sm font-medium">Telegram bot</p>
+            <p className="text-xs text-muted-foreground mt-0.5">
+              Whether the apps/bookshelf-bot process is up and polling for
+              /start commands — separate from whether push notifications are
+              being delivered.
+            </p>
+          </div>
+          <Badge variant={telegramBotStatus.online ? "success" : "destructive"}>
+            {telegramBotStatus.online ? "Online" : "Offline"}
+          </Badge>
+        </div>
+      )}
+
       <div className="flex flex-col gap-3">
         {jobs.map((job) => {
           const meta = JOB_META[job.name];
@@ -248,14 +305,24 @@ export default function AdminJobsPage() {
                       {digestEnabled ? "Enabled" : "Disabled"}
                     </span>
                   </div>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={handleDigestTestEmail}
-                    disabled={sendingTestEmail}
-                  >
-                    {sendingTestEmail ? "Sending…" : "Send test email"}
-                  </Button>
+                  <div className="flex gap-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={handleDigestTestEmail}
+                      disabled={sendingTestEmail}
+                    >
+                      {sendingTestEmail ? "Sending…" : "Send test email"}
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={handleDigestTestTelegram}
+                      disabled={sendingTestTelegram}
+                    >
+                      {sendingTestTelegram ? "Sending…" : "Send test Telegram"}
+                    </Button>
+                  </div>
                 </div>
               )}
             </ScheduledTaskCard>
