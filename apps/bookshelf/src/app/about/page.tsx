@@ -77,6 +77,30 @@ const faqs = [
     ),
   },
   {
+    id: "invite-a-member",
+    q: "How do I invite someone to join?",
+    a: (
+      <>
+        <p>
+          Every verified member has their own personal invite link — find yours
+          under &ldquo;Invite a member&rdquo; on the Profile tab of your profile
+          page.
+        </p>
+        <p>
+          Sharing it does more than just point someone at Bookshelf: signing up
+          through your link skips this community&apos;s normal registration
+          gate, even if the community has closed registration or requires admin
+          approval for new members. Your invite is treated as the vouch.
+        </p>
+        <p>
+          An admin can disable invite links community-wide, or revoke your link
+          specifically — a revoked link stops working immediately, and
+          you&apos;ll get a fresh one the next time you visit your profile.
+        </p>
+      </>
+    ),
+  },
+  {
     id: "borrowing-requirements",
     q: "Why can't I request to borrow a book?",
     a: (
@@ -147,6 +171,26 @@ const faqs = [
         </li>
         <li>Optionally restrict the key to the Books API only for security.</li>
       </ol>
+    ),
+  },
+  {
+    id: "telegram-notifications",
+    q: "Can I get notifications on Telegram?",
+    a: (
+      <>
+        <p>
+          Yes — go to Profile → Integrations and click <strong>Connect</strong>{" "}
+          next to Telegram. That opens Telegram to the Bookshelf bot, which
+          finishes linking your account automatically — there&apos;s no code to
+          copy or paste.
+        </p>
+        <p>
+          Once connected, a toggle on the Profile tab turns on Telegram
+          notifications for loan requests, approvals, and wishlist matches,
+          alongside your regular in-app notifications. You can disconnect
+          Telegram from Profile → Integrations at any time.
+        </p>
+      </>
     ),
   },
 ];
