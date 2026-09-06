@@ -50,12 +50,11 @@ func NewAdminHandler(admin repository.AdminRepository, copies repository.CopyRep
 // --- Input / Output types ---
 
 type adminUsersInput struct {
-	Page     int    `query:"page" minimum:"1" doc:"Page number (default 1)"`
-	PageSize int    `query:"page_size" minimum:"1" maximum:"100" doc:"Items per page (default 50)"`
-	Search   string `query:"search" doc:"Filter by name or email (case-insensitive substring match)"`
-	Role     string `query:"role" enum:"user,admin" doc:"Filter by role"`
-	Status   string `query:"status" enum:"verified,unverified,pending_approval,suspended" doc:"Filter by status"`
-	Sort     string `query:"sort" enum:"oldest,newest,name,email,role" doc:"Sort order (default oldest)"`
+	paginationParams
+	Search string `query:"search" doc:"Filter by name or email (case-insensitive substring match)"`
+	Role   string `query:"role" enum:"user,admin" doc:"Filter by role"`
+	Status string `query:"status" enum:"verified,unverified,pending_approval,suspended" doc:"Filter by status"`
+	Sort   string `query:"sort" enum:"oldest,newest,name,email,role" doc:"Sort order (default oldest)"`
 }
 
 type adminUsersOutput struct {
@@ -212,14 +211,7 @@ func (h *AdminHandler) listUsers(ctx context.Context, input *adminUsersInput) (*
 	if err := middleware.RequireAdmin(ctx); err != nil {
 		return nil, adminError(err)
 	}
-	page := input.Page
-	if page < 1 {
-		page = 1
-	}
-	pageSize := input.PageSize
-	if pageSize < 1 {
-		pageSize = 50
-	}
+	page, pageSize := input.normalize(50)
 	result, err := h.admin.ListUsersPaginated(page, pageSize, repository.UserListFilter{
 		Search: input.Search,
 		Role:   input.Role,

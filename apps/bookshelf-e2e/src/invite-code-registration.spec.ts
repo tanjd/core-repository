@@ -161,8 +161,13 @@ test.describe("invite-code registration", () => {
       E2E_ADMIN_EMAIL,
       E2E_ADMIN_PASSWORD,
     );
+    // Filtered by the invitee's own email rather than paging through the
+    // whole list: this suite runs many spec files concurrently against one
+    // shared backend, and the combined user count can exceed a fixed page
+    // size (with the default oldest-first sort, that would silently push
+    // this newly-created invitee off page 1 — see the flake this replaced).
     const usersRes = await request.get(
-      `${BACKEND_URL}/admin/users?page_size=100`,
+      `${BACKEND_URL}/admin/users?search=${encodeURIComponent(inviteeEmail)}`,
       { headers: { Authorization: `Bearer ${adminToken}` } },
     );
     const { items } = (await usersRes.json()) as {

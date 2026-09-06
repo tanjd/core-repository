@@ -23,9 +23,8 @@ func NewNotificationHandler(notifs repository.NotificationRepository) *Notificat
 // --- Input / Output types ---
 
 type listNotificationsInput struct {
-	Unread   bool `query:"unread" doc:"When true, return only unread notifications"`
-	Page     int  `query:"page" minimum:"1" doc:"Page number (default 1)"`
-	PageSize int  `query:"page_size" minimum:"1" maximum:"100" doc:"Items per page (default 20)"`
+	Unread bool `query:"unread" doc:"When true, return only unread notifications"`
+	paginationParams
 }
 
 type listNotificationsOutput struct {
@@ -92,14 +91,7 @@ func (h *NotificationHandler) listNotifications(ctx context.Context, input *list
 		return nil, huma.Error401Unauthorized("authentication required")
 	}
 
-	page := input.Page
-	if page < 1 {
-		page = 1
-	}
-	pageSize := input.PageSize
-	if pageSize < 1 {
-		pageSize = 20
-	}
+	page, pageSize := input.normalize(20)
 
 	result, err := h.notifs.FindByRecipientPaginated(userID, input.Unread, page, pageSize)
 	if err != nil {
