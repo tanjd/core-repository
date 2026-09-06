@@ -39,8 +39,7 @@ type listActiveAnnouncementsOutput struct {
 }
 
 type adminListAnnouncementsInput struct {
-	Page     int `query:"page" minimum:"1" doc:"Page number (default 1)"`
-	PageSize int `query:"page_size" minimum:"1" maximum:"100" doc:"Items per page (default 20)"`
+	paginationParams
 }
 
 type adminListAnnouncementsOutput struct {
@@ -148,14 +147,7 @@ func (h *AnnouncementHandler) adminList(ctx context.Context, input *adminListAnn
 	if err := middleware.RequireAdmin(ctx); err != nil {
 		return nil, adminError(err)
 	}
-	page := input.Page
-	if page < 1 {
-		page = 1
-	}
-	pageSize := input.PageSize
-	if pageSize < 1 {
-		pageSize = 20
-	}
+	page, pageSize := input.normalize(20)
 	result, err := h.announcements.ListPaginated(page, pageSize)
 	if err != nil {
 		return nil, huma.Error500InternalServerError("could not list announcements")

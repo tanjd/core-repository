@@ -99,9 +99,8 @@ func toWishlistResponse(req models.WishlistRequest, viewerID uint, isAdmin bool)
 type wishlistRequestOutput struct{ Body wishlistResponse }
 
 type listWishlistInput struct {
-	Q        string `query:"q" doc:"Search by title or author"`
-	Page     int    `query:"page" minimum:"1" doc:"Page number (default 1)"`
-	PageSize int    `query:"page_size" minimum:"1" maximum:"100" doc:"Items per page (default 20)"`
+	Q string `query:"q" doc:"Search by title or author"`
+	paginationParams
 }
 
 type listWishlistOutput struct {
@@ -255,14 +254,7 @@ func (h *WishlistHandler) list(ctx context.Context, input *listWishlistInput) (*
 	}
 	isAdmin := middleware.GetUserRole(ctx) == "admin"
 
-	page := input.Page
-	if page < 1 {
-		page = 1
-	}
-	pageSize := input.PageSize
-	if pageSize < 1 {
-		pageSize = 20
-	}
+	page, pageSize := input.normalize(20)
 
 	result, err := h.requests.ListOpenPaginated(input.Q, page, pageSize)
 	if err != nil {

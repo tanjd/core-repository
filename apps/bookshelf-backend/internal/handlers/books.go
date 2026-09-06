@@ -59,8 +59,7 @@ type listBooksInput struct {
 	OLKey         string `query:"ol_key" doc:"Filter by exact Open Library key (returns single book)"`
 	Sort          string `query:"sort" doc:"Sort order: title (default), author, newest, popular, recommended, relevance (best-match, only meaningful with q)"`
 	AvailableOnly bool   `query:"available_only" doc:"Only return books with at least one available copy"`
-	Page          int    `query:"page" minimum:"1" doc:"Page number (default 1)"`
-	PageSize      int    `query:"page_size" minimum:"1" maximum:"100" doc:"Items per page (default 20)"`
+	paginationParams
 }
 
 type listBooksOutput struct {
@@ -167,14 +166,7 @@ func (h *BookHandler) listBooks(ctx context.Context, input *listBooksInput) (*li
 		return &out, nil
 	}
 
-	page := input.Page
-	if page < 1 {
-		page = 1
-	}
-	pageSize := input.PageSize
-	if pageSize < 1 {
-		pageSize = 20
-	}
+	page, pageSize := input.normalize(20)
 
 	result, err := h.books.ListPaginated(input.Q, input.Sort, input.AvailableOnly, page, pageSize)
 	if err != nil {

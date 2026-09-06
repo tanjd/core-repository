@@ -102,9 +102,8 @@ type listLoanRequestsInput struct {
 type listLoanRequestsOutput struct{ Body []getLoanRequestBody }
 
 type listMineInput struct {
-	Page     int    `query:"page" minimum:"1" doc:"Page number (default 1)"`
-	PageSize int    `query:"page_size" minimum:"1" maximum:"100" doc:"Items per page (default 20)"`
-	View     string `query:"view" doc:"Filter: current (pending+accepted) or history (returned+rejected+cancelled); omit for all"`
+	paginationParams
+	View string `query:"view" doc:"Filter: current (pending+accepted) or history (returned+rejected+cancelled); omit for all"`
 }
 
 type listMineOutput struct {
@@ -298,14 +297,7 @@ func (h *LoanRequestHandler) listMine(ctx context.Context, input *listMineInput)
 		return nil, huma.Error401Unauthorized("authentication required")
 	}
 
-	page := input.Page
-	if page < 1 {
-		page = 1
-	}
-	pageSize := input.PageSize
-	if pageSize < 1 {
-		pageSize = 20
-	}
+	page, pageSize := input.normalize(20)
 
 	result, err := h.loanReqs.ListByBorrowerIDPaginated(callerID, statusesForView(input.View), page, pageSize)
 	if err != nil {
@@ -332,14 +324,7 @@ func (h *LoanRequestHandler) listMineLending(ctx context.Context, input *listMin
 		return nil, huma.Error401Unauthorized("authentication required")
 	}
 
-	page := input.Page
-	if page < 1 {
-		page = 1
-	}
-	pageSize := input.PageSize
-	if pageSize < 1 {
-		pageSize = 20
-	}
+	page, pageSize := input.normalize(20)
 
 	result, err := h.loanReqs.ListByOwnerIDPaginated(callerID, statusesForView(input.View), page, pageSize)
 	if err != nil {
