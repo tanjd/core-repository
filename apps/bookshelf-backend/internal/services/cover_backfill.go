@@ -33,15 +33,19 @@ type CoverBackfillService struct {
 	books              repository.BookRepository
 	coversDir          string
 	googleBooksKeyPool *GoogleBooksKeyPool
+	hardcoverAPIKey    string
 	client             *http.Client
 }
 
-// NewCoverBackfillService creates a CoverBackfillService.
-func NewCoverBackfillService(books repository.BookRepository, coversDir string, googleBooksKeyPool *GoogleBooksKeyPool) *CoverBackfillService {
+// NewCoverBackfillService creates a CoverBackfillService. hardcoverAPIKey
+// may be empty, in which case resolveExternalDataWithPool simply skips the
+// Hardcover step (see externalLookupSteps).
+func NewCoverBackfillService(books repository.BookRepository, coversDir string, googleBooksKeyPool *GoogleBooksKeyPool, hardcoverAPIKey string) *CoverBackfillService {
 	return &CoverBackfillService{
 		books:              books,
 		coversDir:          coversDir,
 		googleBooksKeyPool: googleBooksKeyPool,
+		hardcoverAPIKey:    hardcoverAPIKey,
 		client:             &http.Client{Timeout: 15 * time.Second},
 	}
 }
@@ -110,7 +114,7 @@ func coverBackfillCandidates(books []models.Book) []models.Book {
 // on both success (which source it came from) and failure (why not, e.g. a
 // quota-exceeded Google Books call rather than a genuine "no cover exists").
 func (s *CoverBackfillService) backfillOne(ctx context.Context, book *models.Book) (bool, string) {
-	data, attempts := resolveExternalDataWithPool(ctx, s.client, *book, s.googleBooksKeyPool)
+	data, attempts := resolveExternalDataWithPool(ctx, s.client, *book, s.googleBooksKeyPool, s.hardcoverAPIKey)
 	if data.coverURL == "" {
 		return false, attemptsSummary(attempts)
 	}

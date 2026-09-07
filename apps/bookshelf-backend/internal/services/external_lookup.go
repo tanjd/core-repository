@@ -1,12 +1,15 @@
 package services
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
 	"net/url"
 	"strings"
+	"sync"
+	"time"
 
 	"github.com/tanjd/core-repository/apps/bookshelf-backend/internal/models"
 )
@@ -189,6 +192,130 @@ func lookupGoogleBooksByISBN(ctx context.Context, client *http.Client, isbn, api
 	return parsed.Items[0].VolumeInfo.toExternalBookData(), "", nil
 }
 
+// hardcoverGraphQLEndpoint mirrors internal/handlers/metadata.go's constant
+// of the same name — duplicated rather than imported, since handlers already
+// imports services and Go doesn't allow the reverse.
+const hardcoverGraphQLEndpoint = "https://api.hardcover.app/v1/graphql"
+
+// hardcoverLookupByISBNQuery is a minimal version of metadata.go's
+// hardcoverSearchByISBNQuery, scoped to just the fields
+// resolveExternalData/mergeExternalLookup can use (cover + description) —
+// this backfill/reconciliation path never persists the richer fields
+// (publisher, language, contributors) that query also fetches.
+const hardcoverLookupByISBNQuery = `
+query BookLookupByIsbn($isbn: String!) {
+  books(where: { editions: { isbn_13: { _eq: $isbn } } }) {
+    description
+    image { url }
+  }
+}
+`
+
+// hardcoverLookupRateLimiter spaces this package's own Hardcover requests to
+// stay within its free-tier 60 req/min cap — a separate limiter instance
+// from internal/handlers/metadata.go's (services can't import handlers to
+// share one), though in practice it rarely binds here: coverBackfillSpacing
+// already paces at most one book — so at most one Hardcover call — every
+// 1.5s, well under the 1/s this enforces.
+var hardcoverLookupRateLimiter = &minIntervalLimiter{minInterval: time.Second}
+
+// minIntervalLimiter enforces a minimum gap between successive calls,
+// blocking callers (or returning early on ctx cancellation) rather than
+// rejecting them outright. Mirrors internal/handlers/metadata.go's type of
+// the same name.
+type minIntervalLimiter struct {
+	mu          sync.Mutex
+	minInterval time.Duration
+	next        time.Time
+}
+
+func (l *minIntervalLimiter) wait(ctx context.Context) {
+	l.mu.Lock()
+	now := time.Now()
+	scheduled := now
+	if l.next.After(now) {
+		scheduled = l.next
+	}
+	l.next = scheduled.Add(l.minInterval)
+	l.mu.Unlock()
+
+	if d := time.Until(scheduled); d > 0 {
+		timer := time.NewTimer(d)
+		defer timer.Stop()
+		select {
+		case <-timer.C:
+		case <-ctx.Done():
+		}
+	}
+}
+
+// hardcoverLookupResponse is the "data"/"errors" envelope for
+// hardcoverLookupByISBNQuery.
+type hardcoverLookupResponse struct {
+	Data struct {
+		Books []struct {
+			Description string `json:"description"`
+			Image       struct {
+				URL string `json:"url"`
+			} `json:"image"`
+		} `json:"books"`
+	} `json:"data"`
+	Errors []struct {
+		Message string `json:"message"`
+	} `json:"errors"`
+}
+
+// lookupHardcoverByISBN looks up a cover and description by ISBN via
+// Hardcover's GraphQL API — the same source metadata search's Hardcover
+// provider uses (internal/handlers/metadata.go's fetchHardcoverByISBN), but
+// reimplemented minimally here since Book has no HardcoverID field to look
+// up by directly (only ISBN), and this backfill/reconciliation sweep has no
+// use for the free-text search path search's fan-out relies on.
+func lookupHardcoverByISBN(ctx context.Context, client *http.Client, isbn, apiKey string) (externalBookData, string, error) {
+	if apiKey == "" {
+		return externalBookData{}, "no api key configured", nil
+	}
+	hardcoverLookupRateLimiter.wait(ctx)
+
+	payload, err := json.Marshal(struct {
+		Query     string         `json:"query"`
+		Variables map[string]any `json:"variables"`
+	}{Query: hardcoverLookupByISBNQuery, Variables: map[string]any{"isbn": isbn}})
+	if err != nil {
+		return externalBookData{}, "", err
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, hardcoverGraphQLEndpoint, bytes.NewReader(payload))
+	if err != nil {
+		return externalBookData{}, "", err
+	}
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+apiKey)
+
+	resp, err := client.Do(req)
+	if err != nil {
+		return externalBookData{}, "", err
+	}
+	defer resp.Body.Close() //nolint:errcheck
+
+	if resp.StatusCode != http.StatusOK {
+		return externalBookData{}, fmt.Sprintf("http %d", resp.StatusCode), nil
+	}
+
+	var parsed hardcoverLookupResponse
+	if err := json.NewDecoder(resp.Body).Decode(&parsed); err != nil {
+		return externalBookData{}, "", err
+	}
+	if len(parsed.Errors) > 0 {
+		return externalBookData{}, "", fmt.Errorf("hardcover returned GraphQL errors: %s", parsed.Errors[0].Message)
+	}
+	if len(parsed.Data.Books) == 0 {
+		return externalBookData{}, "no results", nil
+	}
+
+	book := parsed.Data.Books[0]
+	return externalBookData{coverURL: book.Image.URL, description: book.Description}, "", nil
+}
+
 // externalLookupStep is one named source resolveExternalData can try, bound
 // to the specific book/client/key it's being resolved for.
 type externalLookupStep struct {
@@ -199,9 +326,12 @@ type externalLookupStep struct {
 // externalLookupSteps builds the ordered list of sources to try for book —
 // the same trust order findExistingBook uses (OLKey, then GoogleBooksID,
 // then ISBN). The ISBN branch tries Open Library first (free, no API key
-// needed) before Google Books by ISBN search, to minimize paid/key-gated
-// calls. A step whose key is empty on book is omitted rather than run.
-func externalLookupSteps(ctx context.Context, client *http.Client, book models.Book, googleBooksAPIKey string) []externalLookupStep {
+// needed), then Google Books by ISBN search, then Hardcover by ISBN — kept
+// last since it's the newest/least-tested source here and, unlike the other
+// two, self-rate-limits (see hardcoverLookupRateLimiter). A step whose key
+// is empty on book, or whose required API key isn't configured, is omitted
+// rather than run.
+func externalLookupSteps(ctx context.Context, client *http.Client, book models.Book, googleBooksAPIKey, hardcoverAPIKey string) []externalLookupStep {
 	var steps []externalLookupStep
 	if book.OLKey != "" {
 		steps = append(steps, externalLookupStep{"openlibrary(key)", func() (externalBookData, string, error) {
@@ -222,6 +352,11 @@ func externalLookupSteps(ctx context.Context, client *http.Client, book models.B
 		steps = append(steps, externalLookupStep{"google_books(isbn)", func() (externalBookData, string, error) {
 			return lookupGoogleBooksByISBN(ctx, client, book.ISBN, googleBooksAPIKey)
 		}})
+		if hardcoverAPIKey != "" {
+			steps = append(steps, externalLookupStep{"hardcover(isbn)", func() (externalBookData, string, error) {
+				return lookupHardcoverByISBN(ctx, client, book.ISBN, hardcoverAPIKey)
+			}})
+		}
 	}
 	return steps
 }
@@ -264,10 +399,12 @@ func googleBooksWasRateLimited(attempts []lookupAttempt) bool {
 // resolveExternalDataWithPool wraps resolveExternalData, drawing the Google
 // Books key to use from pool and cooling it down on a 429 so the caller's
 // next lookup round-robins onto a different key instead of retrying the one
-// that just got rate-limited.
-func resolveExternalDataWithPool(ctx context.Context, client *http.Client, book models.Book, pool *GoogleBooksKeyPool) (externalBookData, []lookupAttempt) {
+// that just got rate-limited. hardcoverAPIKey is passed straight through —
+// unlike Google Books, Hardcover has just the one server-wide key (see
+// Config.HardcoverAPIKey), no pool to draw from.
+func resolveExternalDataWithPool(ctx context.Context, client *http.Client, book models.Book, pool *GoogleBooksKeyPool, hardcoverAPIKey string) (externalBookData, []lookupAttempt) {
 	key := pool.Key()
-	data, attempts := resolveExternalData(ctx, client, book, key)
+	data, attempts := resolveExternalData(ctx, client, book, key, hardcoverAPIKey)
 	if googleBooksWasRateLimited(attempts) {
 		pool.MarkRateLimited(key)
 	}
@@ -285,11 +422,11 @@ func resolveExternalDataWithPool(ctx context.Context, client *http.Client, book 
 // description; a prior "stop at the first source with any usable data"
 // version of this function meant a book with an Open Library cover would
 // never even be checked against Google Books for a description.
-func resolveExternalData(ctx context.Context, client *http.Client, book models.Book, googleBooksAPIKey string) (externalBookData, []lookupAttempt) {
+func resolveExternalData(ctx context.Context, client *http.Client, book models.Book, googleBooksAPIKey, hardcoverAPIKey string) (externalBookData, []lookupAttempt) {
 	var attempts []lookupAttempt
 	var merged externalBookData
 
-	for _, step := range externalLookupSteps(ctx, client, book, googleBooksAPIKey) {
+	for _, step := range externalLookupSteps(ctx, client, book, googleBooksAPIKey, hardcoverAPIKey) {
 		data, status, err := step.run()
 		mergeExternalLookup(&merged, &attempts, step.source, data, status, err)
 		if merged.coverURL != "" && merged.description != "" {

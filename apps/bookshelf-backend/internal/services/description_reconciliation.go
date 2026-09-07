@@ -27,14 +27,19 @@ import (
 type DescriptionReconciliationService struct {
 	books              repository.BookRepository
 	googleBooksKeyPool *GoogleBooksKeyPool
+	hardcoverAPIKey    string
 	client             *http.Client
 }
 
-// NewDescriptionReconciliationService creates a DescriptionReconciliationService.
-func NewDescriptionReconciliationService(books repository.BookRepository, googleBooksKeyPool *GoogleBooksKeyPool) *DescriptionReconciliationService {
+// NewDescriptionReconciliationService creates a
+// DescriptionReconciliationService. hardcoverAPIKey may be empty, in which
+// case resolveExternalDataWithPool simply skips the Hardcover step (see
+// externalLookupSteps).
+func NewDescriptionReconciliationService(books repository.BookRepository, googleBooksKeyPool *GoogleBooksKeyPool, hardcoverAPIKey string) *DescriptionReconciliationService {
 	return &DescriptionReconciliationService{
 		books:              books,
 		googleBooksKeyPool: googleBooksKeyPool,
+		hardcoverAPIKey:    hardcoverAPIKey,
 		client:             &http.Client{Timeout: 15 * time.Second},
 	}
 }
@@ -98,7 +103,7 @@ func (s *DescriptionReconciliationService) fillFromExternalSources(ctx context.C
 		}
 		first = false
 
-		data, attempts := resolveExternalDataWithPool(ctx, s.client, *book, s.googleBooksKeyPool)
+		data, attempts := resolveExternalDataWithPool(ctx, s.client, *book, s.googleBooksKeyPool, s.hardcoverAPIKey)
 		if data.description == "" {
 			lines = append(lines, fmt.Sprintf("✗ %s — %s", book.Title, attemptsSummary(attempts)))
 			continue
