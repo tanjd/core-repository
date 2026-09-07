@@ -1,3 +1,13 @@
+## 0.30.0 (2026-09-07)
+
+### 🚀 Features
+
+- **bookshelf,bookshelf-backend:** add author view for browsing books by author ([#118](https://github.com/tanjd/core-repository/pull/118))
+
+### ❤️ Thank You
+
+- Jeddy Tan @tanjd
+
 ## 0.29.1 (2026-09-07)
 
 ### 🩹 Fixes
