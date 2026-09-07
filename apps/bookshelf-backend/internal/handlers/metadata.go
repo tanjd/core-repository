@@ -615,7 +615,7 @@ const hardcoverGraphQLEndpoint = "https://api.hardcover.app/v1/graphql"
 
 const hardcoverSearchByISBNQuery = `
 query BookSearchByIsbn($isbn: String!) {
-  books(where: { editions: { _or: [{ isbn_13: { _eq: $isbn } }, { isbn_10: { _eq: $isbn } }] } }) {
+  books(where: { editions: { isbn_13: { _eq: $isbn } } }) {
     slug
     title
     description
@@ -624,7 +624,7 @@ query BookSearchByIsbn($isbn: String!) {
     release_date
     release_year
     image { url }
-    editions(where: { _or: [{ isbn_13: { _eq: $isbn } }, { isbn_10: { _eq: $isbn } }] }) {
+    editions(where: { isbn_13: { _eq: $isbn } }) {
       publisher { name }
       isbn_10
       isbn_13
@@ -745,6 +745,13 @@ type hardcoverSearchResponse struct {
 	} `json:"data"`
 }
 
+// hardcoverGraphQLError is one entry of a GraphQL response's top-level
+// "errors" array, present even on an HTTP 200 when the query itself failed
+// (bad variable, permission error, schema validation, etc.).
+type hardcoverGraphQLError struct {
+	Message string `json:"message"`
+}
+
 // hardcoverExecute POSTs a GraphQL query to Hardcover and unmarshals the
 // response's "data" object into out.
 func hardcoverExecute(ctx context.Context, apiKey, query string, variables map[string]any, out any) error {
@@ -773,6 +780,17 @@ func hardcoverExecute(ctx context.Context, apiKey, query string, variables map[s
 	if err != nil {
 		return err
 	}
+
+	var errEnvelope struct {
+		Errors []hardcoverGraphQLError `json:"errors"`
+	}
+	if err := json.Unmarshal(body, &errEnvelope); err != nil {
+		return err
+	}
+	if len(errEnvelope.Errors) > 0 {
+		return fmt.Errorf("hardcover returned GraphQL errors: %s", errEnvelope.Errors[0].Message)
+	}
+
 	return json.Unmarshal(body, out)
 }
 

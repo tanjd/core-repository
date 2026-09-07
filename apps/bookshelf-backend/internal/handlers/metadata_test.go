@@ -234,6 +234,15 @@ func TestFetchHardcover_NonOKStatusIsAnError(t *testing.T) {
 	assert.ErrorContains(t, err, "hardcover returned 401")
 }
 
+func TestFetchHardcover_GraphQLErrorsOnHTTP200IsAnError(t *testing.T) {
+	withFakeMetadataClient(t, func(_ *http.Request) (*http.Response, error) {
+		return jsonResponse(http.StatusOK, `{"errors":[{"message":"field 'isbn' is required"}],"data":null}`), nil
+	})
+
+	_, err := fetchHardcover(context.Background(), "some title", "test-key")
+	assert.ErrorContains(t, err, "field 'isbn' is required")
+}
+
 func TestHardcoverAuthorFromContributors(t *testing.T) {
 	author := func(name string) (a struct {
 		Name string `json:"name"`
