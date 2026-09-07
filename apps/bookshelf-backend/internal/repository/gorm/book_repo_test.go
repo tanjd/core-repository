@@ -93,6 +93,122 @@ func TestBookRepository_ListPaginated_RelevanceSort(t *testing.T) {
 	require.Equal(t, []string{"Harry Potter", "The Harried Reader"}, titles)
 }
 
+func TestBookRepository_ListByAuthorPaginated_ExactMatchOnly(t *testing.T) {
+	db := openTestDB(t)
+	books := NewBookRepository(db)
+	copies := NewCopyRepository(db)
+
+	owner := models.User{Name: "Owner", Email: "owner@example.com"}
+	require.NoError(t, db.Create(&owner).Error)
+
+	for _, seed := range []struct{ title, author string }{
+		{"Dune", "Frank Herbert"},
+		{"Children of Dune", "Frank Herbert"},
+		{"Something Else", "Herbert, Frank"},
+	} {
+		book := models.Book{Title: seed.title, Author: seed.author}
+		require.NoError(t, books.Create(&book))
+		require.NoError(t, copies.Create(&models.Copy{BookID: book.ID, OwnerID: owner.ID, Condition: "good", Status: "available"}))
+	}
+
+	result, err := books.ListByAuthorPaginated("Frank Herbert", 1, 20)
+	require.NoError(t, err)
+
+	var titles []string
+	for _, b := range result.Items {
+		titles = append(titles, b.Title)
+	}
+	// Differently-formatted variants of the same real-world author ("Herbert,
+	// Frank") are a distinct author to this exact-match query — see
+	// apps/bookshelf/docs/author-view-spec.md's "Matching" behavior.
+	require.Equal(t, []string{"Children of Dune", "Dune"}, titles)
+	assert.EqualValues(t, 2, result.Total)
+}
+
+func TestBookRepository_ListByAuthorPaginated_ExcludesBooksWithNoCopies(t *testing.T) {
+	db := openTestDB(t)
+	books := NewBookRepository(db)
+	copies := NewCopyRepository(db)
+
+	owner := models.User{Name: "Owner", Email: "owner@example.com"}
+	require.NoError(t, db.Create(&owner).Error)
+
+	withCopy := models.Book{Title: "Has A Copy", Author: "A"}
+	require.NoError(t, books.Create(&withCopy))
+	require.NoError(t, copies.Create(&models.Copy{BookID: withCopy.ID, OwnerID: owner.ID, Condition: "good", Status: "available"}))
+
+	noCopy := models.Book{Title: "No Copies Left", Author: "A"}
+	require.NoError(t, books.Create(&noCopy))
+
+	result, err := books.ListByAuthorPaginated("A", 1, 20)
+	require.NoError(t, err)
+
+	var titles []string
+	for _, b := range result.Items {
+		titles = append(titles, b.Title)
+	}
+	assert.Contains(t, titles, "Has A Copy")
+	assert.NotContains(t, titles, "No Copies Left")
+	assert.EqualValues(t, 1, result.Total)
+}
+
+func TestBookRepository_ListAuthorsPaginated_GroupsAndCounts(t *testing.T) {
+	db := openTestDB(t)
+	books := NewBookRepository(db)
+	copies := NewCopyRepository(db)
+
+	owner := models.User{Name: "Owner", Email: "owner@example.com"}
+	require.NoError(t, db.Create(&owner).Error)
+
+	for _, seed := range []struct{ title, author string }{
+		{"Dune", "Frank Herbert"},
+		{"Children of Dune", "Frank Herbert"},
+		{"Sapiens", "Yuval Noah Harari"},
+	} {
+		book := models.Book{Title: seed.title, Author: seed.author}
+		require.NoError(t, books.Create(&book))
+		require.NoError(t, copies.Create(&models.Copy{BookID: book.ID, OwnerID: owner.ID, Condition: "good", Status: "available"}))
+	}
+
+	result, err := books.ListAuthorsPaginated(1, 20)
+	require.NoError(t, err)
+
+	require.Len(t, result.Items, 2)
+	// Alphabetical order.
+	assert.Equal(t, "Frank Herbert", result.Items[0].Author)
+	assert.EqualValues(t, 2, result.Items[0].BookCount)
+	assert.Equal(t, "Yuval Noah Harari", result.Items[1].Author)
+	assert.EqualValues(t, 1, result.Items[1].BookCount)
+	assert.EqualValues(t, 2, result.Total)
+}
+
+func TestBookRepository_ListAuthorsPaginated_ExcludesAuthorsWithNoAvailableCopiesLeft(t *testing.T) {
+	db := openTestDB(t)
+	books := NewBookRepository(db)
+	copies := NewCopyRepository(db)
+
+	owner := models.User{Name: "Owner", Email: "owner@example.com"}
+	require.NoError(t, db.Create(&owner).Error)
+
+	withCopy := models.Book{Title: "Has A Copy", Author: "Present Author"}
+	require.NoError(t, books.Create(&withCopy))
+	require.NoError(t, copies.Create(&models.Copy{BookID: withCopy.ID, OwnerID: owner.ID, Condition: "good", Status: "available"}))
+
+	// Simulates an author whose only book lost its last copy.
+	noCopy := models.Book{Title: "No Copies Left", Author: "Vanished Author"}
+	require.NoError(t, books.Create(&noCopy))
+
+	result, err := books.ListAuthorsPaginated(1, 20)
+	require.NoError(t, err)
+
+	var authors []string
+	for _, a := range result.Items {
+		authors = append(authors, a.Author)
+	}
+	assert.Contains(t, authors, "Present Author")
+	assert.NotContains(t, authors, "Vanished Author")
+}
+
 func TestBookRepository_Delete(t *testing.T) {
 	db := openTestDB(t)
 	books := NewBookRepository(db)

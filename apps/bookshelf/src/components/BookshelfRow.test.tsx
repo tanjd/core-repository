@@ -9,6 +9,12 @@ jest.mock("@/lib/api", () => ({
   },
 }));
 
+// AuthorLink (rendered for book.author) calls useRouter — needs the
+// AppRouterContext this component tree otherwise lacks in jsdom.
+jest.mock("next/navigation", () => ({
+  useRouter: () => ({ push: jest.fn() }),
+}));
+
 jest.mock("next/image", () => ({
   __esModule: true,
   default: (props: Record<string, unknown>) => {

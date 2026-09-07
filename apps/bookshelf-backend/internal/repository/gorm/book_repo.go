@@ -154,6 +154,54 @@ func (r *BookRepository) ListPaginated(search, sort string, availableOnly bool, 
 	}, nil
 }
 
+func (r *BookRepository) buildByAuthorQuery(author string) *gorm.DB {
+	return r.db.Model(&models.Book{}).
+		Where("author = ?", author).
+		Where("EXISTS (SELECT 1 FROM copies WHERE copies.book_id = books.id)").
+		Order("title ASC")
+}
+
+func (r *BookRepository) ListByAuthorPaginated(author string, page, pageSize int) (*repository.PaginatedResult[models.Book], error) {
+	var total int64
+	if err := r.buildByAuthorQuery(author).Count(&total).Error; err != nil {
+		return nil, err
+	}
+	var books []models.Book
+	offset := (page - 1) * pageSize
+	if err := r.buildByAuthorQuery(author).Offset(offset).Limit(pageSize).Find(&books).Error; err != nil {
+		return nil, err
+	}
+	totalPages := int((total + int64(pageSize) - 1) / int64(pageSize))
+	return &repository.PaginatedResult[models.Book]{
+		Items: books, Total: total, Page: page, PageSize: pageSize, TotalPages: totalPages,
+	}, nil
+}
+
+func (r *BookRepository) ListAuthorsPaginated(page, pageSize int) (*repository.PaginatedResult[repository.AuthorSummary], error) {
+	var total int64
+	if err := r.db.Model(&models.Book{}).
+		Where("EXISTS (SELECT 1 FROM copies WHERE copies.book_id = books.id)").
+		Distinct("author").
+		Count(&total).Error; err != nil {
+		return nil, err
+	}
+	var authors []repository.AuthorSummary
+	offset := (page - 1) * pageSize
+	if err := r.db.Model(&models.Book{}).
+		Where("EXISTS (SELECT 1 FROM copies WHERE copies.book_id = books.id)").
+		Select("author, COUNT(*) AS book_count").
+		Group("author").
+		Order("author ASC").
+		Offset(offset).Limit(pageSize).
+		Scan(&authors).Error; err != nil {
+		return nil, err
+	}
+	totalPages := int((total + int64(pageSize) - 1) / int64(pageSize))
+	return &repository.PaginatedResult[repository.AuthorSummary]{
+		Items: authors, Total: total, Page: page, PageSize: pageSize, TotalPages: totalPages,
+	}, nil
+}
+
 func (r *BookRepository) ListRecent(limit int) ([]models.Book, error) {
 	var books []models.Book
 	err := r.db.Where("EXISTS (SELECT 1 FROM copies WHERE copies.book_id = books.id)").

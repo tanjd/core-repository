@@ -5,10 +5,12 @@ import Link from "next/link";
 import { useRouter, usePathname } from "next/navigation";
 import { Search, SlidersHorizontal, Heart, X, Loader2 } from "lucide-react";
 import { api } from "@/lib/api";
-import type { Book, PaginatedResult } from "@/lib/types";
+import type { AuthorSummary, Book, PaginatedResult } from "@/lib/types";
 import { BookCard } from "@/components/BookCard";
 import { BookshelfRow } from "@/components/BookshelfRow";
+import { AuthorsList } from "@/components/AuthorsList";
 import { Pagination } from "@/components/ui/Pagination";
+import { SegmentedControl } from "@/components/ui/segmented-control";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -46,6 +48,18 @@ export default function CatalogPage() {
   const [loading, setLoading] = useState(true);
   const [fetching, setFetching] = useState(false);
   const [error, setError] = useState("");
+  // "Authors" is a sub-view of this same page, not a separate route — see
+  // apps/bookshelf/docs/author-view-spec.md's "Authors index page". It has
+  // no search/sort/availability filters of its own (non-goal), so it keeps
+  // its own small, independent fetch state rather than threading through
+  // the books-view state above.
+  const [view, setView] = useState<"books" | "authors">("books");
+  const [authorsResult, setAuthorsResult] =
+    useState<PaginatedResult<AuthorSummary> | null>(null);
+  const [authorsPage, setAuthorsPage] = useState(1);
+  const [authorsLoading, setAuthorsLoading] = useState(false);
+  const [authorsError, setAuthorsError] = useState("");
+  const authorsRequestIdRef = useRef(0);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   // Tracks whether the user has explicitly picked a sort — once they have,
   // typing/clearing a search no longer auto-switches it for them.
@@ -88,12 +102,51 @@ export default function CatalogPage() {
     }
   }
 
+  async function fetchAuthors(p: number) {
+    const requestId = ++authorsRequestIdRef.current;
+    setAuthorsLoading(true);
+    setAuthorsError("");
+    try {
+      const data = await api.getAuthors({ page: p, page_size: PAGE_SIZE });
+      if (requestId !== authorsRequestIdRef.current) return;
+      setAuthorsResult(data);
+    } catch (err) {
+      if (requestId !== authorsRequestIdRef.current) return;
+      setAuthorsError(
+        err instanceof Error ? err.message : "Failed to load authors",
+      );
+    } finally {
+      if (requestId === authorsRequestIdRef.current) setAuthorsLoading(false);
+    }
+  }
+
+  function handleViewChange(v: "books" | "authors") {
+    setView(v);
+    updateUrl(search, sort, availableOnly, page, v);
+    if (v === "authors" && !authorsResult) {
+      fetchAuthors(1);
+    }
+  }
+
+  function handleAuthorsPageChange(p: number) {
+    setAuthorsPage(p);
+    fetchAuthors(p);
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  }
+
   // Reflects page/search/sort/availableOnly into the URL (via replace, not
   // push, so pagination clicks/keystrokes don't flood browser history) so
   // that clicking into a book and hitting Back restores the exact catalog
   // state instead of remounting to page-1 defaults.
-  function updateUrl(q: string, s: string, avail: boolean, p: number) {
+  function updateUrl(
+    q: string,
+    s: string,
+    avail: boolean,
+    p: number,
+    v: "books" | "authors" = view,
+  ) {
     const params = new URLSearchParams();
+    if (v === "authors") params.set("view", "authors");
     if (q.trim()) params.set("q", q.trim());
     if (s !== "title") params.set("sort", s);
     if (avail) params.set("available", "true");
@@ -108,6 +161,11 @@ export default function CatalogPage() {
   // ?q= prefill) so a deep link or a restored Back-navigation URL is
   // honored on first render.
   const loadedRef = useRef(false);
+  // Set by this effect when it's about to change search/sort/availableOnly,
+  // so the debounce watcher effect further below recognizes its next run
+  // (triggered by that very state change) as hydration, not a live filter
+  // edit — see the comment on that effect for why this is needed.
+  const skipNextFilterEffectRef = useRef(false);
   useEffect(() => {
     if (loadedRef.current) return;
     loadedRef.current = true;
@@ -118,6 +176,15 @@ export default function CatalogPage() {
     const parsedPage = Number(params.get("page"));
     const initialPage =
       Number.isFinite(parsedPage) && parsedPage > 0 ? parsedPage : 1;
+    const initialView = params.get("view") === "authors" ? "authors" : "books";
+    // If any of these differ from their defaults, the setState calls below
+    // change search/sort/availableOnly — which the debounce watcher effect
+    // below is also watching. That effect would otherwise mistake the
+    // resulting re-render for a live user edit and reset page back to 1.
+    // Flag it so that one watcher run is skipped instead.
+    if (initialSearch || initialSort !== "title" || initialAvailable) {
+      skipNextFilterEffectRef.current = true;
+    }
     // window.location isn't available during SSR, so hydrating filter state
     // from the URL genuinely has to happen post-mount — same
     // setState-in-effect exception as the (auth) pages' token prefill.
@@ -126,8 +193,10 @@ export default function CatalogPage() {
     if (initialSort !== "title") setSort(initialSort);
     if (initialAvailable) setAvailableOnly(true);
     if (initialPage !== 1) setPage(initialPage);
+    if (initialView === "authors") setView("authors");
     /* eslint-enable react-hooks/set-state-in-effect */
     fetchBooks(initialSearch, initialSort, initialAvailable, initialPage, true);
+    if (initialView === "authors") fetchAuthors(1);
   }, []);
 
   // Debounced search/sort/filter — reset to page 1. Skips the mount pass
@@ -144,6 +213,10 @@ export default function CatalogPage() {
     mountedRef.current = false;
   }, []);
   useEffect(() => {
+    if (skipNextFilterEffectRef.current) {
+      skipNextFilterEffectRef.current = false;
+      return;
+    }
     if (!mountedRef.current) {
       mountedRef.current = true;
       return;
@@ -236,8 +309,10 @@ export default function CatalogPage() {
       className="flex flex-col gap-8"
       onClickCapture={cancelPendingUrlSyncOnNavigate}
     >
-      {/* Recently added bookshelf (only when not searching) */}
-      {!search && (
+      {/* Recently added bookshelf (only when not searching, and only in the
+          Books view — it's a book-discovery shelf, not relevant while
+          browsing by author) */}
+      {view === "books" && !search && (
         <BookshelfRow
           limit={12}
           ownedBookIds={ownedBookIds}
@@ -252,188 +327,234 @@ export default function CatalogPage() {
         </p>
       </div>
 
-      {/* Search + filters */}
-      <div className="flex flex-col sm:flex-row gap-3 items-start sm:items-center">
-        <div className="relative flex-1 max-w-xl">
-          {fetching ? (
-            <Loader2 className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground pointer-events-none animate-spin" />
-          ) : (
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground pointer-events-none" />
-          )}
-          <Input
-            type="search"
-            placeholder="Search by title, author…"
-            value={search}
-            onChange={(e) => handleSearchChange(e.target.value)}
-            className="pl-9 h-10 pr-9"
-          />
-          {search && (
-            <button
-              type="button"
-              aria-label="Clear search"
-              onClick={() => handleSearchChange("")}
-              className="absolute right-2 top-1/2 -translate-y-1/2 flex size-6 items-center justify-center rounded-full text-muted-foreground hover:bg-accent hover:text-foreground"
-            >
-              <X className="size-4" />
-            </button>
-          )}
-        </div>
+      {/* Books / Authors toggle — a sub-view of this same page, not a
+          separate nav destination. See
+          apps/bookshelf/docs/author-view-spec.md's "Authors index page". */}
+      <SegmentedControl
+        value={view}
+        onValueChange={handleViewChange}
+        aria-label="Browse by"
+        options={[
+          { value: "books", label: "Books" },
+          { value: "authors", label: "Authors" },
+        ]}
+        className="self-start"
+      />
 
-        <div className="flex items-center gap-3 flex-wrap">
-          <div className="flex items-center gap-1.5">
-            <SlidersHorizontal className="size-4 text-muted-foreground" />
-            <Select value={sort} onValueChange={handleSortChange}>
-              <SelectTrigger className="h-10 w-40">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="title">Title A–Z</SelectItem>
-                <SelectItem value="author">Author A–Z</SelectItem>
-                <SelectItem value="newest">Newest First</SelectItem>
-                <SelectItem value="popular">Most Borrowed</SelectItem>
-                <SelectItem value="recommended">Most Recommended</SelectItem>
-                {search.trim() && (
-                  <SelectItem value="relevance">Best Match</SelectItem>
-                )}
-              </SelectContent>
-            </Select>
-          </div>
-
-          <div className="flex items-center gap-2">
-            <Switch
-              id="available-only"
-              checked={availableOnly}
-              onCheckedChange={setAvailableOnly}
-            />
-            <Label
-              htmlFor="available-only"
-              className="text-sm cursor-pointer select-none"
-            >
-              Available only
-            </Label>
-          </div>
-        </div>
-      </div>
-
-      {/* Active filter chips — only meaningful once results have loaded at
-          least once; keeps the applied search/sort/availability state
-          legible after the filter row above scrolls out of view. */}
-      {hasActiveFilters && !loading && (
-        <div className="flex items-center gap-2 flex-wrap -mt-4">
-          {search.trim() && (
-            <Badge variant="secondary" className="gap-1 pr-1">
-              &ldquo;{search.trim()}&rdquo;
-              <button
-                type="button"
-                aria-label="Clear search"
-                onClick={() => handleSearchChange("")}
-                className="rounded-full hover:bg-background/60 p-0.5"
-              >
-                <X className="size-3" />
-              </button>
-            </Badge>
-          )}
-          {availableOnly && (
-            <Badge variant="secondary" className="gap-1 pr-1">
-              Available only
-              <button
-                type="button"
-                aria-label="Remove available-only filter"
-                onClick={() => setAvailableOnly(false)}
-                className="rounded-full hover:bg-background/60 p-0.5"
-              >
-                <X className="size-3" />
-              </button>
-            </Badge>
-          )}
-          {sort !== "title" && (
-            <Badge variant="secondary" className="gap-1 pr-1">
-              Sort: {SORT_LABELS[sort] ?? sort}
-              <button
-                type="button"
-                aria-label="Reset sort"
-                onClick={() => handleSortChange("title")}
-                className="rounded-full hover:bg-background/60 p-0.5"
-              >
-                <X className="size-3" />
-              </button>
-            </Badge>
-          )}
-          <button
-            onClick={clearFilters}
-            className="text-xs text-muted-foreground hover:text-foreground hover:underline ml-1"
-          >
-            Clear all
-          </button>
-        </div>
-      )}
-
-      {error && <p className="text-sm text-destructive">{error}</p>}
-
-      {loading ? (
-        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
-          {Array.from({ length: 10 }).map((_, i) => (
-            <div key={i}>
-              <Skeleton className="aspect-[2/3] rounded-lg" />
-              <Skeleton className="mt-2 h-4 w-3/4" />
-              <Skeleton className="mt-1 h-3 w-1/2" />
-            </div>
-          ))}
-        </div>
-      ) : books.length === 0 ? (
-        <div className="flex flex-col items-center justify-center py-16 text-center gap-4">
-          <p className="text-muted-foreground">No books found.</p>
-          <div className="flex flex-wrap items-center justify-center gap-2">
-            {hasActiveFilters && (
-              <Button variant="outline" size="sm" onClick={clearFilters}>
-                Clear filters
-              </Button>
-            )}
-            {search.trim() && (
-              <Link href={`/share?q=${encodeURIComponent(search.trim())}`}>
-                <Button variant="outline" size="sm">
-                  Own a copy? Share &ldquo;{search.trim()}&rdquo;
-                </Button>
-              </Link>
-            )}
-            {search.trim() && (
-              <Link href={`/wishlist?q=${encodeURIComponent(search.trim())}`}>
-                <Button variant="outline" size="sm">
-                  <Heart className="size-3.5" />
-                  Add to wishlist
-                </Button>
-              </Link>
-            )}
-          </div>
-        </div>
-      ) : (
+      {view === "authors" ? (
         <>
-          <div
-            className={
-              fetching ? "opacity-60 transition-opacity" : "transition-opacity"
-            }
-          >
-            {total > 0 && (
-              <p className="text-sm text-muted-foreground mb-4">
-                {total} {total === 1 ? "book" : "books"} found
-              </p>
-            )}
-            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
-              {books.map((book) => (
-                <BookCard
-                  key={book.id}
-                  book={book}
-                  ownedByMe={ownedBookIds.has(book.id)}
-                  catalogHref={currentCatalogHref}
-                />
+          {authorsError && (
+            <p className="text-sm text-destructive">{authorsError}</p>
+          )}
+          {authorsLoading ? (
+            <div className="flex flex-col gap-3">
+              {Array.from({ length: 8 }).map((_, i) => (
+                <Skeleton key={i} className="h-12 w-full" />
               ))}
             </div>
+          ) : (
+            <>
+              <AuthorsList authors={authorsResult?.items ?? []} />
+              <Pagination
+                page={authorsPage}
+                totalPages={authorsResult?.total_pages ?? 1}
+                onPageChange={handleAuthorsPageChange}
+              />
+            </>
+          )}
+        </>
+      ) : (
+        <>
+          {/* Search + filters */}
+          <div className="flex flex-col sm:flex-row gap-3 items-start sm:items-center">
+            <div className="relative flex-1 max-w-xl">
+              {fetching ? (
+                <Loader2 className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground pointer-events-none animate-spin" />
+              ) : (
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground pointer-events-none" />
+              )}
+              <Input
+                type="search"
+                placeholder="Search by title, author…"
+                value={search}
+                onChange={(e) => handleSearchChange(e.target.value)}
+                className="pl-9 h-10 pr-9"
+              />
+              {search && (
+                <button
+                  type="button"
+                  aria-label="Clear search"
+                  onClick={() => handleSearchChange("")}
+                  className="absolute right-2 top-1/2 -translate-y-1/2 flex size-6 items-center justify-center rounded-full text-muted-foreground hover:bg-accent hover:text-foreground"
+                >
+                  <X className="size-4" />
+                </button>
+              )}
+            </div>
+
+            <div className="flex items-center gap-3 flex-wrap">
+              <div className="flex items-center gap-1.5">
+                <SlidersHorizontal className="size-4 text-muted-foreground" />
+                <Select value={sort} onValueChange={handleSortChange}>
+                  <SelectTrigger className="h-10 w-40">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="title">Title A–Z</SelectItem>
+                    <SelectItem value="author">Author A–Z</SelectItem>
+                    <SelectItem value="newest">Newest First</SelectItem>
+                    <SelectItem value="popular">Most Borrowed</SelectItem>
+                    <SelectItem value="recommended">
+                      Most Recommended
+                    </SelectItem>
+                    {search.trim() && (
+                      <SelectItem value="relevance">Best Match</SelectItem>
+                    )}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <Switch
+                  id="available-only"
+                  checked={availableOnly}
+                  onCheckedChange={setAvailableOnly}
+                />
+                <Label
+                  htmlFor="available-only"
+                  className="text-sm cursor-pointer select-none"
+                >
+                  Available only
+                </Label>
+              </div>
+            </div>
           </div>
-          <Pagination
-            page={page}
-            totalPages={totalPages}
-            onPageChange={handlePageChange}
-          />
+
+          {/* Active filter chips — only meaningful once results have loaded at
+          least once; keeps the applied search/sort/availability state
+          legible after the filter row above scrolls out of view. */}
+          {hasActiveFilters && !loading && (
+            <div className="flex items-center gap-2 flex-wrap -mt-4">
+              {search.trim() && (
+                <Badge variant="secondary" className="gap-1 pr-1">
+                  &ldquo;{search.trim()}&rdquo;
+                  <button
+                    type="button"
+                    aria-label="Clear search"
+                    onClick={() => handleSearchChange("")}
+                    className="rounded-full hover:bg-background/60 p-0.5"
+                  >
+                    <X className="size-3" />
+                  </button>
+                </Badge>
+              )}
+              {availableOnly && (
+                <Badge variant="secondary" className="gap-1 pr-1">
+                  Available only
+                  <button
+                    type="button"
+                    aria-label="Remove available-only filter"
+                    onClick={() => setAvailableOnly(false)}
+                    className="rounded-full hover:bg-background/60 p-0.5"
+                  >
+                    <X className="size-3" />
+                  </button>
+                </Badge>
+              )}
+              {sort !== "title" && (
+                <Badge variant="secondary" className="gap-1 pr-1">
+                  Sort: {SORT_LABELS[sort] ?? sort}
+                  <button
+                    type="button"
+                    aria-label="Reset sort"
+                    onClick={() => handleSortChange("title")}
+                    className="rounded-full hover:bg-background/60 p-0.5"
+                  >
+                    <X className="size-3" />
+                  </button>
+                </Badge>
+              )}
+              <button
+                onClick={clearFilters}
+                className="text-xs text-muted-foreground hover:text-foreground hover:underline ml-1"
+              >
+                Clear all
+              </button>
+            </div>
+          )}
+
+          {error && <p className="text-sm text-destructive">{error}</p>}
+
+          {loading ? (
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
+              {Array.from({ length: 10 }).map((_, i) => (
+                <div key={i}>
+                  <Skeleton className="aspect-[2/3] rounded-lg" />
+                  <Skeleton className="mt-2 h-4 w-3/4" />
+                  <Skeleton className="mt-1 h-3 w-1/2" />
+                </div>
+              ))}
+            </div>
+          ) : books.length === 0 ? (
+            <div className="flex flex-col items-center justify-center py-16 text-center gap-4">
+              <p className="text-muted-foreground">No books found.</p>
+              <div className="flex flex-wrap items-center justify-center gap-2">
+                {hasActiveFilters && (
+                  <Button variant="outline" size="sm" onClick={clearFilters}>
+                    Clear filters
+                  </Button>
+                )}
+                {search.trim() && (
+                  <Link href={`/share?q=${encodeURIComponent(search.trim())}`}>
+                    <Button variant="outline" size="sm">
+                      Own a copy? Share &ldquo;{search.trim()}&rdquo;
+                    </Button>
+                  </Link>
+                )}
+                {search.trim() && (
+                  <Link
+                    href={`/wishlist?q=${encodeURIComponent(search.trim())}`}
+                  >
+                    <Button variant="outline" size="sm">
+                      <Heart className="size-3.5" />
+                      Add to wishlist
+                    </Button>
+                  </Link>
+                )}
+              </div>
+            </div>
+          ) : (
+            <>
+              <div
+                className={
+                  fetching
+                    ? "opacity-60 transition-opacity"
+                    : "transition-opacity"
+                }
+              >
+                {total > 0 && (
+                  <p className="text-sm text-muted-foreground mb-4">
+                    {total} {total === 1 ? "book" : "books"} found
+                  </p>
+                )}
+                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
+                  {books.map((book) => (
+                    <BookCard
+                      key={book.id}
+                      book={book}
+                      ownedByMe={ownedBookIds.has(book.id)}
+                      catalogHref={currentCatalogHref}
+                    />
+                  ))}
+                </div>
+              </div>
+              <Pagination
+                page={page}
+                totalPages={totalPages}
+                onPageChange={handlePageChange}
+              />
+            </>
+          )}
         </>
       )}
     </div>

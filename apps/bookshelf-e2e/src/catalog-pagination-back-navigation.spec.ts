@@ -157,3 +157,55 @@ test("navigating directly to /catalog?page=2 stays on page 2", async ({
   await expect(page).toHaveURL(/\?page=2$/);
   await expect(page.getByText("Page Two Book").first()).toBeVisible();
 });
+
+// Regression: the mount-hydration effect only called setSort/setSearch/
+// setAvailableOnly when the URL value differed from its default (e.g. a
+// non-"title" sort). That state change re-triggered the debounce watcher
+// effect (which also watches search/sort/availableOnly), and by then its
+// mountedRef guard had already flipped to true on the watcher's first,
+// pre-hydration invocation — so the hydration-driven re-render was
+// misread as a live filter edit, and 300ms later the watcher reset page
+// back to 1. This only showed up with a non-default sort/search/filter
+// combined with page > 1 in the URL — sort=title (the default) never
+// triggered the extra state change, which is why it looked sort-specific
+// at first. Fixed by having the hydration effect flag its own state
+// change so the watcher's next run is skipped instead of misread.
+test("breadcrumb returns to the catalog page the user came from when sorted by author", async ({
+  page,
+  request,
+}, testInfo) => {
+  const email = `catalog-breadcrumb-sort-${Date.now()}-${testInfo.parallelIndex}@example.com`;
+  await registerTestUser(request, email, E2E_TEST_USER_PASSWORD);
+  await setupCatalogMocks(page);
+
+  await login(page, email, E2E_TEST_USER_PASSWORD);
+  await expect(
+    page.getByText("Page One Book 1", { exact: true }).first(),
+  ).toBeVisible();
+
+  await page.getByRole("combobox").click();
+  await page.getByRole("option", { name: "Author A–Z" }).click();
+  await expect(page).toHaveURL(/\?sort=author$/);
+
+  await page.getByRole("button", { name: "Next page" }).click();
+  await expect(page.getByText("Page Two Book").first()).toBeVisible();
+  await expect(page).toHaveURL(/\?sort=author&page=2$/);
+
+  await page.getByRole("link", { name: /Page Two Book/ }).click();
+  await expect(page).toHaveURL(/\/catalog\/21/);
+
+  await expect(
+    page.getByRole("link", { name: "Back to catalog" }),
+  ).toBeVisible();
+
+  await page.getByRole("link", { name: "Back to catalog" }).click();
+  await expect(page).toHaveURL(/\?sort=author&page=2$/);
+  await expect(page.getByText("Page Two Book").first()).toBeVisible();
+  // The regression only manifests ~300ms after mount (the debounce watcher's
+  // setTimeout), so an immediate assertion can pass even on the buggy code —
+  // wait past that window and re-assert the URL didn't quietly revert to
+  // page 1 in the meantime.
+  await page.waitForTimeout(500);
+  await expect(page).toHaveURL(/\?sort=author&page=2$/);
+  await expect(page.getByText("Page Two Book").first()).toBeVisible();
+});

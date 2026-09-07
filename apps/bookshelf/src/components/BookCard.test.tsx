@@ -2,6 +2,12 @@ import { render, screen } from "@testing-library/react";
 import { BookCard } from "./BookCard";
 import type { Book } from "@/lib/types";
 
+// AuthorLink (rendered for book.author) calls useRouter — needs the
+// AppRouterContext this component tree otherwise lacks in jsdom.
+jest.mock("next/navigation", () => ({
+  useRouter: () => ({ push: jest.fn() }),
+}));
+
 // Substituting a plain <img> for next/image is the whole point of the
 // mock — jsdom has no image optimizer to run, and asserting on
 // container.querySelector("img") is how these tests distinguish the

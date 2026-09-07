@@ -13,6 +13,7 @@ import type {
   MetadataProviderStatus,
   WaitlistStatus,
   PaginatedResult,
+  AuthorSummary,
   JobStatus,
   TelegramBotStatus,
   BackupInfo,
@@ -491,6 +492,26 @@ export const api = {
   },
   getRecentBooks: (limit?: number) =>
     request<Book[]>(`/books/recent${limit ? "?limit=" + limit : ""}`),
+  getBooksByAuthor: (params: {
+    author: string;
+    page?: number;
+    page_size?: number;
+  }) => {
+    const p: Record<string, string> = { author: params.author };
+    if (params.page) p.page = String(params.page);
+    if (params.page_size) p.page_size = String(params.page_size);
+    const qs = new URLSearchParams(p).toString();
+    return request<PaginatedResult<Book>>(`/books/by-author?${qs}`);
+  },
+  getAuthors: (params?: { page?: number; page_size?: number }) => {
+    const p: Record<string, string> = {};
+    if (params?.page) p.page = String(params.page);
+    if (params?.page_size) p.page_size = String(params.page_size);
+    const qs = new URLSearchParams(p).toString();
+    return request<PaginatedResult<AuthorSummary>>(
+      `/books/authors${qs ? "?" + qs : ""}`,
+    );
+  },
   getBook: (id: number) => request<Book>(`/books/${id}`),
   createBook: (data: Partial<Book>) =>
     request<Book>("/books", { method: "POST", body: JSON.stringify(data) }),

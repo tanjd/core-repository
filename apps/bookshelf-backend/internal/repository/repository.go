@@ -26,6 +26,14 @@ type PaginatedResult[T any] struct {
 	TotalPages int   `json:"total_pages"`
 }
 
+// AuthorSummary is one row of the distinct-authors listing — an exact-string
+// Author value from the catalog plus how many books carry it. See
+// apps/bookshelf/docs/author-view-spec.md.
+type AuthorSummary struct {
+	Author    string `json:"author"`
+	BookCount int64  `json:"book_count"`
+}
+
 // UserRepository handles persistence for User records.
 type UserRepository interface {
 	Create(user *models.User) error
@@ -78,6 +86,15 @@ type BookRepository interface {
 	// emails a live "N books shared" figure.
 	CountAll() (int64, error)
 	ListPaginated(search, sort string, availableOnly bool, page, pageSize int) (*PaginatedResult[models.Book], error)
+	// ListByAuthorPaginated returns books whose Author field exactly matches
+	// author (case-sensitive, no normalization) — see
+	// apps/bookshelf/docs/author-view-spec.md's "Matching" behavior.
+	ListByAuthorPaginated(author string, page, pageSize int) (*PaginatedResult[models.Book], error)
+	// ListAuthorsPaginated returns every distinct Author value in the
+	// catalog, alphabetically, with a per-author book count. Grouping is
+	// exact-string, same as ListByAuthorPaginated — see the spec's "Authors
+	// index page" section.
+	ListAuthorsPaginated(page, pageSize int) (*PaginatedResult[AuthorSummary], error)
 	ListRecent(limit int) ([]models.Book, error)
 	// ListCreatedBetween returns books whose created_at is in [from, to),
 	// ordered newest first, up to limit. Used by the monthly digest to

@@ -72,6 +72,30 @@ type listBooksOutput struct {
 	}
 }
 
+type listBooksByAuthorInput struct {
+	Author string `query:"author" required:"true" doc:"Exact author name to filter by"`
+	PaginationParams
+}
+
+type listAuthorsInput struct {
+	PaginationParams
+}
+
+type authorSummaryResponse struct {
+	Author    string `json:"author"`
+	BookCount int64  `json:"book_count"`
+}
+
+type listAuthorsOutput struct {
+	Body struct {
+		Items      []authorSummaryResponse `json:"items"`
+		Total      int64                   `json:"total"`
+		Page       int                     `json:"page"`
+		PageSize   int                     `json:"page_size"`
+		TotalPages int                     `json:"total_pages"`
+	}
+}
+
 type listRecentBooksInput struct {
 	Limit int `query:"limit" minimum:"1" maximum:"50" doc:"Max books to return (default 16)"`
 }
@@ -114,6 +138,24 @@ func (h *BookHandler) RegisterRoutes(api huma.API) {
 		Summary:     "List books with optional search, sort, filter, and pagination",
 		Security:    []map[string][]string{{"bearer": {}}},
 	}, h.listBooks)
+
+	huma.Register(api, huma.Operation{
+		OperationID: "list-books-by-author",
+		Method:      "GET",
+		Path:        "/books/by-author",
+		Tags:        []string{"books"},
+		Summary:     "List books by an exact author match, paginated",
+		Security:    []map[string][]string{{"bearer": {}}},
+	}, h.listBooksByAuthor)
+
+	huma.Register(api, huma.Operation{
+		OperationID: "list-authors",
+		Method:      "GET",
+		Path:        "/books/authors",
+		Tags:        []string{"books"},
+		Summary:     "List distinct authors in the catalog with book counts, paginated",
+		Security:    []map[string][]string{{"bearer": {}}},
+	}, h.listAuthors)
 
 	huma.Register(api, huma.Operation{
 		OperationID: "list-recent-books",
@@ -180,6 +222,55 @@ func (h *BookHandler) listBooks(ctx context.Context, input *listBooksInput) (*li
 
 	var out listBooksOutput
 	out.Body.Items = items
+	out.Body.Total = result.Total
+	out.Body.Page = result.Page
+	out.Body.PageSize = result.PageSize
+	out.Body.TotalPages = result.TotalPages
+	return &out, nil
+}
+
+func (h *BookHandler) listBooksByAuthor(ctx context.Context, input *listBooksByAuthorInput) (*listBooksOutput, error) {
+	userID, err := middleware.GetRequiredUserID(ctx)
+	if err != nil {
+		return nil, huma.Error401Unauthorized("authentication required")
+	}
+
+	page, pageSize := input.normalize(20)
+	result, err := h.books.ListByAuthorPaginated(input.Author, page, pageSize)
+	if err != nil {
+		return nil, huma.Error500InternalServerError("could not fetch books")
+	}
+
+	items, err := h.toBooksResponse(result.Items, userID)
+	if err != nil {
+		return nil, huma.Error500InternalServerError("could not fetch book counts")
+	}
+
+	var out listBooksOutput
+	out.Body.Items = items
+	out.Body.Total = result.Total
+	out.Body.Page = result.Page
+	out.Body.PageSize = result.PageSize
+	out.Body.TotalPages = result.TotalPages
+	return &out, nil
+}
+
+func (h *BookHandler) listAuthors(ctx context.Context, input *listAuthorsInput) (*listAuthorsOutput, error) {
+	if _, err := middleware.GetRequiredUserID(ctx); err != nil {
+		return nil, huma.Error401Unauthorized("authentication required")
+	}
+
+	page, pageSize := input.normalize(20)
+	result, err := h.books.ListAuthorsPaginated(page, pageSize)
+	if err != nil {
+		return nil, huma.Error500InternalServerError("could not fetch authors")
+	}
+
+	var out listAuthorsOutput
+	out.Body.Items = make([]authorSummaryResponse, len(result.Items))
+	for i, a := range result.Items {
+		out.Body.Items[i] = authorSummaryResponse{Author: a.Author, BookCount: a.BookCount}
+	}
 	out.Body.Total = result.Total
 	out.Body.Page = result.Page
 	out.Body.PageSize = result.PageSize

@@ -14,6 +14,21 @@
 # which self-exclude) avoids that footgun entirely.
 set -u
 
+# `go run` (and similar wrapper invocations) execs the real program as a
+# separate child process rather than exec'ing into it, and doesn't forward
+# signals to that child — so killing only the matched wrapper PID leaves the
+# actual server running (and its port held) as an orphaned child. Kill each
+# matched PID's full descendant tree instead, children first, so nothing gets
+# orphaned mid-walk.
+kill_tree() {
+	local pid="$1"
+	local child
+	for child in $(pgrep -P "$pid" 2>/dev/null || true); do
+		kill_tree "$child"
+	done
+	kill "$pid" 2>/dev/null || true
+}
+
 patterns=(
 	"nx run"
 	"nx serve"
@@ -32,7 +47,9 @@ for pattern in "${patterns[@]}"; do
 	pids=$(pgrep -f "$pattern" || true)
 	if [ -n "$pids" ]; then
 		echo "  $pattern: $(echo "$pids" | tr '\n' ' ')"
-		kill $pids 2>/dev/null || true
+		for pid in $pids; do
+			kill_tree "$pid"
+		done
 	fi
 done
 echo "Done."

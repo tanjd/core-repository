@@ -231,6 +231,13 @@ export interface PaginatedResult<T> {
   total_pages: number;
 }
 
+// One row of the distinct-authors listing — see
+// apps/bookshelf/docs/author-view-spec.md.
+export interface AuthorSummary {
+  author: string;
+  book_count: number;
+}
+
 export interface AuthResponse {
   token: string;
   user: User;
