@@ -1,3 +1,17 @@
+## 0.40.2 (2026-09-07)
+
+### 🚀 Features
+
+- **bookshelf-backend:** add Hardcover metadata provider ([#115](https://github.com/tanjd/core-repository/pull/115))
+
+### Database migrations
+
+Includes migration **000022** — automatic on startup; no manual SQL required.
+
+### ❤️ Thank You
+
+- Jeddy Tan @tanjd
+
 ## 0.40.1 (2026-09-04)
 
 ### 🩹 Fixes
