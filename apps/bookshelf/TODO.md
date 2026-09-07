@@ -19,9 +19,16 @@ testing setup `apps/bookshelf-backend/docker-compose.example.yml` still document
 - **Feedback mechanism** — in-app "send feedback" form, writes to a table, emails the admin
   via the existing `EmailService`. No new infra.
 - **"Import settings"** - use yaml file to update settings
+- **Author view** — see `docs/author-view-spec.md` (draft). Tap an author's name to see every
+  book by them the community owns. Scoped to avoid the discovery-feature guardrail — no bio/
+  external metadata.
 
 ## Later — once there's real usage to react to
 
+- **Guided tour for first-time users** — idea from comparing similar self-hosted apps; a
+  first-run walkthrough for new members. Not yet spec'd. Revisit once there's a steadier trickle
+  of brand-new (not invited-and-briefed) members — the app is currently invite-driven, so
+  onboarding friction hasn't been confirmed as a real problem yet.
 - **Telegram bot: link account + receive notifications** — cheap relative to a from-scratch
   integration since `libs/telegram-bot-shared` and the bot generator already exist. Link via
   a deep-link token, forward `Notification` rows to Telegram alongside/instead of email.

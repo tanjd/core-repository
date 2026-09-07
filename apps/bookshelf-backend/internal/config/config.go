@@ -31,9 +31,20 @@ type Config struct {
 	// singular key did; adding more lets requests round-robin across them
 	// (services.GoogleBooksKeyPool) to spread load across each key's
 	// separate free-tier quota instead of hitting one key's rate limit.
-	GoogleBooksAPIKeys      []string `env:"GOOGLE_BOOKS_API_KEY" envSeparator:"," sensitive:"true"`
-	MetadataRefreshInterval string   `env:"METADATA_REFRESH_INTERVAL" envDefault:"24h"`
-	AppConfigPath           string   `env:"APP_CONFIG_PATH" envDefault:"./bookshelf.yaml"`
+	GoogleBooksAPIKeys []string `env:"GOOGLE_BOOKS_API_KEY" envSeparator:"," sensitive:"true"`
+	// HardcoverAPIKey authenticates metadata search's Hardcover provider
+	// (internal/handlers/metadata.go's fetchHardcover) as the server-wide
+	// fallback — a free personal access token from
+	// https://hardcover.app/account/api. Empty disables Hardcover from the
+	// fan-out, same unset-means-skip contract as GoogleBooksAPIKeys. Unlike
+	// GoogleBooksAPIKeys this is a single key, not a round-robin pool
+	// (Hardcover's 5,000 req/day free-tier quota is generous enough for a
+	// single server-wide key at this app's scale), but it does support the
+	// same per-user override as Google Books — see User.HardcoverAPIKey /
+	// MetadataHandler.resolveHardcoverAPIKey.
+	HardcoverAPIKey         string `env:"HARDCOVER_API_KEY" sensitive:"true"`
+	MetadataRefreshInterval string `env:"METADATA_REFRESH_INTERVAL" envDefault:"24h"`
+	AppConfigPath           string `env:"APP_CONFIG_PATH" envDefault:"./bookshelf.yaml"`
 	// RegisterRateLimitBurst overrides registerLimiter's burst size
 	// (internal/handlers/auth.go) — the default (20) is sized for real
 	// community usage. The e2e suite (apps/bookshelf-e2e/playwright.config.ts)

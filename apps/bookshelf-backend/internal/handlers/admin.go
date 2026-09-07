@@ -1,7 +1,9 @@
 package handlers
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"net/http"
 	"sync"
@@ -40,11 +42,15 @@ type AdminHandler struct {
 	// invite code, so a removed or suspended member can't keep bringing in
 	// new signups via an outstanding link. See docs/invite-code-spec.md.
 	inviteCodes repository.InviteCodeRepository
+	// hardcoverAPIKey may be empty, in which case Hardcover is reported
+	// disabled by getMetadataStatus — same unset-means-skip contract as
+	// MetadataHandler.hardcoverAPIKey.
+	hardcoverAPIKey string
 }
 
 // NewAdminHandler creates a new AdminHandler.
-func NewAdminHandler(admin repository.AdminRepository, copies repository.CopyRepository, loans repository.LoanRequestRepository, googleBooksKeyPool *services.GoogleBooksKeyPool, registration *services.RegistrationWorkflow, recommendations repository.RecommendationRepository, inviteCodes repository.InviteCodeRepository) *AdminHandler {
-	return &AdminHandler{admin: admin, copies: copies, loans: loans, googleBooksKeyPool: googleBooksKeyPool, registration: registration, recommendations: recommendations, inviteCodes: inviteCodes}
+func NewAdminHandler(admin repository.AdminRepository, copies repository.CopyRepository, loans repository.LoanRequestRepository, googleBooksKeyPool *services.GoogleBooksKeyPool, registration *services.RegistrationWorkflow, recommendations repository.RecommendationRepository, inviteCodes repository.InviteCodeRepository, hardcoverAPIKey string) *AdminHandler {
+	return &AdminHandler{admin: admin, copies: copies, loans: loans, googleBooksKeyPool: googleBooksKeyPool, registration: registration, recommendations: recommendations, inviteCodes: inviteCodes, hardcoverAPIKey: hardcoverAPIKey}
 }
 
 // --- Input / Output types ---
@@ -468,38 +474,74 @@ func (h *AdminHandler) exportSettings(ctx context.Context, _ *struct{}) (*export
 	return &out, nil
 }
 
+// metadataProbe describes one metadata provider reachability check for
+// getMetadataStatus.
+type metadataProbe struct {
+	name    string
+	enabled bool
+	// newRequest builds the actual probe request; it may embed secrets
+	// (URL query param or header) and must never be surfaced in
+	// responses or logs.
+	newRequest func(ctx context.Context) (*http.Request, error)
+}
+
+func metadataProbeGetRequest(url string) func(ctx context.Context) (*http.Request, error) {
+	return func(ctx context.Context) (*http.Request, error) {
+		return http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	}
+}
+
+// hardcoverProbeRequest builds a minimal authenticated GraphQL request,
+// reusing hardcoverGraphQLEndpoint/hardcoverGraphQLRequest so the probe
+// exercises the same auth path as an actual metadata search.
+func hardcoverProbeRequest(ctx context.Context, apiKey string) (*http.Request, error) {
+	payload, err := json.Marshal(hardcoverGraphQLRequest{Query: "{ __typename }"})
+	if err != nil {
+		return nil, err
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, hardcoverGraphQLEndpoint, bytes.NewReader(payload))
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+apiKey)
+	return req, nil
+}
+
+func (h *AdminHandler) metadataProbes() []metadataProbe {
+	googleBooksKey := h.googleBooksKeyPool.Key()
+	return []metadataProbe{
+		{
+			name:       "openlibrary",
+			enabled:    true,
+			newRequest: metadataProbeGetRequest("https://openlibrary.org/search.json?q=test&limit=1"),
+		},
+		{
+			name:       "google_books",
+			enabled:    googleBooksKey != "",
+			newRequest: metadataProbeGetRequest("https://www.googleapis.com/books/v1/volumes?q=test&maxResults=1&key=" + googleBooksKey),
+		},
+		{
+			name:       "bookbrainz",
+			enabled:    true,
+			newRequest: metadataProbeGetRequest("https://api.bookbrainz.org/1/search?q=test&type=edition&size=1"),
+		},
+		{
+			name:    "hardcover",
+			enabled: h.hardcoverAPIKey != "",
+			newRequest: func(ctx context.Context) (*http.Request, error) {
+				return hardcoverProbeRequest(ctx, h.hardcoverAPIKey)
+			},
+		},
+	}
+}
+
 func (h *AdminHandler) getMetadataStatus(ctx context.Context, _ *struct{}) (*metadataStatusOutput, error) {
 	if err := middleware.RequireAdmin(ctx); err != nil {
 		return nil, adminError(err)
 	}
 
-	type probe struct {
-		name    string
-		enabled bool
-		// url is the actual request URL; it may contain secrets and must never be
-		// surfaced in responses or logs.
-		url string
-	}
-
-	googleBooksKey := h.googleBooksKeyPool.Key()
-	probes := []probe{
-		{
-			name:    "openlibrary",
-			enabled: true,
-			url:     "https://openlibrary.org/search.json?q=test&limit=1",
-		},
-		{
-			name:    "google_books",
-			enabled: googleBooksKey != "",
-			url:     "https://www.googleapis.com/books/v1/volumes?q=test&maxResults=1&key=" + googleBooksKey,
-		},
-		{
-			name:    "bookbrainz",
-			enabled: true,
-			url:     "https://api.bookbrainz.org/1/search?q=test&type=edition&size=1",
-		},
-	}
-
+	probes := h.metadataProbes()
 	client := &http.Client{Timeout: 10 * time.Second}
 	statuses := make([]MetadataProviderStatus, len(probes))
 
@@ -510,11 +552,17 @@ func (h *AdminHandler) getMetadataStatus(ctx context.Context, _ *struct{}) (*met
 			continue
 		}
 		wg.Add(1)
-		go func(idx int, p probe) {
+		go func(idx int, p metadataProbe) {
 			defer wg.Done()
 			s := &statuses[idx]
 			start := time.Now()
-			resp, err := client.Get(p.url) //nolint:noctx,gosec
+			req, err := p.newRequest(ctx)
+			if err != nil {
+				s.Error = "connection error"
+				zerolog.Ctx(ctx).Warn().Err(err).Str("provider", p.name).Msg("metadata probe request build failed")
+				return
+			}
+			resp, err := client.Do(req)
 			s.LatencyMs = time.Since(start).Milliseconds()
 			if err != nil {
 				// Do not include the URL in the error — it may contain an API key.

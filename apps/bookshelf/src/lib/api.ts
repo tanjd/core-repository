@@ -392,6 +392,7 @@ export const api = {
     phone?: string;
     email?: string;
     google_books_api_key?: string;
+    hardcover_api_key?: string;
     email_notifications_enabled?: boolean;
     monthly_digest_enabled?: boolean;
     telegram_notifications_enabled?: boolean;
@@ -435,6 +436,11 @@ export const api = {
       "/auth/me/google-books-key/test",
       { method: "POST", body: JSON.stringify({ key: key ?? "" }) },
     ),
+  testHardcoverKey: (key?: string) =>
+    request<{ ok: boolean; message?: string }>("/auth/me/hardcover-key/test", {
+      method: "POST",
+      body: JSON.stringify({ key: key ?? "" }),
+    }),
   sendOTP: () =>
     request<{ debug_code?: string }>("/auth/send-otp", {
       method: "POST",

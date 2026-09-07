@@ -1,12 +1,14 @@
 package handlers
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
 	"net/url"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -19,8 +21,25 @@ import (
 	"github.com/tanjd/core-repository/apps/bookshelf-backend/internal/services"
 )
 
+// httpDoer is the seam every metadata fetch calls through instead of using
+// metadataClient's convenience methods directly, so tests can substitute a
+// fake and never hit real network — see docs/metadata-search.md.
+type httpDoer interface {
+	Do(req *http.Request) (*http.Response, error)
+}
+
 // metadataClient is a shared HTTP client with a timeout for all metadata fetches.
-var metadataClient = &http.Client{Timeout: 10 * time.Second}
+var metadataClient httpDoer = &http.Client{Timeout: 10 * time.Second}
+
+// doGet issues a GET through metadataClient with ctx attached, so callers
+// need no per-call //nolint:noctx.
+func doGet(ctx context.Context, apiURL string) (*http.Response, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, apiURL, nil)
+	if err != nil {
+		return nil, err
+	}
+	return metadataClient.Do(req)
+}
 
 // BookMetadataResult is a normalised search result from any metadata source.
 type BookMetadataResult struct {
@@ -37,6 +56,7 @@ type BookMetadataResult struct {
 	OLKey         string `json:"ol_key"`
 	GoogleBooksID string `json:"google_books_id"`
 	BookBrainzID  string `json:"bookbrainz_id,omitempty"`
+	HardcoverID   string `json:"hardcover_id,omitempty"`
 	// EnrichedFields lists fields on this result that were backfilled from a
 	// sibling edition of the same work, rather than from this result's own source.
 	EnrichedFields []string `json:"enriched_fields,omitempty"`
@@ -51,15 +71,19 @@ const searchCacheTTL = 1 * time.Hour
 // MetadataHandler handles book metadata search routes.
 type MetadataHandler struct {
 	googleBooksKeyPool *services.GoogleBooksKeyPool
+	hardcoverAPIKey    string
 	encryptionSecret   string
 	users              repository.UserRepository
 	cache              MetadataCache
 }
 
-// NewMetadataHandler creates a MetadataHandler.
-func NewMetadataHandler(ctx context.Context, googleBooksKeyPool *services.GoogleBooksKeyPool, encryptionSecret string, users repository.UserRepository) *MetadataHandler {
+// NewMetadataHandler creates a MetadataHandler. hardcoverAPIKey may be empty,
+// in which case Hardcover is simply skipped from the fan-out (same
+// unset-means-skip contract as Google Books' apiKey).
+func NewMetadataHandler(ctx context.Context, googleBooksKeyPool *services.GoogleBooksKeyPool, hardcoverAPIKey, encryptionSecret string, users repository.UserRepository) *MetadataHandler {
 	return &MetadataHandler{
 		googleBooksKeyPool: googleBooksKeyPool,
+		hardcoverAPIKey:    hardcoverAPIKey,
 		encryptionSecret:   encryptionSecret,
 		users:              users,
 		cache:              NewInMemoryMetadataCache(ctx, searchCacheTTL),
@@ -112,12 +136,16 @@ func (h *MetadataHandler) searchMetadata(ctx context.Context, input *searchMetad
 	}
 
 	apiKey := h.resolveGoogleBooksAPIKey(ctx)
+	hardcoverAPIKey := h.resolveHardcoverAPIKey(ctx)
 
-	// Cache key incorporates whether Google Books is active so that users with
-	// and without a Google Books key do not share cache entries.
+	// Cache key incorporates whether Google Books/Hardcover are active so
+	// that users with and without those keys do not share cache entries.
 	cacheKey := strings.ToLower(q)
 	if apiKey != "" {
 		cacheKey += "|gbooks"
+	}
+	if hardcoverAPIKey != "" {
+		cacheKey += "|hardcover"
 	}
 	if cached, ok := h.cache.Get(cacheKey); ok {
 		zerolog.Ctx(ctx).Debug().Str("query", q).Msg("metadata search cache hit")
@@ -125,9 +153,9 @@ func (h *MetadataHandler) searchMetadata(ctx context.Context, input *searchMetad
 	}
 
 	queriedISBN := normalizeISBN(q)
-	results, hadError := fetchAllSources(ctx, q, apiKey, h.googleBooksKeyPool)
+	results, hadError := fetchAllSources(ctx, q, apiKey, h.googleBooksKeyPool, hardcoverAPIKey)
 	if queriedISBN != "" {
-		siblingResults, siblingHadError := expandSiblingEditions(ctx, results, apiKey, h.googleBooksKeyPool)
+		siblingResults, siblingHadError := expandSiblingEditions(ctx, results, apiKey, h.googleBooksKeyPool, hardcoverAPIKey)
 		results = append(results, siblingResults...)
 		hadError = hadError || siblingHadError
 	}
@@ -157,6 +185,28 @@ func (h *MetadataHandler) resolveGoogleBooksAPIKey(ctx context.Context) string {
 	decrypted, err := decryptField(user.GoogleBooksAPIKey, h.encryptionSecret)
 	if err != nil {
 		zerolog.Ctx(ctx).Warn().Err(err).Uint("user_id", userID).Msg("could not decrypt user google books api key")
+		return apiKey
+	}
+	return decrypted
+}
+
+// resolveHardcoverAPIKey prefers the authenticated user's stored key,
+// falling back to the server-wide key when unauthenticated, unset, or
+// undecryptable — same contract as resolveGoogleBooksAPIKey.
+func (h *MetadataHandler) resolveHardcoverAPIKey(ctx context.Context) string {
+	apiKey := h.hardcoverAPIKey
+
+	userID, err := middleware.GetRequiredUserID(ctx)
+	if err != nil {
+		return apiKey
+	}
+	user, err := h.users.FindByID(userID)
+	if err != nil || user.HardcoverAPIKey == "" {
+		return apiKey
+	}
+	decrypted, err := decryptField(user.HardcoverAPIKey, h.encryptionSecret)
+	if err != nil {
+		zerolog.Ctx(ctx).Warn().Err(err).Uint("user_id", userID).Msg("could not decrypt user hardcover api key")
 		return apiKey
 	}
 	return decrypted
@@ -197,15 +247,19 @@ func runFetchSources(ctx context.Context, q string, sources []fetchSource) (resu
 	return results, hadError
 }
 
-// fetchAllSources queries Open Library, Google Books (if apiKey is set), and
-// BookBrainz concurrently, merging all results.
-func fetchAllSources(ctx context.Context, q, apiKey string, pool *services.GoogleBooksKeyPool) ([]BookMetadataResult, bool) {
+// fetchAllSources queries Open Library, BookBrainz, Google Books (if apiKey
+// is set), and Hardcover (if hardcoverAPIKey is set) concurrently, merging
+// all results.
+func fetchAllSources(ctx context.Context, q, apiKey string, pool *services.GoogleBooksKeyPool, hardcoverAPIKey string) ([]BookMetadataResult, bool) {
 	sources := []fetchSource{
 		{"open library", func() ([]BookMetadataResult, error) { return fetchOpenLibrary(ctx, q) }},
 		{"bookbrainz", func() ([]BookMetadataResult, error) { return fetchBookBrainz(ctx, q) }},
 	}
 	if apiKey != "" {
 		sources = append(sources, fetchSource{"google books", func() ([]BookMetadataResult, error) { return fetchGoogleBooks(ctx, q, apiKey, pool) }})
+	}
+	if hardcoverAPIKey != "" {
+		sources = append(sources, fetchSource{"hardcover", func() ([]BookMetadataResult, error) { return fetchHardcover(ctx, q, hardcoverAPIKey) }})
 	}
 	return runFetchSources(ctx, q, sources)
 }
@@ -218,19 +272,19 @@ func fetchAllSources(ctx context.Context, q, apiKey string, pool *services.Googl
 // dedup/enrich/bucket pipeline (see docs/metadata-search.md) never gets a
 // chance to see them as the same work. Returns (nil, false) if the ISBN
 // hit(s) didn't carry a usable Title/Author to search by.
-func expandSiblingEditions(ctx context.Context, isbnResults []BookMetadataResult, apiKey string, pool *services.GoogleBooksKeyPool) ([]BookMetadataResult, bool) {
+func expandSiblingEditions(ctx context.Context, isbnResults []BookMetadataResult, apiKey string, pool *services.GoogleBooksKeyPool, hardcoverAPIKey string) ([]BookMetadataResult, bool) {
 	title, author := bestTitleAuthorForExpansion(isbnResults)
 	if title == "" || author == "" {
 		return nil, false
 	}
-	return fetchAllSources(ctx, title+" "+author, apiKey, pool)
+	return fetchAllSources(ctx, title+" "+author, apiKey, pool, hardcoverAPIKey)
 }
 
-func (h *MetadataHandler) getOLDescription(_ context.Context, input *olDescriptionInput) (*olDescriptionOutput, error) {
+func (h *MetadataHandler) getOLDescription(ctx context.Context, input *olDescriptionInput) (*olDescriptionOutput, error) {
 	workKey := strings.TrimPrefix(input.OLKey, "/works/")
 	apiURL := fmt.Sprintf("https://openlibrary.org/works/%s.json", url.PathEscape(workKey))
 
-	resp, err := metadataClient.Get(apiURL) //nolint:noctx,gosec
+	resp, err := doGet(ctx, apiURL)
 	if err != nil {
 		return nil, huma.Error502BadGateway("could not reach Open Library")
 	}
@@ -275,7 +329,7 @@ func fetchOpenLibrary(ctx context.Context, q string) ([]BookMetadataResult, erro
 		"https://openlibrary.org/search.json?q=%s&fields=key,title,author_name,isbn,cover_i&limit=10",
 		url.QueryEscape(q),
 	)
-	resp, err := metadataClient.Get(apiURL) //nolint:noctx,gosec
+	resp, err := doGet(ctx, apiURL)
 	if err != nil {
 		return nil, err
 	}
@@ -334,7 +388,7 @@ func validateGoogleBooksAPIKey(ctx context.Context, key string) error {
 		"https://www.googleapis.com/books/v1/volumes?q=test&key=%s&maxResults=1&fields=kind",
 		url.QueryEscape(key),
 	)
-	resp, err := metadataClient.Get(apiURL) //nolint:noctx,gosec
+	resp, err := doGet(ctx, apiURL)
 	if err != nil {
 		zerolog.Ctx(ctx).Warn().Err(err).Msg("google books key test: could not reach API")
 		return fmt.Errorf("could not reach Google Books API: %w", err)
@@ -479,7 +533,7 @@ func fetchGoogleBooks(ctx context.Context, q, apiKey string, pool *services.Goog
 		url.QueryEscape(apiKey),
 		url.QueryEscape(googleBooksFields),
 	)
-	resp, err := metadataClient.Get(apiURL) //nolint:noctx,gosec
+	resp, err := doGet(ctx, apiURL)
 	if err != nil {
 		return nil, err
 	}
@@ -519,7 +573,7 @@ func fetchBookBrainz(ctx context.Context, q string) ([]BookMetadataResult, error
 		"https://api.bookbrainz.org/1/search?q=%s&type=edition&size=10",
 		url.QueryEscape(q),
 	)
-	resp, err := metadataClient.Get(apiURL) //nolint:noctx,gosec
+	resp, err := doGet(ctx, apiURL)
 	if err != nil {
 		return nil, err
 	}
@@ -568,4 +622,411 @@ func fetchBookBrainz(ctx context.Context, q string) ([]BookMetadataResult, error
 		results = append(results, r)
 	}
 	return results, nil
+}
+
+// --- Hardcover ---
+//
+// Hardcover (https://hardcover.app) exposes a free GraphQL API
+// (https://docs.hardcover.app/api/getting-started) gated by a per-account
+// Bearer token: 60 req/min, 5,000 req/day on the free tier. Unlike
+// OpenLibrary/Google Books/BookBrainz, there is no free-text search index
+// alongside a structured one — a bare ISBN gets an exact edition match via
+// the books query, everything else goes through Hardcover's Typesense-backed
+// search endpoint, which returns book-level (not edition-level) documents.
+
+const hardcoverGraphQLEndpoint = "https://api.hardcover.app/v1/graphql"
+
+const hardcoverSearchByISBNQuery = `
+query BookSearchByIsbn($isbn: String!) {
+  books(where: { editions: { isbn_13: { _eq: $isbn } } }) {
+    slug
+    title
+    description
+    cached_contributors { author { name } contribution }
+    pages
+    release_date
+    release_year
+    image { url }
+    editions(where: { isbn_13: { _eq: $isbn } }) {
+      publisher { name }
+      isbn_10
+      isbn_13
+      language { code2 }
+    }
+  }
+}
+`
+
+const hardcoverSearchBooksQuery = `
+query BookSearch($q: String!, $limit: Int!) {
+  search(query: $q, query_type: "Book", per_page: $limit, page: 1) {
+    results
+  }
+}
+`
+
+// hardcoverEditionsBySlugQuery backfills Publisher/Language/ISBN for the top
+// hardcoverSearchBooksQuery hit — the Typesense-backed search index only
+// carries book-level fields (no publisher/language), so without this
+// follow-up a free-text Hardcover result is permanently missing fields an
+// ISBN-shaped query would have gotten for the same book. Scoped to one
+// lookup per search (see fetchHardcoverBySearch) to bound the extra
+// rate-limited call this costs.
+const hardcoverEditionsBySlugQuery = `
+query BookEditionsBySlug($slug: String!) {
+  books(where: { slug: { _eq: $slug } }) {
+    editions {
+      publisher { name }
+      isbn_10
+      isbn_13
+      language { code2 }
+    }
+  }
+}
+`
+
+// hardcoverRateLimiter spaces Hardcover requests to stay within its free-tier
+// 60 req/min cap — this handler already runs provider fetches concurrently
+// per search, so without this a single user search (plus expandSiblingEditions'
+// re-fetch) could burst several requests at once.
+var hardcoverRateLimiter = &minIntervalLimiter{minInterval: time.Second}
+
+// minIntervalLimiter enforces a minimum gap between successive calls,
+// blocking callers (or returning early on ctx cancellation) rather than
+// rejecting them outright.
+type minIntervalLimiter struct {
+	mu          sync.Mutex
+	minInterval time.Duration
+	next        time.Time
+}
+
+func (l *minIntervalLimiter) wait(ctx context.Context) {
+	l.mu.Lock()
+	now := time.Now()
+	scheduled := now
+	if l.next.After(now) {
+		scheduled = l.next
+	}
+	l.next = scheduled.Add(l.minInterval)
+	l.mu.Unlock()
+
+	if d := time.Until(scheduled); d > 0 {
+		timer := time.NewTimer(d)
+		defer timer.Stop()
+		select {
+		case <-timer.C:
+		case <-ctx.Done():
+		}
+	}
+}
+
+type hardcoverContributor struct {
+	Author struct {
+		Name string `json:"name"`
+	} `json:"author"`
+	Contribution string `json:"contribution"`
+}
+
+type hardcoverImage struct {
+	URL string `json:"url"`
+}
+
+type hardcoverEdition struct {
+	Publisher struct {
+		Name string `json:"name"`
+	} `json:"publisher"`
+	ISBN10   string `json:"isbn_10"`
+	ISBN13   string `json:"isbn_13"`
+	Language struct {
+		Code2 string `json:"code2"`
+	} `json:"language"`
+}
+
+type hardcoverBook struct {
+	Slug               string                 `json:"slug"`
+	Title              string                 `json:"title"`
+	Description        string                 `json:"description"`
+	CachedContributors []hardcoverContributor `json:"cached_contributors"`
+	Pages              int                    `json:"pages"`
+	ReleaseDate        string                 `json:"release_date"`
+	ReleaseYear        int                    `json:"release_year"`
+	Image              hardcoverImage         `json:"image"`
+	Editions           []hardcoverEdition     `json:"editions"`
+}
+
+type hardcoverSearchDocument struct {
+	Title         string                 `json:"title"`
+	Slug          string                 `json:"slug"`
+	Description   string                 `json:"description"`
+	Contributions []hardcoverContributor `json:"contributions"`
+	ISBNs         []string               `json:"isbns"`
+	Pages         int                    `json:"pages"`
+	ReleaseDate   string                 `json:"release_date"`
+	Image         hardcoverImage         `json:"image"`
+}
+
+type hardcoverGraphQLRequest struct {
+	Query     string         `json:"query"`
+	Variables map[string]any `json:"variables"`
+}
+
+type hardcoverISBNResponse struct {
+	Data struct {
+		Books []hardcoverBook `json:"books"`
+	} `json:"data"`
+}
+
+type hardcoverSearchResponse struct {
+	Data struct {
+		Search struct {
+			Results struct {
+				Hits []struct {
+					Document hardcoverSearchDocument `json:"document"`
+				} `json:"hits"`
+			} `json:"results"`
+		} `json:"search"`
+	} `json:"data"`
+}
+
+type hardcoverEditionsBySlugResponse struct {
+	Data struct {
+		Books []struct {
+			Editions []hardcoverEdition `json:"editions"`
+		} `json:"books"`
+	} `json:"data"`
+}
+
+// hardcoverGraphQLError is one entry of a GraphQL response's top-level
+// "errors" array, present even on an HTTP 200 when the query itself failed
+// (bad variable, permission error, schema validation, etc.).
+type hardcoverGraphQLError struct {
+	Message string `json:"message"`
+}
+
+// hardcoverExecute POSTs a GraphQL query to Hardcover and unmarshals the
+// response's "data" object into out.
+func hardcoverExecute(ctx context.Context, apiKey, query string, variables map[string]any, out any) error {
+	payload, err := json.Marshal(hardcoverGraphQLRequest{Query: query, Variables: variables})
+	if err != nil {
+		return err
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, hardcoverGraphQLEndpoint, bytes.NewReader(payload))
+	if err != nil {
+		return err
+	}
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+apiKey)
+
+	resp, err := metadataClient.Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close() //nolint:errcheck
+
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("hardcover returned %d", resp.StatusCode)
+	}
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return err
+	}
+
+	var errEnvelope struct {
+		Errors []hardcoverGraphQLError `json:"errors"`
+	}
+	if err := json.Unmarshal(body, &errEnvelope); err != nil {
+		return err
+	}
+	if len(errEnvelope.Errors) > 0 {
+		return fmt.Errorf("hardcover returned GraphQL errors: %s", errEnvelope.Errors[0].Message)
+	}
+
+	return json.Unmarshal(body, out)
+}
+
+// validateHardcoverAPIKey makes a minimal test call to verify the key is
+// accepted by Hardcover. Reuses hardcoverExecute so a rejected key surfaces
+// the same status-code/GraphQL-error handling as an actual metadata search.
+func validateHardcoverAPIKey(ctx context.Context, key string) error {
+	var out struct{}
+	if err := hardcoverExecute(ctx, key, "{ __typename }", nil, &out); err != nil {
+		zerolog.Ctx(ctx).Warn().Err(err).Msg("hardcover key test failed")
+		return err
+	}
+	return nil
+}
+
+// fetchHardcover calls the Hardcover GraphQL API and returns normalised
+// results: an exact-edition ISBN lookup when q is ISBN-shaped, else a
+// free-text search.
+func fetchHardcover(ctx context.Context, q, apiKey string) ([]BookMetadataResult, error) {
+	hardcoverRateLimiter.wait(ctx)
+	if isbn := normalizeISBN(q); isbn != "" {
+		return fetchHardcoverByISBN(ctx, isbn, apiKey)
+	}
+	return fetchHardcoverBySearch(ctx, q, apiKey)
+}
+
+func fetchHardcoverByISBN(ctx context.Context, isbn, apiKey string) ([]BookMetadataResult, error) {
+	zerolog.Ctx(ctx).Debug().Str("isbn", isbn).Msg("searching Hardcover by ISBN")
+	var resp hardcoverISBNResponse
+	if err := hardcoverExecute(ctx, apiKey, hardcoverSearchByISBNQuery, map[string]any{"isbn": isbn}, &resp); err != nil {
+		return nil, err
+	}
+
+	results := make([]BookMetadataResult, 0, len(resp.Data.Books))
+	for _, book := range resp.Data.Books {
+		if len(book.Editions) == 0 {
+			results = append(results, hardcoverResultFromBook(book, hardcoverEdition{}))
+			continue
+		}
+		for _, edition := range book.Editions {
+			results = append(results, hardcoverResultFromBook(book, edition))
+		}
+	}
+	zerolog.Ctx(ctx).Debug().Str("isbn", isbn).Int("results", len(results)).Msg("Hardcover ISBN search complete")
+	return results, nil
+}
+
+func fetchHardcoverBySearch(ctx context.Context, q, apiKey string) ([]BookMetadataResult, error) {
+	zerolog.Ctx(ctx).Debug().Str("query", q).Msg("searching Hardcover")
+	var resp hardcoverSearchResponse
+	variables := map[string]any{"q": q, "limit": 10}
+	if err := hardcoverExecute(ctx, apiKey, hardcoverSearchBooksQuery, variables, &resp); err != nil {
+		return nil, err
+	}
+
+	hits := resp.Data.Search.Results.Hits
+	results := make([]BookMetadataResult, 0, len(hits))
+	for _, hit := range hits {
+		results = append(results, hardcoverResultFromSearchDocument(hit.Document))
+	}
+	if len(results) > 0 {
+		enrichTopHitWithEditionFields(ctx, &results[0], apiKey)
+	}
+	zerolog.Ctx(ctx).Debug().Str("query", q).Int("results", len(results)).Msg("Hardcover search complete")
+	return results, nil
+}
+
+// enrichTopHitWithEditionFields backfills Publisher/Language/ISBN on r (the
+// top hardcoverSearchBooksQuery hit) from a follow-up editions-by-slug query
+// — see hardcoverEditionsBySlugQuery's doc comment for why this is needed at
+// all. Best-effort: a failure here is logged and swallowed rather than
+// failing the whole search, since the search hit itself is still usable
+// without it. Backfill-only — never overwrites a field the search document
+// already populated.
+func enrichTopHitWithEditionFields(ctx context.Context, r *BookMetadataResult, apiKey string) {
+	if r.HardcoverID == "" || (r.Publisher != "" && r.Language != "" && r.ISBN != "") {
+		return
+	}
+	hardcoverRateLimiter.wait(ctx)
+	var resp hardcoverEditionsBySlugResponse
+	if err := hardcoverExecute(ctx, apiKey, hardcoverEditionsBySlugQuery, map[string]any{"slug": r.HardcoverID}, &resp); err != nil {
+		zerolog.Ctx(ctx).Warn().Err(err).Str("slug", r.HardcoverID).Msg("hardcover top-hit edition backfill failed")
+		return
+	}
+	if len(resp.Data.Books) == 0 || len(resp.Data.Books[0].Editions) == 0 {
+		return
+	}
+	edition := bestHardcoverEdition(resp.Data.Books[0].Editions)
+	if r.Publisher == "" {
+		r.Publisher = edition.Publisher.Name
+	}
+	if r.Language == "" {
+		r.Language = edition.Language.Code2
+	}
+	if r.ISBN == "" {
+		r.ISBN = preferredEditionISBN(edition)
+	}
+}
+
+// bestHardcoverEdition returns the first edition carrying an ISBN-13, else
+// the first edition overall — same preference as preferredHardcoverISBN.
+func bestHardcoverEdition(editions []hardcoverEdition) hardcoverEdition {
+	for _, e := range editions {
+		if e.ISBN13 != "" {
+			return e
+		}
+	}
+	return editions[0]
+}
+
+// preferredEditionISBN returns e's ISBN-13 if set, else its ISBN-10.
+func preferredEditionISBN(e hardcoverEdition) string {
+	if e.ISBN13 != "" {
+		return e.ISBN13
+	}
+	return e.ISBN10
+}
+
+// hardcoverAuthorFromContributors returns the first contributor whose role is
+// "Author" (or unset, matching Hardcover's own display rule — a null
+// contribution defaults to author), else "".
+func hardcoverAuthorFromContributors(contributors []hardcoverContributor) string {
+	for _, c := range contributors {
+		if c.Contribution == "" || strings.EqualFold(c.Contribution, "author") {
+			if c.Author.Name != "" {
+				return c.Author.Name
+			}
+		}
+	}
+	return ""
+}
+
+// preferredHardcoverISBN returns the first ISBN-13-shaped entry, else the
+// first entry, else "".
+func preferredHardcoverISBN(isbns []string) string {
+	for _, i := range isbns {
+		if len(i) == 13 {
+			return i
+		}
+	}
+	if len(isbns) > 0 {
+		return isbns[0]
+	}
+	return ""
+}
+
+func hardcoverResultFromBook(book hardcoverBook, edition hardcoverEdition) BookMetadataResult {
+	r := BookMetadataResult{
+		Source:      "hardcover",
+		HardcoverID: book.Slug,
+		Title:       book.Title,
+		Author:      hardcoverAuthorFromContributors(book.CachedContributors),
+		Description: book.Description,
+		PageCount:   book.Pages,
+		Publisher:   edition.Publisher.Name,
+		Language:    edition.Language.Code2,
+		ISBN:        preferredEditionISBN(edition),
+	}
+	if book.Image.URL != "" {
+		r.CoverURL = book.Image.URL
+	}
+	switch {
+	case book.ReleaseDate != "":
+		r.PublishedDate = book.ReleaseDate
+	case book.ReleaseYear > 0:
+		r.PublishedDate = strconv.Itoa(book.ReleaseYear)
+	}
+	return r
+}
+
+func hardcoverResultFromSearchDocument(doc hardcoverSearchDocument) BookMetadataResult {
+	r := BookMetadataResult{
+		Source:      "hardcover",
+		HardcoverID: doc.Slug,
+		Title:       doc.Title,
+		Author:      hardcoverAuthorFromContributors(doc.Contributions),
+		Description: doc.Description,
+		PageCount:   doc.Pages,
+		ISBN:        preferredHardcoverISBN(doc.ISBNs),
+	}
+	if doc.Image.URL != "" {
+		r.CoverURL = doc.Image.URL
+	}
+	if doc.ReleaseDate != "" {
+		r.PublishedDate = doc.ReleaseDate
+	}
+	return r
 }

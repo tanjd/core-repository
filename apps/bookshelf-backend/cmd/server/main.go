@@ -140,12 +140,12 @@ func main() {
 
 	// Handlers
 	authH := handlers.NewAuthHandler(userRepo, adminRepo, copyRepo, regVerificationRepo, cfg.JWTSecret, cfg.EncryptionSecret, emailSvc, smsSvc, registrationWorkflow, cfg.Env, cfg.RegisterRateLimitBurst, cfg.RegisterSendRateLimitBurst, cfg.LoginRateLimitAttempts, inviteCodeRepo)
-	metadataH := handlers.NewMetadataHandler(ctx, googleBooksKeyPool, cfg.EncryptionSecret, userRepo)
+	metadataH := handlers.NewMetadataHandler(ctx, googleBooksKeyPool, cfg.HardcoverAPIKey, cfg.EncryptionSecret, userRepo)
 	bookH := handlers.NewBookHandler(bookRepo, userRepo, coversDir, wishlistWorkflow, recommendationRepo)
 	copyH := handlers.NewCopyHandler(copyRepo, userRepo, notifRepo, waitlistRepo, adminRepo, bookRepo, wishlistRepo, coversDir, wishlistWorkflow, recommendationRepo)
 	loanH := handlers.NewLoanRequestHandler(copyRepo, loanRepo, adminRepo, userRepo, workflow)
 	notifH := handlers.NewNotificationHandler(notifRepo)
-	adminH := handlers.NewAdminHandler(adminRepo, copyRepo, loanRepo, googleBooksKeyPool, registrationWorkflow, recommendationRepo, inviteCodeRepo)
+	adminH := handlers.NewAdminHandler(adminRepo, copyRepo, loanRepo, googleBooksKeyPool, registrationWorkflow, recommendationRepo, inviteCodeRepo, cfg.HardcoverAPIKey)
 	botHealthChecker := services.NewTelegramBotHealthChecker(cfg.TelegramBotHealthURL)
 	jobsH := handlers.NewJobsHandler(scheduler, digestSvc, userRepo, botHealthChecker)
 	backupH := handlers.NewBackupHandler(backupSvc)

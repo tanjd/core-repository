@@ -16,13 +16,14 @@ GET /books/metadata/search?q=...
         ▼
   searchMetadata (internal/handlers/metadata.go)
         │
-        ├─ cache lookup (1h TTL, key = lowercased q [+ "|gbooks"]) — hit? return immediately.
+        ├─ cache lookup (1h TTL, key = lowercased q [+ "|gbooks"] [+ "|hardcover"]) — hit? return immediately.
         │
         ▼
-  fetchAllSources(q)  ── fans out q, unchanged, to all 3 providers concurrently
+  fetchAllSources(q)  ── fans out q, unchanged, to all 4 providers concurrently
         │
         ├─ Open Library   (fetchOpenLibrary)   — always
         ├─ Google Books   (fetchGoogleBooks)   — only if an API key is configured
+        ├─ Hardcover      (fetchHardcover)     — only if an API key is configured
         └─ BookBrainz     (fetchBookBrainz)    — always
         │
         ▼
@@ -49,12 +50,16 @@ GET /books/metadata/search?q=...
   cache.Set(cacheKey, consolidated) → response
 ```
 
-`fetchAllSources`/`fetchOpenLibrary`/`fetchGoogleBooks`/`fetchBookBrainz` and
+`fetchAllSources`/`fetchOpenLibrary`/`fetchGoogleBooks`/`fetchBookBrainz`/`fetchHardcover` and
 `expandSiblingEditions` live in `metadata.go` (the fetch layer — talks to the network).
 `deduplicateIntoGroups`/`mergeGroup`/`enrichAcrossEditions`/`consolidateResults` and their helpers
 live in `metadata_consolidate.go` (the pure layer — takes and returns `[]BookMetadataResult`, no
-I/O, which is why it's the layer with actual unit test coverage; the fetch layer isn't
-network-mocked in tests today).
+I/O, which is why it was, for a long time, the only layer with unit test coverage). The fetch layer
+now has coverage too, via the `httpDoer` interface seam `metadataClient` is declared as
+(`metadata.go`) — tests swap it for a fake and assert against canned JSON bodies instead of hitting
+real network (see `metadata_test.go`'s `withFakeMetadataClient` and the `TestFetchHardcover*`
+tests). This seam was added together with Hardcover rather than as a separate step, since a 4th
+provider was the thing that finally made it worth doing (see "Future direction" below).
 
 ## Step 1: grouping (`deduplicateIntoGroups`)
 
@@ -75,9 +80,49 @@ accepted, documented risk (see `TestCreateBook_DoesNotDedupByISBN_WhenOLKeyProvi
 ## Step 2: merging (`mergeGroup`)
 
 Within a group (same book, multiple source hits), each field takes the first non-empty/non-zero
-value in source-priority order: `google_books` > `openlibrary` > everything else (`bookbrainz`),
-via `sourcePriority`. `firstNonEmpty`/`firstNonZero` are the generic "first populated value in
+value in source-priority order: `google_books` > `openlibrary` > `hardcover` > everything else
+(`bookbrainz`), via `sourcePriority`. Hardcover ranks below Open Library because its
+community-maintained descriptions/ratings are strong but its ISBN/publisher/page-count
+completeness for arbitrary physical editions is less consistent than Open Library's
+library-catalog data. `firstNonEmpty`/`firstNonZero` are the generic "first populated value in
 priority order" helpers used for every field.
+
+## Hardcover specifics
+
+Hardcover (<https://hardcover.app>) is a free GraphQL API
+(<https://docs.hardcover.app/api/getting-started>) gated by a per-account Bearer token — 60 req/min,
+5,000 req/day on the free tier. `HARDCOVER_API_KEY` (see `.env.example`) is a single server-wide
+key, unlike Google Books' multi-key round-robin pool: the free tier's daily quota is generous
+enough for this app's scale to not need a pool. It does support the same per-user override as
+Google Books, though — `User.HardcoverAPIKey` (encrypted, `Profile → Integrations`), resolved by
+`MetadataHandler.resolveHardcoverAPIKey` ahead of the server-wide fallback, same shape as
+`resolveGoogleBooksAPIKey`. Two shapes, unlike the other three providers' single free-text search:
+
+- **ISBN-shaped `q`** (`fetchHardcoverByISBN`): an exact `books` GraphQL query matching the
+  edition(s) carrying that ISBN, returning full book- and edition-level fields (description,
+  cover, publisher, language, page count).
+- **Everything else** (`fetchHardcoverBySearch`): Hardcover's Typesense-backed `search` endpoint,
+  which returns book-level (not edition-level) documents — no publisher/language/page-count-per-edition,
+  just whatever the search index cached. Both Publisher and Language are real, used fields (the
+  metadata-search picker card and the persisted `Book` row both show/store them, and Language also
+  gates `enrichAcrossEditions`'s description-donor matching), so `fetchHardcoverBySearch` makes one
+  bounded follow-up `hardcoverEditionsBySlugQuery` call for the **top hit only** (never all `limit`
+  hits) to backfill Publisher/Language/ISBN when the search document left them empty
+  (`enrichTopHitWithEditionFields`). Backfill-only, never overwrites; a failure on this follow-up
+  call is logged and swallowed rather than failing the search — the bare search hit is still
+  usable without it. This doubles Hardcover's per-search call count for a free-text query (still
+  serialized through `hardcoverRateLimiter`), a deliberate latency-for-completeness tradeoff scoped
+  to one extra call rather than one per hit.
+
+`hardcoverRateLimiter` (a `minIntervalLimiter` spacing calls to 1/second) guards against bursting
+past the per-minute cap, since `fetchAllSources` already runs every provider concurrently per
+search — a single user query (plus `expandSiblingEditions`' re-fetch) could otherwise fire two
+Hardcover calls back to back.
+
+Per the amendment to this app's Product scope guardrail (`apps/bookshelf-backend/CLAUDE.md`),
+only Hardcover's identification-relevant fields are mapped into `BookMetadataResult` — its
+`rating`/`ratings_count` fields are deliberately left unmapped, even though the API returns them
+alongside the fields this pipeline does use.
 
 ## Step 3: cross-edition backfill (`enrichAcrossEditions`)
 
@@ -89,7 +134,7 @@ shared an ISBN they'd already be one row from step 1).
 Only `Description` is cross-filled, backfill-only (never overwrites a populated field), and
 skipped when both sides have a set, differing `Language`. `CoverURL`, `Publisher`,
 `PublishedDate`, `PageCount`, and every identity field (`ISBN`, `OLKey`, `GoogleBooksID`,
-`BookBrainzID`, `Title`, `Author`) are never touched — `CoverURL` has a frontend fallback already
+`BookBrainzID`, `HardcoverID`, `Title`, `Author`) are never touched — `CoverURL` has a frontend fallback already
 and a wrong cover is a sharper problem for peer-to-peer lending than a wrong description; the
 others are genuinely edition-specific facts. See `cross-edition-metadata-enrichment.md` for the
 full reasoning. Every backfilled result is stamped in `EnrichedFields` (currently only ever
@@ -209,12 +254,13 @@ checked into the repo, and replay them through `consolidateResults`/`promoteQuer
 assert the expected top result — catching future regressions the way today's Church Discipline
 scenario was caught by hand.
 
-This needs one prerequisite: `fetchOpenLibrary`/`fetchGoogleBooks`/`fetchBookBrainz`
-(`metadata.go`) currently call the package-level `metadataClient` directly, so the fetch layer has
-no test coverage at all today (see the note above). They'd need to accept an injectable HTTP client
-(or an interface seam) before recorded fixtures could stand in for live network calls. The
+The prerequisite this used to need — an injectable HTTP client seam, since every `fetch*` function
+called the package-level `metadataClient` directly with no way to stand in fixtures for live
+network calls — is now in place (`httpDoer`, added alongside Hardcover; see the note above). The
+fixture-based suite itself is still a follow-up, not built here. The
 `TestConsolidateResults_PromoteQueriedEdition_ExactISBNBeatsHigherScoringSibling` test added
-alongside this fix is a natural first candidate to seed that suite with, once the seam exists.
+alongside the original ranking fix, plus the `TestFetchHardcover*` tests added alongside Hardcover,
+are natural first candidates to seed that suite with.
 
 ## Where to look for each concern
 

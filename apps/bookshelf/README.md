@@ -112,19 +112,20 @@ Docker deployments use `.env` next to `docker-compose.yml`. See
 [`.env.compose.example`](../bookshelf-backend/.env.compose.example) for the
 full reference.
 
-| Variable               | Required | Description                                                                                        |
-| ---------------------- | -------- | -------------------------------------------------------------------------------------------------- |
-| `JWT_SECRET`           | yes      | Signs session tokens. Generate with `openssl rand -base64 32`.                                     |
-| `ENCRYPTION_SECRET`    | yes      | Encrypts stored secrets (e.g. Google Books API keys). Use a **different** value from `JWT_SECRET`. |
-| `FRONTEND_ORIGIN`      | yes      | Public URL of the frontend, used for CORS and email links.                                         |
-| `ENV`                  | no       | `dev` (default) or `prd`. Use `prd` in production.                                                 |
-| `SMTP_HOST`            | no*      | SMTP server. *Required for real multi-user registration.                                           |
-| `SMTP_PORT`            | no       | Default `587`.                                                                                     |
-| `SMTP_USERNAME`        | no       | SMTP auth username.                                                                                |
-| `SMTP_PASSWORD`        | no       | SMTP auth password.                                                                                |
-| `EMAIL_FROM`           | no       | Sender address for outbound mail.                                                                  |
-| `DEV_EMAIL_OVERRIDE`   | no       | When `ENV=dev`, route all mail to this inbox (testing only).                                       |
-| `GOOGLE_BOOKS_API_KEY` | no       | Optional metadata key(s), comma-separated for round-robin. Open Library is always used.            |
+| Variable               | Required | Description                                                                                                                    |
+| ---------------------- | -------- | ------------------------------------------------------------------------------------------------------------------------------ |
+| `JWT_SECRET`           | yes      | Signs session tokens. Generate with `openssl rand -base64 32`.                                                                 |
+| `ENCRYPTION_SECRET`    | yes      | Encrypts stored secrets (e.g. Google Books/Hardcover API keys). Use a **different** value from `JWT_SECRET`.                   |
+| `FRONTEND_ORIGIN`      | yes      | Public URL of the frontend, used for CORS and email links.                                                                     |
+| `ENV`                  | no       | `dev` (default) or `prd`. Use `prd` in production.                                                                             |
+| `SMTP_HOST`            | no*      | SMTP server. *Required for real multi-user registration.                                                                       |
+| `SMTP_PORT`            | no       | Default `587`.                                                                                                                 |
+| `SMTP_USERNAME`        | no       | SMTP auth username.                                                                                                            |
+| `SMTP_PASSWORD`        | no       | SMTP auth password.                                                                                                            |
+| `EMAIL_FROM`           | no       | Sender address for outbound mail.                                                                                              |
+| `DEV_EMAIL_OVERRIDE`   | no       | When `ENV=dev`, route all mail to this inbox (testing only).                                                                   |
+| `GOOGLE_BOOKS_API_KEY` | no       | Optional metadata key(s), comma-separated for round-robin. Open Library is always used.                                        |
+| `HARDCOVER_API_KEY`    | no       | Optional Hardcover metadata key (free at hardcover.app/account/api). Members can also set their own in Profile → Integrations. |
 
 Local development uses
 [`.env.example`](../bookshelf-backend/.env.example) in `apps/bookshelf-backend/`

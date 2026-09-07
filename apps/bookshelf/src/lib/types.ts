@@ -10,6 +10,7 @@ export interface User {
   role: "user" | "admin";
   created_at: string;
   google_books_key_configured: boolean;
+  hardcover_key_configured: boolean;
   pending_email?: string;
   email_notifications_enabled: boolean;
   monthly_digest_enabled: boolean;

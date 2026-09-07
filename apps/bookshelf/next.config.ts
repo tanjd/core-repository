@@ -17,6 +17,10 @@ const nextConfig: WithNxOptions = {
         protocol: "https",
         hostname: "books.google.com",
       },
+      {
+        protocol: "https",
+        hostname: "assets.hardcover.app",
+      },
     ],
   },
   // Required for the Docker image — generates .next/standalone + server.js

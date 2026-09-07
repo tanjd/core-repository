@@ -1,0 +1,2 @@
+-- No column drop: same rationale as 000006's down migration — no established pattern
+-- in this repo for dropping a column, so it's left in place here too.

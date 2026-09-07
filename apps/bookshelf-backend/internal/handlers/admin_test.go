@@ -1,6 +1,9 @@
 package handlers
 
 import (
+	"context"
+	"io"
+	"net/http"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -23,7 +26,7 @@ func newAdminHandlerWithCopiesAndLoans() (*AdminHandler, *repotest.AdminReposito
 	loans := repotest.NewLoanRequestRepository(copies, repotest.NewNotificationRepository(), repotest.NewUserRepository())
 	email := services.NewEmailService("", "", "", "", "", "", "", "http://localhost:3000")
 	registration := services.NewRegistrationWorkflow(admin, repotest.NewNotificationRepository(), repotest.NewBookRepository(), email, repotest.NewTelegramNotifier())
-	return NewAdminHandler(admin, copies, loans, services.NewGoogleBooksKeyPool(nil), registration, nil, nil), admin, copies, loans
+	return NewAdminHandler(admin, copies, loans, services.NewGoogleBooksKeyPool(nil), registration, nil, nil, ""), admin, copies, loans
 }
 
 func TestAdminHandler_RequiresAdmin(t *testing.T) {
@@ -155,7 +158,7 @@ func TestUpdateUser_SuspensionRevokesInviteCode(t *testing.T) {
 	email := services.NewEmailService("", "", "", "", "", "", "", "http://localhost:3000")
 	registration := services.NewRegistrationWorkflow(admin, repotest.NewNotificationRepository(), repotest.NewBookRepository(), email, repotest.NewTelegramNotifier())
 	inviteCodes := repotest.NewInviteCodeRepository(repotest.NewUserRepository())
-	h := NewAdminHandler(admin, copies, loans, services.NewGoogleBooksKeyPool(nil), registration, nil, inviteCodes)
+	h := NewAdminHandler(admin, copies, loans, services.NewGoogleBooksKeyPool(nil), registration, nil, inviteCodes, "")
 
 	require.NoError(t, admin.SaveUser(&models.User{ID: 1, Role: "admin"}))
 	require.NoError(t, admin.SaveUser(&models.User{ID: 2, Role: "user"}))
@@ -208,7 +211,7 @@ func TestUpdateUser_ApprovalNotifiesUser(t *testing.T) {
 	notifs := repotest.NewNotificationRepository()
 	email := services.NewEmailService("", "", "", "", "", "", "", "http://localhost:3000")
 	registration := services.NewRegistrationWorkflow(admin, notifs, repotest.NewBookRepository(), email, repotest.NewTelegramNotifier())
-	h := NewAdminHandler(admin, copies, loans, services.NewGoogleBooksKeyPool(nil), registration, nil, nil)
+	h := NewAdminHandler(admin, copies, loans, services.NewGoogleBooksKeyPool(nil), registration, nil, nil, "")
 
 	require.NoError(t, admin.SaveUser(&models.User{ID: 1, Role: "admin"}))
 	require.NoError(t, admin.SaveUser(&models.User{ID: 2, Role: "user", PendingApproval: true}))
@@ -315,7 +318,7 @@ func TestDeleteUser(t *testing.T) {
 		email := services.NewEmailService("", "", "", "", "", "", "", "http://localhost:3000")
 		registration := services.NewRegistrationWorkflow(admin, repotest.NewNotificationRepository(), repotest.NewBookRepository(), email, repotest.NewTelegramNotifier())
 		recommendations := repotest.NewRecommendationRepository(repotest.NewUserRepository())
-		h := NewAdminHandler(admin, copies, loans, services.NewGoogleBooksKeyPool(nil), registration, recommendations, nil)
+		h := NewAdminHandler(admin, copies, loans, services.NewGoogleBooksKeyPool(nil), registration, recommendations, nil, "")
 
 		require.NoError(t, admin.SaveUser(&models.User{ID: 1, Role: "admin"}))
 		require.NoError(t, admin.SaveUser(&models.User{ID: 2, Role: "user"}))
@@ -335,7 +338,7 @@ func TestDeleteUser(t *testing.T) {
 		email := services.NewEmailService("", "", "", "", "", "", "", "http://localhost:3000")
 		registration := services.NewRegistrationWorkflow(admin, repotest.NewNotificationRepository(), repotest.NewBookRepository(), email, repotest.NewTelegramNotifier())
 		inviteCodes := repotest.NewInviteCodeRepository(repotest.NewUserRepository())
-		h := NewAdminHandler(admin, copies, loans, services.NewGoogleBooksKeyPool(nil), registration, nil, inviteCodes)
+		h := NewAdminHandler(admin, copies, loans, services.NewGoogleBooksKeyPool(nil), registration, nil, inviteCodes, "")
 
 		require.NoError(t, admin.SaveUser(&models.User{ID: 1, Role: "admin"}))
 		require.NoError(t, admin.SaveUser(&models.User{ID: 2, Role: "user"}))
@@ -368,4 +371,50 @@ func TestUpdateSettings(t *testing.T) {
 	require.Len(t, out.Body, 1)
 	assert.Equal(t, "max_active_loans", out.Body[0].Key)
 	assert.Equal(t, "3", out.Body[0].Value)
+}
+
+func findMetadataProbe(t *testing.T, probes []metadataProbe, name string) metadataProbe {
+	t.Helper()
+	for _, p := range probes {
+		if p.name == name {
+			return p
+		}
+	}
+	t.Fatalf("no metadata probe named %q", name)
+	return metadataProbe{}
+}
+
+func TestMetadataProbes_HardcoverDisabledWithoutServerKey(t *testing.T) {
+	admin := repotest.NewAdminRepository()
+	copies := repotest.NewCopyRepository()
+	loans := repotest.NewLoanRequestRepository(copies, repotest.NewNotificationRepository(), repotest.NewUserRepository())
+	email := services.NewEmailService("", "", "", "", "", "", "", "http://localhost:3000")
+	registration := services.NewRegistrationWorkflow(admin, repotest.NewNotificationRepository(), repotest.NewBookRepository(), email, repotest.NewTelegramNotifier())
+	h := NewAdminHandler(admin, copies, loans, services.NewGoogleBooksKeyPool(nil), registration, nil, nil, "")
+
+	p := findMetadataProbe(t, h.metadataProbes(), "hardcover")
+	assert.False(t, p.enabled)
+}
+
+func TestMetadataProbes_HardcoverEnabledWithServerKeySendsBearerAuth(t *testing.T) {
+	admin := repotest.NewAdminRepository()
+	copies := repotest.NewCopyRepository()
+	loans := repotest.NewLoanRequestRepository(copies, repotest.NewNotificationRepository(), repotest.NewUserRepository())
+	email := services.NewEmailService("", "", "", "", "", "", "", "http://localhost:3000")
+	registration := services.NewRegistrationWorkflow(admin, repotest.NewNotificationRepository(), repotest.NewBookRepository(), email, repotest.NewTelegramNotifier())
+	h := NewAdminHandler(admin, copies, loans, services.NewGoogleBooksKeyPool(nil), registration, nil, nil, "test-key")
+
+	p := findMetadataProbe(t, h.metadataProbes(), "hardcover")
+	require.True(t, p.enabled)
+
+	req, err := p.newRequest(context.Background())
+	require.NoError(t, err)
+	assert.Equal(t, http.MethodPost, req.Method)
+	assert.Equal(t, hardcoverGraphQLEndpoint, req.URL.String())
+	assert.Equal(t, "Bearer test-key", req.Header.Get("Authorization"))
+	assert.Equal(t, "application/json", req.Header.Get("Content-Type"))
+
+	body, err := io.ReadAll(req.Body)
+	require.NoError(t, err)
+	assert.Contains(t, string(body), "__typename", "probe reuses the minimal validateHardcoverAPIKey-style query")
 }
