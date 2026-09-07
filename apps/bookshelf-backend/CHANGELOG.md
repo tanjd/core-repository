@@ -1,3 +1,13 @@
+## 0.29.0 (2026-09-07)
+
+### 🚀 Features
+
+- **bookshelf-backend:** include Hardcover in cover/description backfill ([#116](https://github.com/tanjd/core-repository/pull/116), [#115](https://github.com/tanjd/core-repository/issues/115))
+
+### ❤️ Thank You
+
+- Jeddy Tan @tanjd
+
 ## 0.28.0 (2026-09-07)
 
 ### 🚀 Features
