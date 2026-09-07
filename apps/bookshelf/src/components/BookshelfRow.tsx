@@ -6,6 +6,7 @@ import { api } from "@/lib/api";
 import type { Book } from "@/lib/types";
 import { Badge } from "@/components/ui/badge";
 import { BookCover } from "@/components/BookCover";
+import { AuthorLink } from "@/components/AuthorLink";
 
 function BookSpine({
   book,
@@ -47,9 +48,12 @@ function BookSpine({
         <p className="text-xs font-medium line-clamp-2 leading-tight">
           {book.title}
         </p>
-        <p className="text-[10px] text-muted-foreground line-clamp-1">
-          {book.author}
-        </p>
+        {book.author && (
+          <AuthorLink
+            author={book.author}
+            className="text-[10px] text-muted-foreground line-clamp-1"
+          />
+        )}
         {typeof book.available_copies === "number" && (
           <Badge
             variant={book.available_copies > 0 ? "success" : "secondary"}

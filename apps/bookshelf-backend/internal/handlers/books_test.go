@@ -180,6 +180,20 @@ func TestListBooks_Unauthenticated(t *testing.T) {
 	assertStatus(t, err, 401)
 }
 
+func TestListBooksByAuthor_Unauthenticated(t *testing.T) {
+	h, _ := newBookHandler()
+
+	_, err := h.listBooksByAuthor(fakeAuthedCtxNone(), &listBooksByAuthorInput{Author: "A"})
+	assertStatus(t, err, 401)
+}
+
+func TestListAuthors_Unauthenticated(t *testing.T) {
+	h, _ := newBookHandler()
+
+	_, err := h.listAuthors(fakeAuthedCtxNone(), &listAuthorsInput{})
+	assertStatus(t, err, 401)
+}
+
 func TestListRecentBooks_Unauthenticated(t *testing.T) {
 	h, _ := newBookHandler()
 

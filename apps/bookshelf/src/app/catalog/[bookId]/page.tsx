@@ -15,6 +15,7 @@ import { Breadcrumb } from "@/components/Breadcrumb";
 import { WaitlistButton } from "@/components/WaitlistButton";
 import { RecommendButton } from "@/components/RecommendButton";
 import { RecommendedBy } from "@/components/RecommendedBy";
+import { AuthorLink } from "@/components/AuthorLink";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -424,9 +425,10 @@ export default function BookDetailPage() {
               {book.title}
             </h1>
             {book.author && (
-              <p className="text-muted-foreground text-sm sm:text-base line-clamp-2">
-                {book.author}
-              </p>
+              <AuthorLink
+                author={book.author}
+                className="text-muted-foreground text-sm sm:text-base line-clamp-2"
+              />
             )}
             {book.isbn && (
               <p className="text-xs text-muted-foreground">ISBN: {book.isbn}</p>

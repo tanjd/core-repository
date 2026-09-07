@@ -3,6 +3,7 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { BookCover } from "@/components/BookCover";
 import { RecommendButton } from "@/components/RecommendButton";
+import { AuthorLink } from "@/components/AuthorLink";
 import type { Book } from "@/lib/types";
 
 interface BookCardProps {
@@ -37,9 +38,10 @@ export function BookCard({ book, ownedByMe, catalogHref }: BookCardProps) {
             {book.title}
           </p>
           {book.author && (
-            <p className="text-xs text-muted-foreground line-clamp-1">
-              {book.author}
-            </p>
+            <AuthorLink
+              author={book.author}
+              className="text-xs text-muted-foreground line-clamp-1"
+            />
           )}
           <div className="mt-auto pt-1 flex items-center justify-between gap-2">
             {typeof book.available_copies === "number" ? (

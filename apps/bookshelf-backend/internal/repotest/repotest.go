@@ -1353,6 +1353,16 @@ func (r *BookRepository) ListPaginated(_, _ string, _ bool, page, pageSize int) 
 	return &repository.PaginatedResult[models.Book]{Page: page, PageSize: pageSize}, nil
 }
 
+// ListByAuthorPaginated returns an empty page — not exercised by any test using this fake yet.
+func (r *BookRepository) ListByAuthorPaginated(_ string, page, pageSize int) (*repository.PaginatedResult[models.Book], error) {
+	return &repository.PaginatedResult[models.Book]{Page: page, PageSize: pageSize}, nil
+}
+
+// ListAuthorsPaginated returns an empty page — not exercised by any test using this fake yet.
+func (r *BookRepository) ListAuthorsPaginated(page, pageSize int) (*repository.PaginatedResult[repository.AuthorSummary], error) {
+	return &repository.PaginatedResult[repository.AuthorSummary]{Page: page, PageSize: pageSize}, nil
+}
+
 // ListRecent returns nil — not exercised by any test using this fake yet.
 func (r *BookRepository) ListRecent(_ int) ([]models.Book, error) { return nil, nil }
 

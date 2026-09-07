@@ -19,6 +19,9 @@ jest.mock("@/lib/api", () => ({
 let mockBookId = "1";
 jest.mock("next/navigation", () => ({
   useParams: () => ({ bookId: mockBookId }),
+  // AuthorLink (rendered for book.author) calls useRouter — needs the
+  // AppRouterContext this page otherwise lacks in jsdom.
+  useRouter: () => ({ push: jest.fn() }),
 }));
 
 jest.mock("sonner", () => ({
