@@ -25,6 +25,10 @@ async function proxy(
   const resHeaders = new Headers();
   const ct = upstream.headers.get("content-type");
   if (ct) resHeaders.set("content-type", ct);
+  // Every /api/* response is dynamic and often per-user (auth-scoped) — make
+  // sure no intermediary (Cloudflare, a corporate proxy, the browser's own
+  // HTTP cache) ever caches it, regardless of upstream/edge cache config.
+  resHeaders.set("cache-control", "no-store");
 
   return new NextResponse(upstream.body, {
     status: upstream.status,
