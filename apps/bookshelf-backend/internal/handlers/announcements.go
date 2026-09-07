@@ -39,7 +39,7 @@ type listActiveAnnouncementsOutput struct {
 }
 
 type adminListAnnouncementsInput struct {
-	paginationParams
+	PaginationParams
 }
 
 type adminListAnnouncementsOutput struct {

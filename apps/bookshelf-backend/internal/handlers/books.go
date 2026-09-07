@@ -59,7 +59,7 @@ type listBooksInput struct {
 	OLKey         string `query:"ol_key" doc:"Filter by exact Open Library key (returns single book)"`
 	Sort          string `query:"sort" doc:"Sort order: title (default), author, newest, popular, recommended, relevance (best-match, only meaningful with q)"`
 	AvailableOnly bool   `query:"available_only" doc:"Only return books with at least one available copy"`
-	paginationParams
+	PaginationParams
 }
 
 type listBooksOutput struct {

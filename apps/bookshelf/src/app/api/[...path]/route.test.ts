@@ -53,6 +53,27 @@ describe("api proxy route", () => {
     expect(res.headers.get("content-type")).toBe("text/plain");
   });
 
+  it("marks every proxied response as non-cacheable", async () => {
+    process.env.BACKEND_URL = "http://backend.internal:9000";
+    const { GET } = await loadRoute();
+    global.fetch = jest.fn().mockResolvedValue(
+      new Response("[]", {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      }),
+    );
+
+    const req = new NextRequest(
+      "http://localhost:3000/api/books?page=2&page_size=20",
+      { method: "GET" },
+    );
+    const res = await GET(req, {
+      params: Promise.resolve({ path: ["books"] }),
+    });
+
+    expect(res.headers.get("cache-control")).toBe("no-store");
+  });
+
   it("falls back to http://localhost:8000 when BACKEND_URL is unset", async () => {
     delete process.env.BACKEND_URL;
     const { GET } = await loadRoute();
