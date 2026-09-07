@@ -56,7 +56,7 @@ func NewAdminHandler(admin repository.AdminRepository, copies repository.CopyRep
 // --- Input / Output types ---
 
 type adminUsersInput struct {
-	paginationParams
+	PaginationParams
 	Search string `query:"search" doc:"Filter by name or email (case-insensitive substring match)"`
 	Role   string `query:"role" enum:"user,admin" doc:"Filter by role"`
 	Status string `query:"status" enum:"verified,unverified,pending_approval,suspended" doc:"Filter by status"`

@@ -102,7 +102,7 @@ type listLoanRequestsInput struct {
 type listLoanRequestsOutput struct{ Body []getLoanRequestBody }
 
 type listMineInput struct {
-	paginationParams
+	PaginationParams
 	View string `query:"view" doc:"Filter: current (pending+accepted) or history (returned+rejected+cancelled); omit for all"`
 }
 

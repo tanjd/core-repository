@@ -100,7 +100,7 @@ type wishlistRequestOutput struct{ Body wishlistResponse }
 
 type listWishlistInput struct {
 	Q string `query:"q" doc:"Search by title or author"`
-	paginationParams
+	PaginationParams
 }
 
 type listWishlistOutput struct {

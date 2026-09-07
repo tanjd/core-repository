@@ -24,7 +24,7 @@ func NewNotificationHandler(notifs repository.NotificationRepository) *Notificat
 
 type listNotificationsInput struct {
 	Unread bool `query:"unread" doc:"When true, return only unread notifications"`
-	paginationParams
+	PaginationParams
 }
 
 type listNotificationsOutput struct {
