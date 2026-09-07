@@ -503,8 +503,9 @@ export const api = {
     const qs = new URLSearchParams(p).toString();
     return request<PaginatedResult<Book>>(`/books/by-author?${qs}`);
   },
-  getAuthors: (params?: { page?: number; page_size?: number }) => {
+  getAuthors: (params?: { q?: string; page?: number; page_size?: number }) => {
     const p: Record<string, string> = {};
+    if (params?.q) p.q = params.q;
     if (params?.page) p.page = String(params.page);
     if (params?.page_size) p.page_size = String(params.page_size);
     const qs = new URLSearchParams(p).toString();

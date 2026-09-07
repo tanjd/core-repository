@@ -3,7 +3,15 @@
 import { useState, useEffect, useRef, type MouseEvent } from "react";
 import Link from "next/link";
 import { useRouter, usePathname } from "next/navigation";
-import { Search, SlidersHorizontal, Heart, X, Loader2 } from "lucide-react";
+import {
+  Search,
+  SlidersHorizontal,
+  Heart,
+  X,
+  Loader2,
+  BookOpen,
+  Users,
+} from "lucide-react";
 import { api } from "@/lib/api";
 import type { AuthorSummary, Book, PaginatedResult } from "@/lib/types";
 import { BookCard } from "@/components/BookCard";
@@ -56,10 +64,14 @@ export default function CatalogPage() {
   const [view, setView] = useState<"books" | "authors">("books");
   const [authorsResult, setAuthorsResult] =
     useState<PaginatedResult<AuthorSummary> | null>(null);
+  const [authorSearch, setAuthorSearch] = useState("");
   const [authorsPage, setAuthorsPage] = useState(1);
   const [authorsLoading, setAuthorsLoading] = useState(false);
+  const [authorsFetching, setAuthorsFetching] = useState(false);
   const [authorsError, setAuthorsError] = useState("");
   const authorsRequestIdRef = useRef(0);
+  const authorsDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const authorsMountedRef = useRef(false);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   // Tracks whether the user has explicitly picked a sort — once they have,
   // typing/clearing a search no longer auto-switches it for them.
@@ -102,12 +114,17 @@ export default function CatalogPage() {
     }
   }
 
-  async function fetchAuthors(p: number) {
+  async function fetchAuthors(q: string, p: number, isInitial = false) {
     const requestId = ++authorsRequestIdRef.current;
-    setAuthorsLoading(true);
+    if (isInitial) setAuthorsLoading(true);
+    else setAuthorsFetching(true);
     setAuthorsError("");
     try {
-      const data = await api.getAuthors({ page: p, page_size: PAGE_SIZE });
+      const data = await api.getAuthors({
+        q: q.trim() || undefined,
+        page: p,
+        page_size: PAGE_SIZE,
+      });
       if (requestId !== authorsRequestIdRef.current) return;
       setAuthorsResult(data);
     } catch (err) {
@@ -116,7 +133,10 @@ export default function CatalogPage() {
         err instanceof Error ? err.message : "Failed to load authors",
       );
     } finally {
-      if (requestId === authorsRequestIdRef.current) setAuthorsLoading(false);
+      if (requestId === authorsRequestIdRef.current) {
+        if (isInitial) setAuthorsLoading(false);
+        else setAuthorsFetching(false);
+      }
     }
   }
 
@@ -124,13 +144,18 @@ export default function CatalogPage() {
     setView(v);
     updateUrl(search, sort, availableOnly, page, v);
     if (v === "authors" && !authorsResult) {
-      fetchAuthors(1);
+      fetchAuthors(authorSearch, 1, true);
     }
+  }
+
+  function handleAuthorSearchChange(value: string) {
+    setAuthorSearch(value);
   }
 
   function handleAuthorsPageChange(p: number) {
     setAuthorsPage(p);
-    fetchAuthors(p);
+    fetchAuthors(authorSearch, p);
+    updateUrl(search, sort, availableOnly, p, "authors");
     window.scrollTo({ top: 0, behavior: "smooth" });
   }
 
@@ -146,10 +171,14 @@ export default function CatalogPage() {
     v: "books" | "authors" = view,
   ) {
     const params = new URLSearchParams();
-    if (v === "authors") params.set("view", "authors");
-    if (q.trim()) params.set("q", q.trim());
-    if (s !== "title") params.set("sort", s);
-    if (avail) params.set("available", "true");
+    if (v === "authors") {
+      params.set("view", "authors");
+      if (authorSearch.trim()) params.set("authorQ", authorSearch.trim());
+    } else {
+      if (q.trim()) params.set("q", q.trim());
+      if (s !== "title") params.set("sort", s);
+      if (avail) params.set("available", "true");
+    }
     if (p > 1) params.set("page", String(p));
     const qs = params.toString();
     router.replace(qs ? `${pathname}?${qs}` : pathname, { scroll: false });
@@ -166,6 +195,9 @@ export default function CatalogPage() {
   // (triggered by that very state change) as hydration, not a live filter
   // edit — see the comment on that effect for why this is needed.
   const skipNextFilterEffectRef = useRef(false);
+  // Same purpose as skipNextFilterEffectRef above, for the authorSearch
+  // debounce watcher effect below.
+  const skipNextAuthorFilterEffectRef = useRef(false);
   useEffect(() => {
     if (loadedRef.current) return;
     loadedRef.current = true;
@@ -177,6 +209,7 @@ export default function CatalogPage() {
     const initialPage =
       Number.isFinite(parsedPage) && parsedPage > 0 ? parsedPage : 1;
     const initialView = params.get("view") === "authors" ? "authors" : "books";
+    const initialAuthorQ = params.get("authorQ") ?? "";
     // If any of these differ from their defaults, the setState calls below
     // change search/sort/availableOnly — which the debounce watcher effect
     // below is also watching. That effect would otherwise mistake the
@@ -184,6 +217,9 @@ export default function CatalogPage() {
     // Flag it so that one watcher run is skipped instead.
     if (initialSearch || initialSort !== "title" || initialAvailable) {
       skipNextFilterEffectRef.current = true;
+    }
+    if (initialAuthorQ) {
+      skipNextAuthorFilterEffectRef.current = true;
     }
     // window.location isn't available during SSR, so hydrating filter state
     // from the URL genuinely has to happen post-mount — same
@@ -194,9 +230,13 @@ export default function CatalogPage() {
     if (initialAvailable) setAvailableOnly(true);
     if (initialPage !== 1) setPage(initialPage);
     if (initialView === "authors") setView("authors");
+    if (initialAuthorQ) setAuthorSearch(initialAuthorQ);
+    if (initialView === "authors" && initialPage !== 1)
+      setAuthorsPage(initialPage);
     /* eslint-enable react-hooks/set-state-in-effect */
     fetchBooks(initialSearch, initialSort, initialAvailable, initialPage, true);
-    if (initialView === "authors") fetchAuthors(1);
+    if (initialView === "authors")
+      fetchAuthors(initialAuthorQ, initialPage, true);
   }, []);
 
   // Debounced search/sort/filter — reset to page 1. Skips the mount pass
@@ -236,6 +276,30 @@ export default function CatalogPage() {
     // changing what the effect does.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [search, sort, availableOnly]);
+
+  // Debounced author search — same shape as the Books debounce above, but
+  // scoped to the Authors sub-view (only fires while it's active).
+  useEffect(() => {
+    if (skipNextAuthorFilterEffectRef.current) {
+      skipNextAuthorFilterEffectRef.current = false;
+      return;
+    }
+    if (!authorsMountedRef.current) {
+      authorsMountedRef.current = true;
+      return;
+    }
+    if (view !== "authors") return;
+    if (authorsDebounceRef.current) clearTimeout(authorsDebounceRef.current);
+    authorsDebounceRef.current = setTimeout(() => {
+      setAuthorsPage(1);
+      fetchAuthors(authorSearch, 1);
+      updateUrl(search, sort, availableOnly, 1, "authors");
+    }, 300);
+    return () => {
+      if (authorsDebounceRef.current) clearTimeout(authorsDebounceRef.current);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [authorSearch]);
 
   // Clicking into a book (or any other link) means the pending debounced
   // fetch/updateUrl is about to be superseded by a navigation — if it fires
@@ -335,14 +399,47 @@ export default function CatalogPage() {
         onValueChange={handleViewChange}
         aria-label="Browse by"
         options={[
-          { value: "books", label: "Books" },
-          { value: "authors", label: "Authors" },
+          {
+            value: "books",
+            label: "Books",
+            icon: <BookOpen className="size-3.5" />,
+          },
+          {
+            value: "authors",
+            label: "Authors",
+            icon: <Users className="size-3.5" />,
+          },
         ]}
         className="self-start"
       />
 
       {view === "authors" ? (
         <>
+          <div className="relative max-w-xl">
+            {authorsFetching ? (
+              <Loader2 className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground pointer-events-none animate-spin" />
+            ) : (
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground pointer-events-none" />
+            )}
+            <Input
+              type="search"
+              placeholder="Search authors…"
+              value={authorSearch}
+              onChange={(e) => handleAuthorSearchChange(e.target.value)}
+              className="pl-9 h-10 pr-9"
+            />
+            {authorSearch && (
+              <button
+                type="button"
+                aria-label="Clear author search"
+                onClick={() => handleAuthorSearchChange("")}
+                className="absolute right-2 top-1/2 -translate-y-1/2 flex size-6 items-center justify-center rounded-full text-muted-foreground hover:bg-accent hover:text-foreground"
+              >
+                <X className="size-4" />
+              </button>
+            )}
+          </div>
+
           {authorsError && (
             <p className="text-sm text-destructive">{authorsError}</p>
           )}
@@ -353,14 +450,25 @@ export default function CatalogPage() {
               ))}
             </div>
           ) : (
-            <>
-              <AuthorsList authors={authorsResult?.items ?? []} />
-              <Pagination
-                page={authorsPage}
-                totalPages={authorsResult?.total_pages ?? 1}
-                onPageChange={handleAuthorsPageChange}
+            <div
+              className={
+                authorsFetching
+                  ? "opacity-60 transition-opacity"
+                  : "transition-opacity"
+              }
+            >
+              <AuthorsList
+                authors={authorsResult?.items ?? []}
+                query={authorSearch.trim()}
               />
-            </>
+              {(authorsResult?.items?.length ?? 0) > 0 && (
+                <Pagination
+                  page={authorsPage}
+                  totalPages={authorsResult?.total_pages ?? 1}
+                  onPageChange={handleAuthorsPageChange}
+                />
+              )}
+            </div>
           )}
         </>
       ) : (

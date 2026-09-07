@@ -170,7 +170,7 @@ func TestBookRepository_ListAuthorsPaginated_GroupsAndCounts(t *testing.T) {
 		require.NoError(t, copies.Create(&models.Copy{BookID: book.ID, OwnerID: owner.ID, Condition: "good", Status: "available"}))
 	}
 
-	result, err := books.ListAuthorsPaginated(1, 20)
+	result, err := books.ListAuthorsPaginated("", 1, 20)
 	require.NoError(t, err)
 
 	require.Len(t, result.Items, 2)
@@ -198,7 +198,7 @@ func TestBookRepository_ListAuthorsPaginated_ExcludesAuthorsWithNoAvailableCopie
 	noCopy := models.Book{Title: "No Copies Left", Author: "Vanished Author"}
 	require.NoError(t, books.Create(&noCopy))
 
-	result, err := books.ListAuthorsPaginated(1, 20)
+	result, err := books.ListAuthorsPaginated("", 1, 20)
 	require.NoError(t, err)
 
 	var authors []string
@@ -207,6 +207,101 @@ func TestBookRepository_ListAuthorsPaginated_ExcludesAuthorsWithNoAvailableCopie
 	}
 	assert.Contains(t, authors, "Present Author")
 	assert.NotContains(t, authors, "Vanished Author")
+}
+
+func TestBookRepository_ListAuthorsPaginated_ExcludesEmptyAuthor(t *testing.T) {
+	db := openTestDB(t)
+	books := NewBookRepository(db)
+	copies := NewCopyRepository(db)
+
+	owner := models.User{Name: "Owner", Email: "owner@example.com"}
+	require.NoError(t, db.Create(&owner).Error)
+
+	withAuthor := models.Book{Title: "Has An Author", Author: "Present Author"}
+	require.NoError(t, books.Create(&withAuthor))
+	require.NoError(t, copies.Create(&models.Copy{BookID: withAuthor.ID, OwnerID: owner.ID, Condition: "good", Status: "available"}))
+
+	// A book with no author is stored as author = "" (Book.Author is NOT
+	// NULL) — it must not surface as a blank row in the authors index,
+	// since the frontend links every row to /authors/[author] and an empty
+	// segment 404s (see apps/bookshelf/docs/author-view-spec.md's "Empty
+	// case", which assumes this can't occur).
+	noAuthor := models.Book{Title: "No Author", Author: ""}
+	require.NoError(t, books.Create(&noAuthor))
+	require.NoError(t, copies.Create(&models.Copy{BookID: noAuthor.ID, OwnerID: owner.ID, Condition: "good", Status: "available"}))
+
+	result, err := books.ListAuthorsPaginated("", 1, 20)
+	require.NoError(t, err)
+
+	var authors []string
+	for _, a := range result.Items {
+		authors = append(authors, a.Author)
+	}
+	assert.Contains(t, authors, "Present Author")
+	assert.NotContains(t, authors, "")
+	assert.EqualValues(t, 1, result.Total)
+}
+
+func TestBookRepository_ListAuthorsPaginated_FiltersBySearch(t *testing.T) {
+	db := openTestDB(t)
+	books := NewBookRepository(db)
+	copies := NewCopyRepository(db)
+
+	owner := models.User{Name: "Owner", Email: "owner@example.com"}
+	require.NoError(t, db.Create(&owner).Error)
+
+	for _, seed := range []struct{ title, author string }{
+		{"Dune", "Frank Herbert"},
+		{"Sapiens", "Yuval Noah Harari"},
+	} {
+		book := models.Book{Title: seed.title, Author: seed.author}
+		require.NoError(t, books.Create(&book))
+		require.NoError(t, copies.Create(&models.Copy{BookID: book.ID, OwnerID: owner.ID, Condition: "good", Status: "available"}))
+	}
+
+	result, err := books.ListAuthorsPaginated("herbert", 1, 20)
+	require.NoError(t, err)
+
+	require.Len(t, result.Items, 1)
+	assert.Equal(t, "Frank Herbert", result.Items[0].Author)
+	assert.EqualValues(t, 1, result.Total)
+}
+
+func TestBookRepository_ListAuthorsPaginated_SamplesUpToThreeCoversNewestFirst(t *testing.T) {
+	db := openTestDB(t)
+	books := NewBookRepository(db)
+	copies := NewCopyRepository(db)
+
+	owner := models.User{Name: "Owner", Email: "owner@example.com"}
+	require.NoError(t, db.Create(&owner).Error)
+
+	// One author with no cover_url on their only book...
+	noCover := models.Book{Title: "No Cover", Author: "No Cover Author"}
+	require.NoError(t, books.Create(&noCover))
+	require.NoError(t, copies.Create(&models.Copy{BookID: noCover.ID, OwnerID: owner.ID, Condition: "good", Status: "available"}))
+
+	// ...and one with 4 covered books, to confirm the cap and ordering.
+	for i, title := range []string{"Book A", "Book B", "Book C", "Book D"} {
+		book := models.Book{Title: title, Author: "Prolific Author", CoverURL: title + "-cover.jpg"}
+		require.NoError(t, books.Create(&book))
+		require.NoError(t, copies.Create(&models.Copy{BookID: book.ID, OwnerID: owner.ID, Condition: "good", Status: "available"}))
+		// Force distinct, increasing created_at values (Create() may assign
+		// them identically within the same second otherwise).
+		require.NoError(t, db.Model(&models.Book{}).Where("id = ?", book.ID).
+			Update("created_at", time.Now().Add(time.Duration(i)*time.Minute)).Error)
+	}
+
+	result, err := books.ListAuthorsPaginated("", 1, 20)
+	require.NoError(t, err)
+
+	byAuthor := map[string]repository.AuthorSummary{}
+	for _, a := range result.Items {
+		byAuthor[a.Author] = a
+	}
+	assert.Empty(t, byAuthor["No Cover Author"].SampleCoverURLs)
+	covers := byAuthor["Prolific Author"].SampleCoverURLs
+	require.Len(t, covers, 3)
+	assert.Equal(t, []string{"Book D-cover.jpg", "Book C-cover.jpg", "Book B-cover.jpg"}, covers)
 }
 
 func TestBookRepository_Delete(t *testing.T) {

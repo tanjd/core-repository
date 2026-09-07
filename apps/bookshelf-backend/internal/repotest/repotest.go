@@ -1359,7 +1359,7 @@ func (r *BookRepository) ListByAuthorPaginated(_ string, page, pageSize int) (*r
 }
 
 // ListAuthorsPaginated returns an empty page — not exercised by any test using this fake yet.
-func (r *BookRepository) ListAuthorsPaginated(page, pageSize int) (*repository.PaginatedResult[repository.AuthorSummary], error) {
+func (r *BookRepository) ListAuthorsPaginated(_ string, page, pageSize int) (*repository.PaginatedResult[repository.AuthorSummary], error) {
 	return &repository.PaginatedResult[repository.AuthorSummary]{Page: page, PageSize: pageSize}, nil
 }
 

@@ -78,12 +78,14 @@ type listBooksByAuthorInput struct {
 }
 
 type listAuthorsInput struct {
+	Q string `query:"q" doc:"Filter authors whose name contains this (case-insensitive)"`
 	PaginationParams
 }
 
 type authorSummaryResponse struct {
-	Author    string `json:"author"`
-	BookCount int64  `json:"book_count"`
+	Author    string   `json:"author"`
+	BookCount int64    `json:"book_count"`
+	Covers    []string `json:"covers"`
 }
 
 type listAuthorsOutput struct {
@@ -261,7 +263,7 @@ func (h *BookHandler) listAuthors(ctx context.Context, input *listAuthorsInput) 
 	}
 
 	page, pageSize := input.normalize(20)
-	result, err := h.books.ListAuthorsPaginated(page, pageSize)
+	result, err := h.books.ListAuthorsPaginated(input.Q, page, pageSize)
 	if err != nil {
 		return nil, huma.Error500InternalServerError("could not fetch authors")
 	}
@@ -269,7 +271,7 @@ func (h *BookHandler) listAuthors(ctx context.Context, input *listAuthorsInput) 
 	var out listAuthorsOutput
 	out.Body.Items = make([]authorSummaryResponse, len(result.Items))
 	for i, a := range result.Items {
-		out.Body.Items[i] = authorSummaryResponse{Author: a.Author, BookCount: a.BookCount}
+		out.Body.Items[i] = authorSummaryResponse{Author: a.Author, BookCount: a.BookCount, Covers: a.SampleCoverURLs}
 	}
 	out.Body.Total = result.Total
 	out.Body.Page = result.Page
