@@ -21,12 +21,18 @@ const coverMaxBytes = 10 << 20
 // allowedCoverHosts is the set of trusted external image hosts.
 // Only URLs whose host matches one of these suffixes are fetched server-side,
 // preventing SSRF attacks from externally-sourced cover_url values (whether
-// user-submitted or returned by a metadata lookup).
+// user-submitted or returned by a metadata lookup). Must stay in sync with
+// apps/bookshelf/next.config.ts's images.remotePatterns — adding a metadata
+// provider's cover CDN to one but not the other lets a cover render in
+// search (frontend fetches it directly) while cover-backfill silently
+// rejects and never persists it (this is exactly how assets.hardcover.app
+// was missed when Hardcover was added in #115).
 var allowedCoverHosts = []string{
 	"covers.openlibrary.org",
 	"books.google.com",
 	"books.googleusercontent.com",
 	"cover.books.readmill.com",
+	"assets.hardcover.app",
 }
 
 // IsCoverURLAllowed reports whether the given URL is safe to fetch.

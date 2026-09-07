@@ -71,7 +71,7 @@ func TestResolveExternalData_PrefersOLKeyOverGoogleBooksIDOverISBN(t *testing.T)
 	})
 
 	book := models.Book{OLKey: "OL1M", GoogleBooksID: "GB1", ISBN: "123"}
-	data, _ := resolveExternalData(t.Context(), client, book, "test-key")
+	data, _ := resolveExternalData(t.Context(), client, book, "test-key", "")
 
 	if data.coverURL != "https://covers.openlibrary.org/b/id/1-L.jpg" {
 		t.Fatalf("expected OLKey result to win for cover, got %+v", data)
@@ -90,7 +90,7 @@ func TestResolveExternalData_FallsThroughWhenOLKeyEmpty(t *testing.T) {
 	})
 
 	book := models.Book{GoogleBooksID: "GB1"}
-	data, _ := resolveExternalData(t.Context(), client, book, "test-key")
+	data, _ := resolveExternalData(t.Context(), client, book, "test-key", "")
 
 	if data.coverURL != "https://books.google.com/gb1.jpg" || data.description != "from google" {
 		t.Fatalf("expected Google Books result, got %+v", data)
@@ -104,7 +104,7 @@ func TestResolveExternalData_FallsThroughOnEmptySource(t *testing.T) {
 	})
 
 	book := models.Book{OLKey: "OL1M", ISBN: "123"}
-	data, _ := resolveExternalData(t.Context(), client, book, "")
+	data, _ := resolveExternalData(t.Context(), client, book, "", "")
 
 	if data.coverURL != "https://covers.openlibrary.org/b/id/3-L.jpg" {
 		t.Fatalf("expected fallthrough to ISBN result, got %+v", data)
@@ -141,7 +141,7 @@ func TestResolveExternalData_ISBNFallsThroughToGoogleBooksSearch(t *testing.T) {
 	})
 
 	book := models.Book{ISBN: "9781433578113"}
-	data, _ := resolveExternalData(t.Context(), client, book, "test-key")
+	data, _ := resolveExternalData(t.Context(), client, book, "test-key", "")
 
 	if data.coverURL != "https://books.google.com/books/content?id=4qErzgEACAAJ" {
 		t.Fatalf("expected Google Books ISBN-search cover, got %+v", data)
@@ -161,7 +161,7 @@ func TestResolveExternalData_ISBNGoogleBooksSearchSkippedWithoutAPIKey(t *testin
 	})
 
 	book := models.Book{ISBN: "111"}
-	data, _ := resolveExternalData(t.Context(), client, book, "")
+	data, _ := resolveExternalData(t.Context(), client, book, "", "")
 
 	if !data.empty() {
 		t.Fatalf("expected empty result without an API key, got %+v", data)
@@ -171,10 +171,49 @@ func TestResolveExternalData_ISBNGoogleBooksSearchSkippedWithoutAPIKey(t *testin
 	}
 }
 
+func TestResolveExternalData_ISBNFallsThroughToHardcover(t *testing.T) {
+	// Neither Open Library nor Google Books has anything for this ISBN, but
+	// Hardcover does — Hardcover must be tried as the last-resort ISBN
+	// source, and only when a key is configured.
+	client, rt := newStubClient(map[string]string{
+		"bibkeys=ISBN:222":   `{"ISBN:222":{}}`,
+		"volumes?q=isbn:222": `{"items":[]}`,
+		"api.hardcover.app":  `{"data":{"books":[{"description":"from hardcover","image":{"url":"https://assets.hardcover.app/cover.jpg"}}]}}`,
+	})
+
+	book := models.Book{ISBN: "222"}
+	data, attempts := resolveExternalData(t.Context(), client, book, "test-key", "hardcover-key")
+
+	if data.coverURL != "https://assets.hardcover.app/cover.jpg" || data.description != "from hardcover" {
+		t.Fatalf("expected Hardcover result, got %+v (attempts: %v)", data, attempts)
+	}
+	if len(rt.calls) != 3 {
+		t.Fatalf("expected Open Library, Google Books, then Hardcover, got %v", rt.calls)
+	}
+}
+
+func TestResolveExternalData_HardcoverSkippedWithoutAPIKey(t *testing.T) {
+	client, rt := newStubClient(map[string]string{
+		"bibkeys=ISBN:333":   `{"ISBN:333":{}}`,
+		"volumes?q=isbn:333": `{"items":[]}`,
+		"api.hardcover.app":  `{"data":{"books":[{"description":"should not be seen"}]}}`,
+	})
+
+	book := models.Book{ISBN: "333"}
+	data, _ := resolveExternalData(t.Context(), client, book, "test-key", "")
+
+	if !data.empty() {
+		t.Fatalf("expected empty result, got %+v", data)
+	}
+	if len(rt.calls) != 2 {
+		t.Fatalf("expected only Open Library and Google Books, Hardcover should be skipped without a key, got %v", rt.calls)
+	}
+}
+
 func TestResolveExternalData_NoKeysReturnsEmpty(t *testing.T) {
 	client, rt := newStubClient(map[string]string{})
 
-	data, _ := resolveExternalData(t.Context(), client, models.Book{}, "test-key")
+	data, _ := resolveExternalData(t.Context(), client, models.Book{}, "test-key", "")
 
 	if !data.empty() {
 		t.Fatalf("expected empty result for a book with no external keys, got %+v", data)

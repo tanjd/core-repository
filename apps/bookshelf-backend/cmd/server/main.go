@@ -110,8 +110,8 @@ func main() {
 	}
 	backupSvc := services.NewBackupService(sqlDB, adminRepo, cfg.DBPath, coversDir, backupsDir)
 	googleBooksKeyPool := services.NewGoogleBooksKeyPool(cfg.GoogleBooksAPIKeys)
-	descriptionReconciliationSvc := services.NewDescriptionReconciliationService(bookRepo, googleBooksKeyPool)
-	coverBackfillSvc := services.NewCoverBackfillService(bookRepo, coversDir, googleBooksKeyPool)
+	descriptionReconciliationSvc := services.NewDescriptionReconciliationService(bookRepo, googleBooksKeyPool, cfg.HardcoverAPIKey)
+	coverBackfillSvc := services.NewCoverBackfillService(bookRepo, coversDir, googleBooksKeyPool, cfg.HardcoverAPIKey)
 
 	digestSvc := services.NewDigestService(bookRepo, recommendationRepo, userRepo, adminRepo,
 		emailSvc.WithJWTSecret(cfg.JWTSecret), telegramSvc)

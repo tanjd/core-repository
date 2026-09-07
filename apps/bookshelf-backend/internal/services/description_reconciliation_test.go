@@ -23,7 +23,7 @@ func newReconciliationDeps() (*DescriptionReconciliationService, *repotest.BookR
 	books := repotest.NewBookRepository()
 	copies := repotest.NewCopyRepository()
 	books.SetCopies(copies)
-	svc := NewDescriptionReconciliationService(books, NewGoogleBooksKeyPool(nil))
+	svc := NewDescriptionReconciliationService(books, NewGoogleBooksKeyPool(nil), "")
 	stubClient, _ := newStubClient(map[string]string{})
 	svc.client = stubClient
 	return svc, books, copies

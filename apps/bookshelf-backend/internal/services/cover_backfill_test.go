@@ -73,7 +73,7 @@ func TestCoverBackfillService_Run_NoCandidatesIsANoop(t *testing.T) {
 		{ID: 1, CoverURL: "/api/covers/already-set.jpg", ISBN: "111"},
 	}}
 
-	svc := NewCoverBackfillService(repo, t.TempDir(), NewGoogleBooksKeyPool(nil))
+	svc := NewCoverBackfillService(repo, t.TempDir(), NewGoogleBooksKeyPool(nil), "")
 	result := svc.Run(t.Context())
 
 	if result != "backfilled 0 of 0 books" {
