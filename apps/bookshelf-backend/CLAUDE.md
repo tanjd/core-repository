@@ -20,6 +20,15 @@ know more about a book, link out to an existing site (e.g. Google Books) rather 
 surface here. Weigh new feature proposals against this scope — metadata-adjacent features are a
 signal to link out, not to build in.
 
+**Amendment (added when the Hardcover provider was introduced):** adding a metadata _provider_ to
+the `internal/handlers/metadata.go` fan-out is in scope when its purpose is closing identification
+gaps the existing sources miss — an ISBN/title/author/cover a book wouldn't otherwise resolve or
+dedupe correctly against. This is not a reversal of the guardrail above: what stays out of scope is
+mapping _provider-specific fields beyond that identification set_ into `BookMetadataResult`/`Book`
+— community ratings, review counts, "more like this," or any other enrichment a provider's API
+happens to return alongside the useful data must be left unmapped, even from an already-integrated
+provider.
+
 Ratings, reviews, and long-form book criticism remain out of scope under this guardrail — link out
 to Google Books. A simple member "highly recommend this" thumbs-up is in scope, though (see
 `apps/bookshelf/docs/book-recommendations-spec.md`), because it surfaces community reading
@@ -187,6 +196,12 @@ cp -r /data/. /backup/`.
 
 ## Known gaps
 
+- **Feature ideas from similar apps.** `docs/roadmap-feature-ideas.md` records which ideas
+  surfaced while comparing bookshelf against other self-hosted community/library-style apps are
+  worth replicating given this app's physical-lending scope — multi-provider metadata (Hardcover
+  shipped, see `docs/metadata-search.md`), OIDC/SSO, and a staging/review import workflow are in
+  scope; multi-format readers/OPDS/Kobo sync are not (would need a content-storage subsystem this
+  app doesn't have and isn't meant to have).
 - **`Copy` preload gotcha.** `CopyRepository.GetByIDWithAssociations`
   (`internal/repository/gorm/copy_repo.go`) is the only method that preloads both `Book` and
   `Owner` — use it for anything that reads `bookCopy.Book` (e.g. building an email/notification

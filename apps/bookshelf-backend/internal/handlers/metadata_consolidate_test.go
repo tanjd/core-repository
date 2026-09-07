@@ -578,3 +578,40 @@ func TestConsolidateResults_PromoteQueriedEdition_ExactISBNBeatsHigherScoringSib
 
 	assert.Equal(t, "Church Discipline", got[0].Title, "the exact-ISBN edition must win the top slot regardless of completeness score")
 }
+
+func TestSourcePriority_HardcoverRanksBetweenOpenLibraryAndBookBrainz(t *testing.T) {
+	assert.Less(t, sourcePriority("openlibrary"), sourcePriority("hardcover"))
+	assert.Less(t, sourcePriority("hardcover"), sourcePriority("bookbrainz"))
+	assert.Less(t, sourcePriority("google_books"), sourcePriority("hardcover"))
+}
+
+func TestConsolidateResults_HardcoverFieldsFillGapsButDontOutrankOpenLibrary(t *testing.T) {
+	results := []BookMetadataResult{
+		{Source: "openlibrary", Title: "Go in Action", Author: "Kennedy", ISBN: "9781617291769", Publisher: "Manning"},
+		{Source: "hardcover", Title: "Go in Action", Author: "Kennedy", ISBN: "9781617291769", Description: "hardcover description", HardcoverID: "go-in-action"},
+	}
+
+	got := consolidateResults(results)
+
+	require.Len(t, got, 1)
+	assert.Equal(t, "openlibrary", got[0].Source, "higher-priority source wins the merged Source field")
+	assert.Equal(t, "Manning", got[0].Publisher, "Open Library field is kept, not overwritten by Hardcover")
+	assert.Equal(t, "hardcover description", got[0].Description, "Hardcover fills a field Open Library left empty")
+	assert.Equal(t, "go-in-action", got[0].HardcoverID, "Hardcover's own identity field is retained on the merged result")
+}
+
+func TestConsolidateResults_DoesNotCopyHardcoverIDAcrossEditions(t *testing.T) {
+	results := []BookMetadataResult{
+		{Source: "google_books", Title: "Go in Action", Author: "Kennedy", ISBN: "9781617291769", HardcoverID: "hc1"},
+		{Source: "google_books", Title: "Go in Action", Author: "Kennedy", ISBN: "9780134190440"},
+	}
+
+	got := consolidateResults(results)
+
+	require.Len(t, got, 2)
+	for _, r := range got {
+		if r.ISBN == "9780134190440" {
+			assert.Empty(t, r.HardcoverID)
+		}
+	}
+}

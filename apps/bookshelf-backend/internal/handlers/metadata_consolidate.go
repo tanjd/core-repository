@@ -9,15 +9,21 @@ import (
 // nonAlphanumSpace matches any character that is not a lowercase letter, digit, or space.
 var nonAlphanumSpace = regexp.MustCompile(`[^a-z0-9 ]+`)
 
-// sourcePriority returns a numeric priority for a source (lower = higher priority).
+// sourcePriority returns a numeric priority for a source (lower = higher
+// priority). Hardcover ranks after Open Library: its community-maintained
+// descriptions/ratings are strong, but its ISBN/publisher/page-count
+// completeness for arbitrary physical editions is less consistent than
+// Open Library's library-catalog data.
 func sourcePriority(source string) int {
 	switch source {
 	case "google_books":
 		return 0
 	case "openlibrary":
 		return 1
-	default:
+	case "hardcover":
 		return 2
+	default:
+		return 3
 	}
 }
 
@@ -170,7 +176,7 @@ func registerISBN(isbnIndex map[string]int, normISBN string, idx int) {
 }
 
 // mergeGroup merges a group of results (same book, multiple sources) into one.
-// Google Books fields take priority, then Open Library, then BookBrainz.
+// Google Books fields take priority, then Open Library, then Hardcover, then BookBrainz.
 func mergeGroup(group []BookMetadataResult) BookMetadataResult {
 	// Sort by source priority so we pick fields from the best source first
 	sorted := make([]BookMetadataResult, len(group))
@@ -195,6 +201,7 @@ func mergeGroup(group []BookMetadataResult) BookMetadataResult {
 		OLKey:         firstNonEmpty(sorted, func(r BookMetadataResult) string { return r.OLKey }),
 		GoogleBooksID: firstNonEmpty(sorted, func(r BookMetadataResult) string { return r.GoogleBooksID }),
 		BookBrainzID:  firstNonEmpty(sorted, func(r BookMetadataResult) string { return r.BookBrainzID }),
+		HardcoverID:   firstNonEmpty(sorted, func(r BookMetadataResult) string { return r.HardcoverID }),
 	}
 }
 
@@ -245,6 +252,9 @@ func scoreResult(r BookMetadataResult) int {
 		sources++
 	}
 	if r.BookBrainzID != "" {
+		sources++
+	}
+	if r.HardcoverID != "" {
 		sources++
 	}
 	if sources > 1 {
