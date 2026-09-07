@@ -177,18 +177,24 @@ func (r *BookRepository) ListByAuthorPaginated(author string, page, pageSize int
 	}, nil
 }
 
-func (r *BookRepository) ListAuthorsPaginated(page, pageSize int) (*repository.PaginatedResult[repository.AuthorSummary], error) {
-	var total int64
-	if err := r.db.Model(&models.Book{}).
+func (r *BookRepository) buildAuthorsQuery(search string) *gorm.DB {
+	tx := r.db.Model(&models.Book{}).
 		Where("EXISTS (SELECT 1 FROM copies WHERE copies.book_id = books.id)").
-		Distinct("author").
-		Count(&total).Error; err != nil {
+		Where("author != ''")
+	if search != "" {
+		tx = tx.Where("author LIKE ?", "%"+search+"%")
+	}
+	return tx
+}
+
+func (r *BookRepository) ListAuthorsPaginated(search string, page, pageSize int) (*repository.PaginatedResult[repository.AuthorSummary], error) {
+	var total int64
+	if err := r.buildAuthorsQuery(search).Distinct("author").Count(&total).Error; err != nil {
 		return nil, err
 	}
 	var authors []repository.AuthorSummary
 	offset := (page - 1) * pageSize
-	if err := r.db.Model(&models.Book{}).
-		Where("EXISTS (SELECT 1 FROM copies WHERE copies.book_id = books.id)").
+	if err := r.buildAuthorsQuery(search).
 		Select("author, COUNT(*) AS book_count").
 		Group("author").
 		Order("author ASC").
@@ -196,10 +202,58 @@ func (r *BookRepository) ListAuthorsPaginated(page, pageSize int) (*repository.P
 		Scan(&authors).Error; err != nil {
 		return nil, err
 	}
+	if err := r.attachSampleCovers(authors); err != nil {
+		return nil, err
+	}
 	totalPages := int((total + int64(pageSize) - 1) / int64(pageSize))
 	return &repository.PaginatedResult[repository.AuthorSummary]{
 		Items: authors, Total: total, Page: page, PageSize: pageSize, TotalPages: totalPages,
 	}, nil
+}
+
+// attachSampleCovers fills in SampleCoverURLs (up to 3, most recently added
+// first) for each author in place, via one window-function query covering
+// the whole page of authors at once.
+func (r *BookRepository) attachSampleCovers(authors []repository.AuthorSummary) error {
+	if len(authors) == 0 {
+		return nil
+	}
+	names := make([]string, len(authors))
+	for i, a := range authors {
+		names[i] = a.Author
+	}
+	type coverRow struct {
+		Author   string
+		CoverURL string
+	}
+	var rows []coverRow
+	err := r.db.Raw(`
+		SELECT author, cover_url FROM (
+			SELECT books.author, books.cover_url,
+			       ROW_NUMBER() OVER (PARTITION BY books.author ORDER BY books.created_at DESC) AS rn
+			FROM books
+			WHERE books.author IN (?) AND books.cover_url != ''
+			  AND EXISTS (SELECT 1 FROM copies WHERE copies.book_id = books.id)
+		) t WHERE rn <= 3
+	`, names).Scan(&rows).Error
+	if err != nil {
+		return err
+	}
+	byAuthor := make(map[string][]string, len(authors))
+	for _, row := range rows {
+		byAuthor[row.Author] = append(byAuthor[row.Author], row.CoverURL)
+	}
+	for i := range authors {
+		// Default to an empty (non-nil) slice so the JSON response always
+		// carries "sample_cover_urls":[] rather than null for an author with
+		// no covered books — the frontend renders on the plain array shape.
+		covers := byAuthor[authors[i].Author]
+		if covers == nil {
+			covers = []string{}
+		}
+		authors[i].SampleCoverURLs = covers
+	}
+	return nil
 }
 
 func (r *BookRepository) ListRecent(limit int) ([]models.Book, error) {

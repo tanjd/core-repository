@@ -236,6 +236,10 @@ export interface PaginatedResult<T> {
 export interface AuthorSummary {
   author: string;
   book_count: number;
+  // Up to 3 cover URLs (most recently added first), for the Authors list's
+  // cover mini-stack. May be shorter than 3 or empty even when book_count is
+  // higher, if those books have no cover_url.
+  covers: string[];
 }
 
 export interface AuthResponse {

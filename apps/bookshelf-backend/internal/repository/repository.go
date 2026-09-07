@@ -32,6 +32,11 @@ type PaginatedResult[T any] struct {
 type AuthorSummary struct {
 	Author    string `json:"author"`
 	BookCount int64  `json:"book_count"`
+	// SampleCoverURLs holds up to 3 cover URLs (most recently added first)
+	// for the author's books, for the Authors list's cover mini-stack. Books
+	// with no cover_url are excluded, so this can be shorter than 3 or empty
+	// even when BookCount is higher.
+	SampleCoverURLs []string `json:"sample_cover_urls"`
 }
 
 // UserRepository handles persistence for User records.
@@ -93,8 +98,10 @@ type BookRepository interface {
 	// ListAuthorsPaginated returns every distinct Author value in the
 	// catalog, alphabetically, with a per-author book count. Grouping is
 	// exact-string, same as ListByAuthorPaginated — see the spec's "Authors
-	// index page" section.
-	ListAuthorsPaginated(page, pageSize int) (*PaginatedResult[AuthorSummary], error)
+	// index page" section. search, when non-empty, filters to authors whose
+	// name contains it (case-insensitive substring, same convention as
+	// ListPaginated's title/author search).
+	ListAuthorsPaginated(search string, page, pageSize int) (*PaginatedResult[AuthorSummary], error)
 	ListRecent(limit int) ([]models.Book, error)
 	// ListCreatedBetween returns books whose created_at is in [from, to),
 	// ordered newest first, up to limit. Used by the monthly digest to
