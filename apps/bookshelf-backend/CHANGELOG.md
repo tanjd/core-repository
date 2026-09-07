@@ -1,3 +1,13 @@
+## 0.29.1 (2026-09-07)
+
+### 🩹 Fixes
+
+- **bookshelf,bookshelf-backend:** fix catalog pagination and harden API caching ([#117](https://github.com/tanjd/core-repository/pull/117))
+
+### ❤️ Thank You
+
+- Jeddy Tan @tanjd
+
 ## 0.29.0 (2026-09-07)
 
 ### 🚀 Features

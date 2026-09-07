@@ -1,3 +1,17 @@
+## 0.40.3 (2026-09-07)
+
+### 🚀 Features
+
+- **bookshelf-backend:** include Hardcover in cover/description backfill ([#116](https://github.com/tanjd/core-repository/pull/116), [#115](https://github.com/tanjd/core-repository/issues/115))
+
+### 🩹 Fixes
+
+- **bookshelf,bookshelf-backend:** fix catalog pagination and harden API caching ([#117](https://github.com/tanjd/core-repository/pull/117))
+
+### ❤️ Thank You
+
+- Jeddy Tan @tanjd
+
 ## 0.40.2 (2026-09-07)
 
 ### 🚀 Features
