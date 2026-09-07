@@ -243,6 +243,9 @@ func scoreResult(r BookMetadataResult) int {
 	if r.PageCount > 0 {
 		score++
 	}
+	if r.PublishedDate != "" {
+		score++
+	}
 	// Bonus for multi-source confidence
 	sources := 0
 	if r.OLKey != "" {

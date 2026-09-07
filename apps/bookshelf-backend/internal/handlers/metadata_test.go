@@ -208,12 +208,21 @@ func TestFetchHardcoverByISBN_NoEditionsStillReturnsBookLevelResult(t *testing.T
 }
 
 func TestFetchHardcoverBySearch_MapsSearchDocuments(t *testing.T) {
-	body := `{"data":{"search":{"results":{"hits":[{"document":{"slug":"go-in-action","title":"Go in Action",` +
+	searchBody := `{"data":{"search":{"results":{"hits":[{"document":{"slug":"go-in-action","title":"Go in Action",` +
 		`"description":"desc","contributions":[{"author":{"name":"Kennedy"}}],` +
 		`"isbns":["1617291769","9781617291769"],"pages":300,"release_date":"2015-11-01",` +
 		`"image":{"url":"https://covers.example/x.jpg"}}}]}}}}`
-	withFakeMetadataClient(t, func(_ *http.Request) (*http.Response, error) {
-		return jsonResponse(http.StatusOK, body), nil
+	editionsBody := `{"data":{"books":[{"editions":[{"publisher":{"name":"Manning"},"isbn_13":"9781617291769","language":{"code2":"en"}}]}]}}`
+
+	var editionsReqBody string
+	withFakeMetadataClient(t, func(req *http.Request) (*http.Response, error) {
+		body, err := io.ReadAll(req.Body)
+		require.NoError(t, err)
+		if strings.Contains(string(body), "BookEditionsBySlug") {
+			editionsReqBody = string(body)
+			return jsonResponse(http.StatusOK, editionsBody), nil
+		}
+		return jsonResponse(http.StatusOK, searchBody), nil
 	})
 
 	results, err := fetchHardcoverBySearch(context.Background(), "go in action kennedy", "test-key")
@@ -226,6 +235,44 @@ func TestFetchHardcoverBySearch_MapsSearchDocuments(t *testing.T) {
 	assert.Equal(t, "Kennedy", r.Author)
 	assert.Equal(t, "9781617291769", r.ISBN, "prefers the ISBN-13-shaped entry")
 	assert.Equal(t, "2015-11-01", r.PublishedDate)
+	assert.Equal(t, "Manning", r.Publisher, "backfilled from the top-hit editions follow-up")
+	assert.Equal(t, "en", r.Language, "backfilled from the top-hit editions follow-up")
+	assert.Contains(t, editionsReqBody, "go-in-action", "editions lookup is scoped to the top hit's slug")
+}
+
+func TestFetchHardcoverBySearch_EditionsBackfillFailureDoesNotFailSearch(t *testing.T) {
+	searchBody := `{"data":{"search":{"results":{"hits":[{"document":{"slug":"go-in-action","title":"Go in Action",` +
+		`"isbns":["9781617291769"]}}]}}}}`
+
+	withFakeMetadataClient(t, func(req *http.Request) (*http.Response, error) {
+		body, err := io.ReadAll(req.Body)
+		require.NoError(t, err)
+		if strings.Contains(string(body), "BookEditionsBySlug") {
+			return jsonResponse(http.StatusInternalServerError, `{}`), nil
+		}
+		return jsonResponse(http.StatusOK, searchBody), nil
+	})
+
+	results, err := fetchHardcoverBySearch(context.Background(), "go in action", "test-key")
+	require.NoError(t, err)
+	require.Len(t, results, 1)
+	assert.Equal(t, "Go in Action", results[0].Title)
+	assert.Empty(t, results[0].Publisher, "editions backfill failure is swallowed, not a hard search failure")
+}
+
+func TestFetchHardcoverBySearch_NoHitsSkipsEditionsBackfill(t *testing.T) {
+	body := `{"data":{"search":{"results":{"hits":[]}}}}`
+
+	calls := 0
+	withFakeMetadataClient(t, func(_ *http.Request) (*http.Response, error) {
+		calls++
+		return jsonResponse(http.StatusOK, body), nil
+	})
+
+	results, err := fetchHardcoverBySearch(context.Background(), "no such book", "test-key")
+	require.NoError(t, err)
+	assert.Empty(t, results)
+	assert.Equal(t, 1, calls, "no top hit to enrich, so no second call is made")
 }
 
 func TestFetchHardcover_NonOKStatusIsAnError(t *testing.T) {

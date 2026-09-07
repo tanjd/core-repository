@@ -1,6 +1,9 @@
 package handlers
 
 import (
+	"context"
+	"io"
+	"net/http"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -368,4 +371,50 @@ func TestUpdateSettings(t *testing.T) {
 	require.Len(t, out.Body, 1)
 	assert.Equal(t, "max_active_loans", out.Body[0].Key)
 	assert.Equal(t, "3", out.Body[0].Value)
+}
+
+func findMetadataProbe(t *testing.T, probes []metadataProbe, name string) metadataProbe {
+	t.Helper()
+	for _, p := range probes {
+		if p.name == name {
+			return p
+		}
+	}
+	t.Fatalf("no metadata probe named %q", name)
+	return metadataProbe{}
+}
+
+func TestMetadataProbes_HardcoverDisabledWithoutServerKey(t *testing.T) {
+	admin := repotest.NewAdminRepository()
+	copies := repotest.NewCopyRepository()
+	loans := repotest.NewLoanRequestRepository(copies, repotest.NewNotificationRepository(), repotest.NewUserRepository())
+	email := services.NewEmailService("", "", "", "", "", "", "", "http://localhost:3000")
+	registration := services.NewRegistrationWorkflow(admin, repotest.NewNotificationRepository(), repotest.NewBookRepository(), email, repotest.NewTelegramNotifier())
+	h := NewAdminHandler(admin, copies, loans, services.NewGoogleBooksKeyPool(nil), registration, nil, nil, "")
+
+	p := findMetadataProbe(t, h.metadataProbes(), "hardcover")
+	assert.False(t, p.enabled)
+}
+
+func TestMetadataProbes_HardcoverEnabledWithServerKeySendsBearerAuth(t *testing.T) {
+	admin := repotest.NewAdminRepository()
+	copies := repotest.NewCopyRepository()
+	loans := repotest.NewLoanRequestRepository(copies, repotest.NewNotificationRepository(), repotest.NewUserRepository())
+	email := services.NewEmailService("", "", "", "", "", "", "", "http://localhost:3000")
+	registration := services.NewRegistrationWorkflow(admin, repotest.NewNotificationRepository(), repotest.NewBookRepository(), email, repotest.NewTelegramNotifier())
+	h := NewAdminHandler(admin, copies, loans, services.NewGoogleBooksKeyPool(nil), registration, nil, nil, "test-key")
+
+	p := findMetadataProbe(t, h.metadataProbes(), "hardcover")
+	require.True(t, p.enabled)
+
+	req, err := p.newRequest(context.Background())
+	require.NoError(t, err)
+	assert.Equal(t, http.MethodPost, req.Method)
+	assert.Equal(t, hardcoverGraphQLEndpoint, req.URL.String())
+	assert.Equal(t, "Bearer test-key", req.Header.Get("Authorization"))
+	assert.Equal(t, "application/json", req.Header.Get("Content-Type"))
+
+	body, err := io.ReadAll(req.Body)
+	require.NoError(t, err)
+	assert.Contains(t, string(body), "__typename", "probe reuses the minimal validateHardcoverAPIKey-style query")
 }

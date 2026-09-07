@@ -103,7 +103,16 @@ Google Books, though — `User.HardcoverAPIKey` (encrypted, `Profile → Integra
   cover, publisher, language, page count).
 - **Everything else** (`fetchHardcoverBySearch`): Hardcover's Typesense-backed `search` endpoint,
   which returns book-level (not edition-level) documents — no publisher/language/page-count-per-edition,
-  just whatever the search index cached.
+  just whatever the search index cached. Both Publisher and Language are real, used fields (the
+  metadata-search picker card and the persisted `Book` row both show/store them, and Language also
+  gates `enrichAcrossEditions`'s description-donor matching), so `fetchHardcoverBySearch` makes one
+  bounded follow-up `hardcoverEditionsBySlugQuery` call for the **top hit only** (never all `limit`
+  hits) to backfill Publisher/Language/ISBN when the search document left them empty
+  (`enrichTopHitWithEditionFields`). Backfill-only, never overwrites; a failure on this follow-up
+  call is logged and swallowed rather than failing the search — the bare search hit is still
+  usable without it. This doubles Hardcover's per-search call count for a free-text query (still
+  serialized through `hardcoverRateLimiter`), a deliberate latency-for-completeness tradeoff scoped
+  to one extra call rather than one per hit.
 
 `hardcoverRateLimiter` (a `minIntervalLimiter` spacing calls to 1/second) guards against bursting
 past the per-minute cap, since `fetchAllSources` already runs every provider concurrently per

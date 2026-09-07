@@ -665,6 +665,26 @@ query BookSearch($q: String!, $limit: Int!) {
 }
 `
 
+// hardcoverEditionsBySlugQuery backfills Publisher/Language/ISBN for the top
+// hardcoverSearchBooksQuery hit — the Typesense-backed search index only
+// carries book-level fields (no publisher/language), so without this
+// follow-up a free-text Hardcover result is permanently missing fields an
+// ISBN-shaped query would have gotten for the same book. Scoped to one
+// lookup per search (see fetchHardcoverBySearch) to bound the extra
+// rate-limited call this costs.
+const hardcoverEditionsBySlugQuery = `
+query BookEditionsBySlug($slug: String!) {
+  books(where: { slug: { _eq: $slug } }) {
+    editions {
+      publisher { name }
+      isbn_10
+      isbn_13
+      language { code2 }
+    }
+  }
+}
+`
+
 // hardcoverRateLimiter spaces Hardcover requests to stay within its free-tier
 // 60 req/min cap — this handler already runs provider fetches concurrently
 // per search, so without this a single user search (plus expandSiblingEditions'
@@ -765,6 +785,14 @@ type hardcoverSearchResponse struct {
 				} `json:"hits"`
 			} `json:"results"`
 		} `json:"search"`
+	} `json:"data"`
+}
+
+type hardcoverEditionsBySlugResponse struct {
+	Data struct {
+		Books []struct {
+			Editions []hardcoverEdition `json:"editions"`
+		} `json:"books"`
 	} `json:"data"`
 }
 
@@ -874,8 +902,62 @@ func fetchHardcoverBySearch(ctx context.Context, q, apiKey string) ([]BookMetada
 	for _, hit := range hits {
 		results = append(results, hardcoverResultFromSearchDocument(hit.Document))
 	}
+	if len(results) > 0 {
+		enrichTopHitWithEditionFields(ctx, &results[0], apiKey)
+	}
 	zerolog.Ctx(ctx).Debug().Str("query", q).Int("results", len(results)).Msg("Hardcover search complete")
 	return results, nil
+}
+
+// enrichTopHitWithEditionFields backfills Publisher/Language/ISBN on r (the
+// top hardcoverSearchBooksQuery hit) from a follow-up editions-by-slug query
+// — see hardcoverEditionsBySlugQuery's doc comment for why this is needed at
+// all. Best-effort: a failure here is logged and swallowed rather than
+// failing the whole search, since the search hit itself is still usable
+// without it. Backfill-only — never overwrites a field the search document
+// already populated.
+func enrichTopHitWithEditionFields(ctx context.Context, r *BookMetadataResult, apiKey string) {
+	if r.HardcoverID == "" || (r.Publisher != "" && r.Language != "" && r.ISBN != "") {
+		return
+	}
+	hardcoverRateLimiter.wait(ctx)
+	var resp hardcoverEditionsBySlugResponse
+	if err := hardcoverExecute(ctx, apiKey, hardcoverEditionsBySlugQuery, map[string]any{"slug": r.HardcoverID}, &resp); err != nil {
+		zerolog.Ctx(ctx).Warn().Err(err).Str("slug", r.HardcoverID).Msg("hardcover top-hit edition backfill failed")
+		return
+	}
+	if len(resp.Data.Books) == 0 || len(resp.Data.Books[0].Editions) == 0 {
+		return
+	}
+	edition := bestHardcoverEdition(resp.Data.Books[0].Editions)
+	if r.Publisher == "" {
+		r.Publisher = edition.Publisher.Name
+	}
+	if r.Language == "" {
+		r.Language = edition.Language.Code2
+	}
+	if r.ISBN == "" {
+		r.ISBN = preferredEditionISBN(edition)
+	}
+}
+
+// bestHardcoverEdition returns the first edition carrying an ISBN-13, else
+// the first edition overall — same preference as preferredHardcoverISBN.
+func bestHardcoverEdition(editions []hardcoverEdition) hardcoverEdition {
+	for _, e := range editions {
+		if e.ISBN13 != "" {
+			return e
+		}
+	}
+	return editions[0]
+}
+
+// preferredEditionISBN returns e's ISBN-13 if set, else its ISBN-10.
+func preferredEditionISBN(e hardcoverEdition) string {
+	if e.ISBN13 != "" {
+		return e.ISBN13
+	}
+	return e.ISBN10
 }
 
 // hardcoverAuthorFromContributors returns the first contributor whose role is
@@ -916,11 +998,7 @@ func hardcoverResultFromBook(book hardcoverBook, edition hardcoverEdition) BookM
 		PageCount:   book.Pages,
 		Publisher:   edition.Publisher.Name,
 		Language:    edition.Language.Code2,
-	}
-	if edition.ISBN13 != "" {
-		r.ISBN = edition.ISBN13
-	} else {
-		r.ISBN = edition.ISBN10
+		ISBN:        preferredEditionISBN(edition),
 	}
 	if book.Image.URL != "" {
 		r.CoverURL = book.Image.URL

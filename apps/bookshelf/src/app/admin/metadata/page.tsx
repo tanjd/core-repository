@@ -17,7 +17,7 @@ const PROVIDER_META: Record<string, { label: string; description: string }> = {
   google_books: {
     label: "Google Books",
     description:
-      "Google's book database. Requires GOOGLE_BOOKS_API_KEY. Provides rich metadata including publisher, page count, and language.",
+      "Google's book database. Requires GOOGLE_BOOKS_API_KEY, or a member's own key set in Profile → Integrations. Provides rich metadata including publisher, page count, and language.",
   },
   bookbrainz: {
     label: "BookBrainz",
@@ -27,7 +27,7 @@ const PROVIDER_META: Record<string, { label: string; description: string }> = {
   hardcover: {
     label: "Hardcover",
     description:
-      "Hardcover's GraphQL book database. Requires HARDCOVER_API_KEY. Provides exact ISBN edition matches plus free-text search.",
+      "Hardcover's GraphQL book database. Requires HARDCOVER_API_KEY, or a member's own key set in Profile → Integrations. Provides exact ISBN edition matches plus free-text search. This check reflects only the server-wide key — reachable here can still be false for a member relying solely on their own key, and vice versa.",
   },
 };
 
