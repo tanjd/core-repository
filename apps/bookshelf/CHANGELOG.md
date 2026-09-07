@@ -1,3 +1,13 @@
+## 0.42.0 (2026-09-07)
+
+### 🚀 Features
+
+- **bookshelf,bookshelf-backend:** add cover thumbnails, search, and toggle icons to the Authors view ([#119](https://github.com/tanjd/core-repository/pull/119))
+
+### ❤️ Thank You
+
+- Jeddy Tan @tanjd
+
 ## 0.41.0 (2026-09-07)
 
 ### 🚀 Features
