@@ -67,6 +67,11 @@ export function ProfileForm() {
   const [savingGbKey, setSavingGbKey] = useState(false);
   const [testingGbKey, setTestingGbKey] = useState(false);
 
+  // Hardcover API key
+  const [hcKey, setHcKey] = useState("");
+  const [savingHcKey, setSavingHcKey] = useState(false);
+  const [testingHcKey, setTestingHcKey] = useState(false);
+
   // OTP
   const [otpSent, setOtpSent] = useState(false);
   const [otpCode, setOtpCode] = useState("");
@@ -343,6 +348,56 @@ export function ProfileForm() {
       );
     } finally {
       setSavingGbKey(false);
+    }
+  }
+
+  async function handleTestHCKey() {
+    setTestingHcKey(true);
+    try {
+      const result = await api.testHardcoverKey(hcKey.trim() || undefined);
+      if (result.ok) {
+        toast.success("API key is valid");
+      } else {
+        toast.error(result.message ?? "API key is invalid");
+      }
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Test failed");
+    } finally {
+      setTestingHcKey(false);
+    }
+  }
+
+  async function handleSaveHCKey(e: FormEvent) {
+    e.preventDefault();
+    setSavingHcKey(true);
+    try {
+      const updated = await api.updateMe({
+        hardcover_api_key: hcKey.trim(),
+      });
+      setUser(updated);
+      setHcKey("");
+      toast.success(hcKey.trim() ? "API key saved" : "API key removed");
+    } catch (err) {
+      toast.error(
+        err instanceof Error ? err.message : "Failed to save API key",
+      );
+    } finally {
+      setSavingHcKey(false);
+    }
+  }
+
+  async function handleRemoveHCKey() {
+    setSavingHcKey(true);
+    try {
+      const updated = await api.updateMe({ hardcover_api_key: "" });
+      setUser(updated);
+      toast.success("API key removed");
+    } catch (err) {
+      toast.error(
+        err instanceof Error ? err.message : "Failed to remove API key",
+      );
+    } finally {
+      setSavingHcKey(false);
     }
   }
 
@@ -1163,6 +1218,82 @@ export function ProfileForm() {
                         variant="outline"
                         disabled={savingGbKey}
                         onClick={handleRemoveGBKey}
+                      >
+                        Remove
+                      </Button>
+                    )}
+                  </div>
+                </form>
+              </div>
+
+              <Separator />
+
+              {/* Hardcover API key */}
+              <div className="flex flex-col gap-3">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm font-medium">Hardcover API Key</p>
+                    <p className="text-xs text-muted-foreground mt-0.5">
+                      Use your personal quota during book searches. The key is
+                      stored encrypted and never exposed.
+                    </p>
+                    <Link
+                      href="/about#hardcover-api-key"
+                      className="text-xs text-primary underline-offset-2 hover:underline mt-0.5 inline-block"
+                    >
+                      How to get a Hardcover API key →
+                    </Link>
+                  </div>
+                  {user.hardcover_key_configured ? (
+                    <Badge variant="success" className="shrink-0">
+                      Configured
+                    </Badge>
+                  ) : (
+                    <Badge variant="secondary" className="shrink-0">
+                      Not configured
+                    </Badge>
+                  )}
+                </div>
+                <form
+                  onSubmit={handleSaveHCKey}
+                  className="flex flex-col gap-3"
+                >
+                  <PasswordInput
+                    id="hc-api-key"
+                    autoComplete="off"
+                    value={hcKey}
+                    onChange={(e) => setHcKey(e.target.value)}
+                    placeholder={
+                      user.hardcover_key_configured
+                        ? "Enter new key to replace"
+                        : "Paste your API key"
+                    }
+                  />
+                  <div className="flex gap-2">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      disabled={
+                        testingHcKey ||
+                        savingHcKey ||
+                        (!hcKey.trim() && !user.hardcover_key_configured)
+                      }
+                      onClick={handleTestHCKey}
+                    >
+                      {testingHcKey ? "Testing…" : "Test"}
+                    </Button>
+                    <Button
+                      type="submit"
+                      disabled={savingHcKey || !hcKey.trim()}
+                    >
+                      {savingHcKey ? "Saving…" : "Save key"}
+                    </Button>
+                    {user.hardcover_key_configured && (
+                      <Button
+                        type="button"
+                        variant="outline"
+                        disabled={savingHcKey}
+                        onClick={handleRemoveHCKey}
                       >
                         Remove
                       </Button>

@@ -23,7 +23,7 @@ func newAdminHandlerWithCopiesAndLoans() (*AdminHandler, *repotest.AdminReposito
 	loans := repotest.NewLoanRequestRepository(copies, repotest.NewNotificationRepository(), repotest.NewUserRepository())
 	email := services.NewEmailService("", "", "", "", "", "", "", "http://localhost:3000")
 	registration := services.NewRegistrationWorkflow(admin, repotest.NewNotificationRepository(), repotest.NewBookRepository(), email, repotest.NewTelegramNotifier())
-	return NewAdminHandler(admin, copies, loans, services.NewGoogleBooksKeyPool(nil), registration, nil, nil), admin, copies, loans
+	return NewAdminHandler(admin, copies, loans, services.NewGoogleBooksKeyPool(nil), registration, nil, nil, ""), admin, copies, loans
 }
 
 func TestAdminHandler_RequiresAdmin(t *testing.T) {
@@ -155,7 +155,7 @@ func TestUpdateUser_SuspensionRevokesInviteCode(t *testing.T) {
 	email := services.NewEmailService("", "", "", "", "", "", "", "http://localhost:3000")
 	registration := services.NewRegistrationWorkflow(admin, repotest.NewNotificationRepository(), repotest.NewBookRepository(), email, repotest.NewTelegramNotifier())
 	inviteCodes := repotest.NewInviteCodeRepository(repotest.NewUserRepository())
-	h := NewAdminHandler(admin, copies, loans, services.NewGoogleBooksKeyPool(nil), registration, nil, inviteCodes)
+	h := NewAdminHandler(admin, copies, loans, services.NewGoogleBooksKeyPool(nil), registration, nil, inviteCodes, "")
 
 	require.NoError(t, admin.SaveUser(&models.User{ID: 1, Role: "admin"}))
 	require.NoError(t, admin.SaveUser(&models.User{ID: 2, Role: "user"}))
@@ -208,7 +208,7 @@ func TestUpdateUser_ApprovalNotifiesUser(t *testing.T) {
 	notifs := repotest.NewNotificationRepository()
 	email := services.NewEmailService("", "", "", "", "", "", "", "http://localhost:3000")
 	registration := services.NewRegistrationWorkflow(admin, notifs, repotest.NewBookRepository(), email, repotest.NewTelegramNotifier())
-	h := NewAdminHandler(admin, copies, loans, services.NewGoogleBooksKeyPool(nil), registration, nil, nil)
+	h := NewAdminHandler(admin, copies, loans, services.NewGoogleBooksKeyPool(nil), registration, nil, nil, "")
 
 	require.NoError(t, admin.SaveUser(&models.User{ID: 1, Role: "admin"}))
 	require.NoError(t, admin.SaveUser(&models.User{ID: 2, Role: "user", PendingApproval: true}))
@@ -315,7 +315,7 @@ func TestDeleteUser(t *testing.T) {
 		email := services.NewEmailService("", "", "", "", "", "", "", "http://localhost:3000")
 		registration := services.NewRegistrationWorkflow(admin, repotest.NewNotificationRepository(), repotest.NewBookRepository(), email, repotest.NewTelegramNotifier())
 		recommendations := repotest.NewRecommendationRepository(repotest.NewUserRepository())
-		h := NewAdminHandler(admin, copies, loans, services.NewGoogleBooksKeyPool(nil), registration, recommendations, nil)
+		h := NewAdminHandler(admin, copies, loans, services.NewGoogleBooksKeyPool(nil), registration, recommendations, nil, "")
 
 		require.NoError(t, admin.SaveUser(&models.User{ID: 1, Role: "admin"}))
 		require.NoError(t, admin.SaveUser(&models.User{ID: 2, Role: "user"}))
@@ -335,7 +335,7 @@ func TestDeleteUser(t *testing.T) {
 		email := services.NewEmailService("", "", "", "", "", "", "", "http://localhost:3000")
 		registration := services.NewRegistrationWorkflow(admin, repotest.NewNotificationRepository(), repotest.NewBookRepository(), email, repotest.NewTelegramNotifier())
 		inviteCodes := repotest.NewInviteCodeRepository(repotest.NewUserRepository())
-		h := NewAdminHandler(admin, copies, loans, services.NewGoogleBooksKeyPool(nil), registration, nil, inviteCodes)
+		h := NewAdminHandler(admin, copies, loans, services.NewGoogleBooksKeyPool(nil), registration, nil, inviteCodes, "")
 
 		require.NoError(t, admin.SaveUser(&models.User{ID: 1, Role: "admin"}))
 		require.NoError(t, admin.SaveUser(&models.User{ID: 2, Role: "user"}))

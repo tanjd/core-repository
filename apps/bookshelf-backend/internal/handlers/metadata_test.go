@@ -11,6 +11,9 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/tanjd/core-repository/apps/bookshelf-backend/internal/models"
+	"github.com/tanjd/core-repository/apps/bookshelf-backend/internal/repotest"
 )
 
 // fakeDoer is an httpDoer test double — see metadataClient's seam comment in
@@ -241,6 +244,42 @@ func TestFetchHardcover_GraphQLErrorsOnHTTP200IsAnError(t *testing.T) {
 
 	_, err := fetchHardcover(context.Background(), "some title", "test-key")
 	assert.ErrorContains(t, err, "field 'isbn' is required")
+}
+
+func TestResolveHardcoverAPIKey_PrefersDecryptedUserKeyOverServerFallback(t *testing.T) {
+	const secret = "test-encryption-secret-32bytes!"
+	encrypted, err := encryptField("user-hardcover-key", secret)
+	require.NoError(t, err)
+
+	users := repotest.NewUserRepository()
+	require.NoError(t, users.Save(&models.User{ID: 1, HardcoverAPIKey: encrypted}))
+
+	h := &MetadataHandler{hardcoverAPIKey: "server-key", encryptionSecret: secret, users: users}
+	ctx := fakeAuthedCtx(t, 1, "user")
+
+	assert.Equal(t, "user-hardcover-key", h.resolveHardcoverAPIKey(ctx))
+}
+
+func TestResolveHardcoverAPIKey_FallsBackToServerKey(t *testing.T) {
+	users := repotest.NewUserRepository()
+	require.NoError(t, users.Save(&models.User{ID: 1}))
+
+	h := &MetadataHandler{hardcoverAPIKey: "server-key", encryptionSecret: "test-encryption-secret-32bytes!", users: users}
+
+	t.Run("no authenticated user", func(t *testing.T) {
+		assert.Equal(t, "server-key", h.resolveHardcoverAPIKey(context.Background()))
+	})
+
+	t.Run("user has no stored key", func(t *testing.T) {
+		assert.Equal(t, "server-key", h.resolveHardcoverAPIKey(fakeAuthedCtx(t, 1, "user")))
+	})
+
+	t.Run("stored key undecryptable with the current secret", func(t *testing.T) {
+		encrypted, err := encryptField("user-hardcover-key", "a-different-secret-entirely!!!!")
+		require.NoError(t, err)
+		require.NoError(t, users.Save(&models.User{ID: 1, HardcoverAPIKey: encrypted}))
+		assert.Equal(t, "server-key", h.resolveHardcoverAPIKey(fakeAuthedCtx(t, 1, "user")))
+	})
 }
 
 func TestHardcoverAuthorFromContributors(t *testing.T) {

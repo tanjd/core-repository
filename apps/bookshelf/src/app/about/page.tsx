@@ -174,6 +174,46 @@ const faqs = [
     ),
   },
   {
+    id: "hardcover-api-key-purpose",
+    q: "What is the Hardcover API key for?",
+    a: (
+      <>
+        <p>
+          Hardcover is another additional metadata source, alongside Google
+          Books — it&apos;s only included when an API key is available. By
+          default the app uses a shared key (if the self-hoster configured one),
+          but you can supply your own in Profile → Integrations to use your
+          personal quota instead.
+        </p>
+      </>
+    ),
+  },
+  {
+    id: "hardcover-api-key",
+    q: "How do I get a Hardcover API key?",
+    a: (
+      <ol className="list-decimal list-inside space-y-1.5">
+        <li>
+          Go to{" "}
+          <a
+            href="https://hardcover.app/account/api"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-primary underline-offset-2 hover:underline"
+          >
+            hardcover.app/account/api
+          </a>{" "}
+          and sign in (or create a free account).
+        </li>
+        <li>Copy the personal access token shown on that page.</li>
+        <li>
+          Paste it into{" "}
+          <strong>Profile → Integrations → Hardcover API Key</strong>.
+        </li>
+      </ol>
+    ),
+  },
+  {
     id: "telegram-notifications",
     q: "Can I get notifications on Telegram?",
     a: (

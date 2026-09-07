@@ -24,6 +24,11 @@ const PROVIDER_META: Record<string, { label: string; description: string }> = {
     description:
       "MusicBrainz's open book database. Always enabled. No cover images.",
   },
+  hardcover: {
+    label: "Hardcover",
+    description:
+      "Hardcover's GraphQL book database. Requires HARDCOVER_API_KEY. Provides exact ISBN edition matches plus free-text search.",
+  },
 };
 
 export default function AdminMetadataPage() {

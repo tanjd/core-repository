@@ -136,6 +136,7 @@ func (h *MetadataHandler) searchMetadata(ctx context.Context, input *searchMetad
 	}
 
 	apiKey := h.resolveGoogleBooksAPIKey(ctx)
+	hardcoverAPIKey := h.resolveHardcoverAPIKey(ctx)
 
 	// Cache key incorporates whether Google Books/Hardcover are active so
 	// that users with and without those keys do not share cache entries.
@@ -143,7 +144,7 @@ func (h *MetadataHandler) searchMetadata(ctx context.Context, input *searchMetad
 	if apiKey != "" {
 		cacheKey += "|gbooks"
 	}
-	if h.hardcoverAPIKey != "" {
+	if hardcoverAPIKey != "" {
 		cacheKey += "|hardcover"
 	}
 	if cached, ok := h.cache.Get(cacheKey); ok {
@@ -152,9 +153,9 @@ func (h *MetadataHandler) searchMetadata(ctx context.Context, input *searchMetad
 	}
 
 	queriedISBN := normalizeISBN(q)
-	results, hadError := fetchAllSources(ctx, q, apiKey, h.googleBooksKeyPool, h.hardcoverAPIKey)
+	results, hadError := fetchAllSources(ctx, q, apiKey, h.googleBooksKeyPool, hardcoverAPIKey)
 	if queriedISBN != "" {
-		siblingResults, siblingHadError := expandSiblingEditions(ctx, results, apiKey, h.googleBooksKeyPool, h.hardcoverAPIKey)
+		siblingResults, siblingHadError := expandSiblingEditions(ctx, results, apiKey, h.googleBooksKeyPool, hardcoverAPIKey)
 		results = append(results, siblingResults...)
 		hadError = hadError || siblingHadError
 	}
@@ -184,6 +185,28 @@ func (h *MetadataHandler) resolveGoogleBooksAPIKey(ctx context.Context) string {
 	decrypted, err := decryptField(user.GoogleBooksAPIKey, h.encryptionSecret)
 	if err != nil {
 		zerolog.Ctx(ctx).Warn().Err(err).Uint("user_id", userID).Msg("could not decrypt user google books api key")
+		return apiKey
+	}
+	return decrypted
+}
+
+// resolveHardcoverAPIKey prefers the authenticated user's stored key,
+// falling back to the server-wide key when unauthenticated, unset, or
+// undecryptable — same contract as resolveGoogleBooksAPIKey.
+func (h *MetadataHandler) resolveHardcoverAPIKey(ctx context.Context) string {
+	apiKey := h.hardcoverAPIKey
+
+	userID, err := middleware.GetRequiredUserID(ctx)
+	if err != nil {
+		return apiKey
+	}
+	user, err := h.users.FindByID(userID)
+	if err != nil || user.HardcoverAPIKey == "" {
+		return apiKey
+	}
+	decrypted, err := decryptField(user.HardcoverAPIKey, h.encryptionSecret)
+	if err != nil {
+		zerolog.Ctx(ctx).Warn().Err(err).Uint("user_id", userID).Msg("could not decrypt user hardcover api key")
 		return apiKey
 	}
 	return decrypted
@@ -792,6 +815,18 @@ func hardcoverExecute(ctx context.Context, apiKey, query string, variables map[s
 	}
 
 	return json.Unmarshal(body, out)
+}
+
+// validateHardcoverAPIKey makes a minimal test call to verify the key is
+// accepted by Hardcover. Reuses hardcoverExecute so a rejected key surfaces
+// the same status-code/GraphQL-error handling as an actual metadata search.
+func validateHardcoverAPIKey(ctx context.Context, key string) error {
+	var out struct{}
+	if err := hardcoverExecute(ctx, key, "{ __typename }", nil, &out); err != nil {
+		zerolog.Ctx(ctx).Warn().Err(err).Msg("hardcover key test failed")
+		return err
+	}
+	return nil
 }
 
 // fetchHardcover calls the Hardcover GraphQL API and returns normalised

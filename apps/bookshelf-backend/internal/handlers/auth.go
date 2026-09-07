@@ -351,6 +351,15 @@ func (h *AuthHandler) RegisterRoutes(api huma.API) {
 	}, h.testGoogleBooksKey)
 
 	huma.Register(api, huma.Operation{
+		OperationID: "test-hardcover-key",
+		Method:      "POST",
+		Path:        "/auth/me/hardcover-key/test",
+		Tags:        []string{"auth"},
+		Summary:     "Test a Hardcover API key. Pass a key in the body to test it directly, or omit to test the currently stored key.",
+		Security:    []map[string][]string{{"bearer": {}}},
+	}, h.testHardcoverKey)
+
+	huma.Register(api, huma.Operation{
 		OperationID: "get-verification-status",
 		Method:      "GET",
 		Path:        "/auth/me/verification-status",

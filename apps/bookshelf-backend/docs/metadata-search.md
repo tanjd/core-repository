@@ -93,8 +93,10 @@ Hardcover (<https://hardcover.app>) is a free GraphQL API
 (<https://docs.hardcover.app/api/getting-started>) gated by a per-account Bearer token — 60 req/min,
 5,000 req/day on the free tier. `HARDCOVER_API_KEY` (see `.env.example`) is a single server-wide
 key, unlike Google Books' multi-key round-robin pool: the free tier's daily quota is generous
-enough for this app's scale, and there's no per-user override. Two shapes, unlike the other three
-providers' single free-text search:
+enough for this app's scale to not need a pool. It does support the same per-user override as
+Google Books, though — `User.HardcoverAPIKey` (encrypted, `Profile → Integrations`), resolved by
+`MetadataHandler.resolveHardcoverAPIKey` ahead of the server-wide fallback, same shape as
+`resolveGoogleBooksAPIKey`. Two shapes, unlike the other three providers' single free-text search:
 
 - **ISBN-shaped `q`** (`fetchHardcoverByISBN`): an exact `books` GraphQL query matching the
   edition(s) carrying that ISBN, returning full book- and edition-level fields (description,
