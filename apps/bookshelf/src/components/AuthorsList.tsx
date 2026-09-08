@@ -8,12 +8,13 @@ import { BookCover } from "@/components/BookCover";
 // same cover-driven visual anchor as every other book-listing surface in
 // this app (BookCard, BookshelfRow) instead of reading as plain text.
 // Authors with no sampled covers (none of their books have a cover_url)
-// render nothing, leaving the row's original text-only layout.
+// still get one slot, rendered via BookCover's built-in BookCoverFallback —
+// same as every other surface's missing-cover handling.
 function AuthorCoverStack({ author, covers = [] }: AuthorSummary) {
-  if (covers.length === 0) return null;
+  const displayCovers = covers.length > 0 ? covers : [undefined];
   return (
     <div className="flex shrink-0">
-      {covers.map((coverUrl, i) => (
+      {displayCovers.map((coverUrl, i) => (
         <div
           key={i}
           className="relative aspect-[2/3] w-8 overflow-hidden rounded-sm border border-background bg-muted shadow-sm"

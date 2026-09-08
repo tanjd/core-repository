@@ -11,7 +11,9 @@ describe("AuthorsList", () => {
 
     render(<AuthorsList authors={authors} />);
 
-    expect(screen.getByText("Frank Herbert")).toBeInTheDocument();
+    expect(
+      screen.getByRole("link", { name: /Frank Herbert/ }),
+    ).toBeInTheDocument();
     // No sticky-letter header or link should be rendered for the blank author.
     expect(screen.queryByText("#")).not.toBeInTheDocument();
     expect(screen.getAllByRole("link")).toHaveLength(1);
@@ -46,5 +48,18 @@ describe("AuthorsList", () => {
       "href",
       "/authors/Frank%20Herbert",
     );
+  });
+
+  it("shows a fallback cover for an author whose books have no cover_url", () => {
+    const authors: AuthorSummary[] = [
+      { author: "Frank Herbert", book_count: 2, covers: [] },
+    ];
+
+    render(<AuthorsList authors={authors} />);
+
+    // BookCoverFallback renders as an <img>-role SVG with a descriptive label.
+    expect(
+      screen.getByRole("img", { name: /Cover placeholder for Frank Herbert/ }),
+    ).toBeInTheDocument();
   });
 });
