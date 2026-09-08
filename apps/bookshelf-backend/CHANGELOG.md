@@ -1,3 +1,13 @@
+## 0.32.2 (2026-09-08)
+
+### 🩹 Fixes
+
+- **bookshelf:** render fallback cover for authors with no covers ([#122](https://github.com/tanjd/core-repository/pull/122))
+
+### ❤️ Thank You
+
+- Jeddy Tan @tanjd
+
 ## 0.32.1 (2026-09-08)
 
 ### 🩹 Fixes
