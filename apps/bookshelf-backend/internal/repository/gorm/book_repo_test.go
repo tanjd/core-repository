@@ -120,6 +120,21 @@ func TestBookRepository_ListPaginated_TokenizedSearch(t *testing.T) {
 		titles = append(titles, b.Title)
 	}
 	assert.Equal(t, []string{"Harry Potter"}, titles)
+
+	t.Run("matches author despite punctuation difference", func(t *testing.T) {
+		lewis := models.Book{Title: "The Lion, the Witch and the Wardrobe", Author: "C. S. Lewis"}
+		require.NoError(t, books.Create(&lewis))
+		require.NoError(t, copies.Create(&models.Copy{BookID: lewis.ID, OwnerID: owner.ID, Condition: "good", Status: "available"}))
+
+		result, err := books.ListPaginated("CS Lewis", "title", false, 1, 20)
+		require.NoError(t, err)
+
+		var titles []string
+		for _, b := range result.Items {
+			titles = append(titles, b.Title)
+		}
+		assert.Equal(t, []string{"The Lion, the Witch and the Wardrobe"}, titles)
+	})
 }
 
 func TestBookRepository_ListByAuthorPaginated_ExactMatchOnly(t *testing.T) {
@@ -301,6 +316,18 @@ func TestBookRepository_ListAuthorsPaginated_FiltersBySearch(t *testing.T) {
 
 		require.Len(t, result.Items, 1)
 		assert.Equal(t, "Frank Herbert", result.Items[0].Author)
+	})
+
+	t.Run("matches author despite punctuation difference", func(t *testing.T) {
+		lewis := models.Book{Title: "The Lion, the Witch and the Wardrobe", Author: "C. S. Lewis"}
+		require.NoError(t, books.Create(&lewis))
+		require.NoError(t, copies.Create(&models.Copy{BookID: lewis.ID, OwnerID: owner.ID, Condition: "good", Status: "available"}))
+
+		result, err := books.ListAuthorsPaginated("CS Lewis", 1, 20)
+		require.NoError(t, err)
+
+		require.Len(t, result.Items, 1)
+		assert.Equal(t, "C. S. Lewis", result.Items[0].Author)
 	})
 }
 

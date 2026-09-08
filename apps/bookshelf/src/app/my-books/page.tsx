@@ -247,6 +247,15 @@ function importSummaryText(summary: ImportSummary, isResult: boolean): string {
   return `${isResult ? "Imported" : "Will import"}: ${parts.join(", ")}`;
 }
 
+// Mirrors the backend's search normalization (lowercase, strip everything
+// but letters/digits) so "CS Lewis" matches a stored "C. S. Lewis" here the
+// same way it does in Catalog/Wishlist search — both collapse to
+// "cslewis", closing the gap that punctuation/spacing differences would
+// otherwise leave in a plain substring match.
+function normalizeSearchText(s: string): string {
+  return s.toLowerCase().replace(/[^a-z0-9]/g, "");
+}
+
 export default function MyBooksPage() {
   const router = useRouter();
   const [bookGroups, setBookGroups] = useState<BookGroup[]>([]);
@@ -618,7 +627,7 @@ export default function MyBooksPage() {
   );
   const totalPending = Object.values(pendingCounts).reduce((n, c) => n + c, 0);
 
-  const query = search.trim().toLowerCase();
+  const query = normalizeSearchText(search);
   const hasActiveFilters =
     !!query ||
     statusFilter !== "all" ||
@@ -712,8 +721,8 @@ export default function MyBooksPage() {
     .filter(
       (g) =>
         !query ||
-        g.title.toLowerCase().includes(query) ||
-        g.author.toLowerCase().includes(query),
+        normalizeSearchText(g.title).includes(query) ||
+        normalizeSearchText(g.author).includes(query),
     )
     .map((g) => ({
       ...g,
