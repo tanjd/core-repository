@@ -2,6 +2,7 @@ package gorm
 
 import (
 	"errors"
+	"fmt"
 	"strings"
 	"time"
 
@@ -10,7 +11,21 @@ import (
 
 	"github.com/tanjd/core-repository/apps/bookshelf-backend/internal/models"
 	"github.com/tanjd/core-repository/apps/bookshelf-backend/internal/repository"
+	"github.com/tanjd/core-repository/apps/bookshelf-backend/internal/textutil"
 )
+
+// normalizedCol wraps a column reference in a SQL expression that lowercases
+// it and strips whitespace and the punctuation most commonly found in
+// titles/author names (periods, commas, apostrophes, hyphens), mirroring
+// textutil.NormalizeSearchKey closely enough to match e.g. "C. S. Lewis"
+// against a "CS Lewis" search (both collapse to "cslewis") — exact
+// regex-level parity isn't available in SQLite without an extension.
+func normalizedCol(col string) string {
+	return fmt.Sprintf(
+		`REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(LOWER(%s), '.', ''), ',', ''), '''', ''), '-', ''), ' ', '')`,
+		col,
+	)
+}
 
 // BookRepository is the GORM implementation of repository.BookRepository.
 type BookRepository struct {
@@ -70,8 +85,8 @@ func (r *BookRepository) buildListQuery(search, sort string, availableOnly bool)
 	// both match "Harry Potter" by "J.K. Rowling", not just an exact-phrase
 	// substring of the whole query.
 	for _, token := range strings.Fields(search) {
-		like := "%" + token + "%"
-		tx = tx.Where("title LIKE ? OR author LIKE ?", like, like)
+		like := "%" + textutil.NormalizeSearchKey(token) + "%"
+		tx = tx.Where(normalizedCol("title")+" LIKE ? OR "+normalizedCol("author")+" LIKE ?", like, like)
 	}
 	// A book with no copies left (e.g. its last copy was just removed by its
 	// owner) shouldn't linger in the catalog — same rule ListRecent already
@@ -121,10 +136,10 @@ func (r *BookRepository) buildListQuery(search, sort string, availableOnly bool)
 		if search == "" {
 			tx = tx.Order("title ASC")
 		} else {
-			prefix := search + "%"
+			prefix := textutil.NormalizeSearchKey(search) + "%"
 			tx = tx.Clauses(clause.OrderBy{
 				Expression: clause.Expr{
-					SQL:  "CASE WHEN title LIKE ? THEN 0 WHEN author LIKE ? THEN 1 ELSE 2 END, title ASC",
+					SQL:  "CASE WHEN " + normalizedCol("title") + " LIKE ? THEN 0 WHEN " + normalizedCol("author") + " LIKE ? THEN 1 ELSE 2 END, title ASC",
 					Vars: []any{prefix, prefix},
 				},
 			})
@@ -187,7 +202,7 @@ func (r *BookRepository) buildAuthorsQuery(search string) *gorm.DB {
 		Where("EXISTS (SELECT 1 FROM copies WHERE copies.book_id = books.id)").
 		Where("author != ''")
 	for _, token := range strings.Fields(search) {
-		tx = tx.Where("author LIKE ?", "%"+token+"%")
+		tx = tx.Where(normalizedCol("author")+" LIKE ?", "%"+textutil.NormalizeSearchKey(token)+"%")
 	}
 	return tx
 }

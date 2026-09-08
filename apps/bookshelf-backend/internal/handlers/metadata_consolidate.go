@@ -1,13 +1,11 @@
 package handlers
 
 import (
-	"regexp"
 	"sort"
 	"strings"
-)
 
-// nonAlphanumSpace matches any character that is not a lowercase letter, digit, or space.
-var nonAlphanumSpace = regexp.MustCompile(`[^a-z0-9 ]+`)
+	"github.com/tanjd/core-repository/apps/bookshelf-backend/internal/textutil"
+)
 
 // sourcePriority returns a numeric priority for a source (lower = higher
 // priority). Hardcover ranks after Open Library: its community-maintained
@@ -88,13 +86,7 @@ func isbn13CheckDigit(digits string) byte {
 
 // normalizeTitleAuthor returns a deduplication key from title and author.
 func normalizeTitleAuthor(title, author string) string {
-	norm := func(s string) string {
-		s = strings.ToLower(strings.TrimSpace(s))
-		s = nonAlphanumSpace.ReplaceAllString(s, "")
-		s = strings.Join(strings.Fields(s), " ")
-		return s
-	}
-	return norm(title) + "|" + norm(author)
+	return textutil.NormalizeText(title) + "|" + textutil.NormalizeText(author)
 }
 
 // deduplicateIntoGroups groups results that refer to the same book.
