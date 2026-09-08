@@ -22,12 +22,17 @@ const JOB_META: Record<string, { label: string; description: string }> = {
   "description-reconciliation": {
     label: "Description Reconciliation",
     description:
-      "Fills in missing book descriptions from other editions of the same book. Runs automatically on the configured interval.",
+      "Fills in missing book descriptions — first for free from another edition of the same book already in the catalog, then from Open Library/Google Books/Hardcover for anything still missing. Runs automatically on the configured interval.",
   },
   "cover-backfill": {
     label: "Cover Backfill",
     description:
-      "Looks up a cover from Open Library/Google Books for any book that still has none. Runs automatically on the configured interval.",
+      "Looks up a cover from Open Library/Google Books/Hardcover for any book that still has none. Runs automatically on the configured interval.",
+  },
+  "author-backfill": {
+    label: "Author Backfill",
+    description:
+      "Looks up an author from Open Library/Google Books/Hardcover for any book that still has none. Runs automatically on the configured interval.",
   },
   "registration-prune": {
     label: "Registration Prune",
@@ -66,6 +71,7 @@ const JOB_SETTING_KEYS: Record<string, string> = {
   "cover-refresh": "cover_refresh_interval",
   "description-reconciliation": "description_reconciliation_interval",
   "cover-backfill": "cover_backfill_interval",
+  "author-backfill": "author_backfill_interval",
   "registration-prune": "registration_prune_interval",
   "monthly-digest": "monthly_digest_interval",
   "due-date-reminder": "due_date_reminder_interval",

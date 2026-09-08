@@ -112,6 +112,7 @@ func main() {
 	googleBooksKeyPool := services.NewGoogleBooksKeyPool(cfg.GoogleBooksAPIKeys)
 	descriptionReconciliationSvc := services.NewDescriptionReconciliationService(bookRepo, googleBooksKeyPool, cfg.HardcoverAPIKey)
 	coverBackfillSvc := services.NewCoverBackfillService(bookRepo, coversDir, googleBooksKeyPool, cfg.HardcoverAPIKey)
+	authorBackfillSvc := services.NewAuthorBackfillService(bookRepo, googleBooksKeyPool, cfg.HardcoverAPIKey)
 
 	digestSvc := services.NewDigestService(bookRepo, recommendationRepo, userRepo, adminRepo,
 		emailSvc.WithJWTSecret(cfg.JWTSecret), telegramSvc)
@@ -121,6 +122,7 @@ func main() {
 	scheduler.RegisterJob("backup", "backup_interval", 24*time.Hour, backupSvc.CreateSnapshot)
 	scheduler.RegisterJob("description-reconciliation", "description_reconciliation_interval", 24*time.Hour, descriptionReconciliationSvc.Run)
 	scheduler.RegisterJob("cover-backfill", "cover_backfill_interval", 24*time.Hour, coverBackfillSvc.Run)
+	scheduler.RegisterJob("author-backfill", "author_backfill_interval", 24*time.Hour, authorBackfillSvc.Run)
 	// Sweeps abandoned signups out of registration_verifications. A row is
 	// deleted as soon as its code is submitted, right or wrong, so this only
 	// catches the ones nobody ever came back to — which for the email channel

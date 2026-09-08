@@ -114,7 +114,7 @@ func coverBackfillCandidates(books []models.Book) []models.Book {
 // on both success (which source it came from) and failure (why not, e.g. a
 // quota-exceeded Google Books call rather than a genuine "no cover exists").
 func (s *CoverBackfillService) backfillOne(ctx context.Context, book *models.Book) (bool, string) {
-	data, attempts := resolveExternalDataWithPool(ctx, s.client, *book, s.googleBooksKeyPool, s.hardcoverAPIKey)
+	data, attempts := resolveExternalDataWithPool(ctx, s.client, *book, s.googleBooksKeyPool, s.hardcoverAPIKey, wantedFields{cover: true, description: true})
 	if data.coverURL == "" {
 		return false, attemptsSummary(attempts)
 	}
