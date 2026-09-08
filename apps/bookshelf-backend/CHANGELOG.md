@@ -1,3 +1,13 @@
+## 0.32.0 (2026-09-08)
+
+### 🚀 Features
+
+- **bookshelf,bookshelf-backend,bookshelf-e2e:** improve author tooling ([#120](https://github.com/tanjd/core-repository/pull/120))
+
+### ❤️ Thank You
+
+- Jeddy Tan @tanjd
+
 ## 0.31.0 (2026-09-07)
 
 ### 🚀 Features
