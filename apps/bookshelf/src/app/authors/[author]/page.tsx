@@ -27,6 +27,20 @@ export default function AuthorPage() {
   const [error, setError] = useState("");
   const requestIdRef = useRef(0);
 
+  // The URL that brought the user here, embedded as ?from= by AuthorsList /
+  // AuthorLink — same convention as catalog/[bookId]'s breadcrumb — so
+  // "Catalog" restores the Authors tab (or Books tab, if that's the true
+  // origin) instead of always resetting to the Books tab default.
+  const [backHref, setBackHref] = useState("/catalog?view=authors");
+  useEffect(() => {
+    const from = new URLSearchParams(window.location.search).get("from");
+    // window.location isn't available during SSR — same setState-in-effect
+    // exception as CatalogPage's URL hydration on mount.
+    /* eslint-disable react-hooks/set-state-in-effect */
+    if (from?.startsWith("/catalog")) setBackHref(from);
+    /* eslint-enable react-hooks/set-state-in-effect */
+  }, []);
+
   async function fetchBooks(p: number) {
     const requestId = ++requestIdRef.current;
     setLoading(true);
@@ -69,7 +83,7 @@ export default function AuthorPage() {
   return (
     <div className="flex flex-col gap-6">
       <Breadcrumb
-        back={{ href: "/catalog" }}
+        back={{ href: backHref }}
         backLabel="Catalog"
         current={author}
       />

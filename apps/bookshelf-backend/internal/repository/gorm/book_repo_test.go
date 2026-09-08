@@ -93,6 +93,35 @@ func TestBookRepository_ListPaginated_RelevanceSort(t *testing.T) {
 	require.Equal(t, []string{"Harry Potter", "The Harried Reader"}, titles)
 }
 
+func TestBookRepository_ListPaginated_TokenizedSearch(t *testing.T) {
+	db := openTestDB(t)
+	books := NewBookRepository(db)
+	copies := NewCopyRepository(db)
+
+	owner := models.User{Name: "Owner", Email: "owner@example.com"}
+	require.NoError(t, db.Create(&owner).Error)
+
+	for _, b := range []models.Book{
+		{Title: "Harry Potter", Author: "J.K. Rowling"},
+		{Title: "A History of Time", Author: "Someone Else"},
+	} {
+		book := b
+		require.NoError(t, books.Create(&book))
+		require.NoError(t, copies.Create(&models.Copy{BookID: book.ID, OwnerID: owner.ID, Condition: "good", Status: "available"}))
+	}
+
+	// Words reversed, and split across title/author — a plain
+	// "%potter rowling%" substring wouldn't match "Harry Potter" at all.
+	result, err := books.ListPaginated("rowling potter", "title", false, 1, 20)
+	require.NoError(t, err)
+
+	var titles []string
+	for _, b := range result.Items {
+		titles = append(titles, b.Title)
+	}
+	assert.Equal(t, []string{"Harry Potter"}, titles)
+}
+
 func TestBookRepository_ListByAuthorPaginated_ExactMatchOnly(t *testing.T) {
 	db := openTestDB(t)
 	books := NewBookRepository(db)
@@ -265,6 +294,14 @@ func TestBookRepository_ListAuthorsPaginated_FiltersBySearch(t *testing.T) {
 	require.Len(t, result.Items, 1)
 	assert.Equal(t, "Frank Herbert", result.Items[0].Author)
 	assert.EqualValues(t, 1, result.Total)
+
+	t.Run("matches reversed word order", func(t *testing.T) {
+		result, err := books.ListAuthorsPaginated("herbert frank", 1, 20)
+		require.NoError(t, err)
+
+		require.Len(t, result.Items, 1)
+		assert.Equal(t, "Frank Herbert", result.Items[0].Author)
+	})
 }
 
 func TestBookRepository_ListAuthorsPaginated_SamplesUpToThreeCoversNewestFirst(t *testing.T) {

@@ -368,6 +368,18 @@ export default function CatalogPage() {
     return qs ? `/catalog?${qs}` : "/catalog";
   })();
 
+  // Same purpose as currentCatalogHref, for the Authors tab — lets the
+  // per-author page's "Catalog" breadcrumb restore the Authors view with its
+  // search/page instead of always landing on the Books tab.
+  const currentAuthorsHref = (() => {
+    const params = new URLSearchParams();
+    params.set("view", "authors");
+    if (authorSearch.trim()) params.set("authorQ", authorSearch.trim());
+    if (authorsPage > 1) params.set("page", String(authorsPage));
+    const qs = params.toString();
+    return `/catalog?${qs}`;
+  })();
+
   return (
     <div
       className="flex flex-col gap-8"
@@ -460,6 +472,7 @@ export default function CatalogPage() {
               <AuthorsList
                 authors={authorsResult?.items ?? []}
                 query={authorSearch.trim()}
+                fromHref={currentAuthorsHref}
               />
               {(authorsResult?.items?.length ?? 0) > 0 && (
                 <Pagination

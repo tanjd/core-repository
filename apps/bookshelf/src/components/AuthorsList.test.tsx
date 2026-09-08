@@ -16,4 +16,35 @@ describe("AuthorsList", () => {
     expect(screen.queryByText("#")).not.toBeInTheDocument();
     expect(screen.getAllByRole("link")).toHaveLength(1);
   });
+
+  it("bakes fromHref into each author link as ?from= so 'Catalog' can restore this view", () => {
+    const authors: AuthorSummary[] = [
+      { author: "Frank Herbert", book_count: 2 },
+    ];
+
+    render(
+      <AuthorsList
+        authors={authors}
+        fromHref="/catalog?view=authors&authorQ=herb"
+      />,
+    );
+
+    expect(screen.getByRole("link", { name: /Frank Herbert/ })).toHaveAttribute(
+      "href",
+      `/authors/Frank%20Herbert?from=${encodeURIComponent("/catalog?view=authors&authorQ=herb")}`,
+    );
+  });
+
+  it("omits ?from= when no fromHref is given", () => {
+    const authors: AuthorSummary[] = [
+      { author: "Frank Herbert", book_count: 2 },
+    ];
+
+    render(<AuthorsList authors={authors} />);
+
+    expect(screen.getByRole("link", { name: /Frank Herbert/ })).toHaveAttribute(
+      "href",
+      "/authors/Frank%20Herbert",
+    );
+  });
 });
