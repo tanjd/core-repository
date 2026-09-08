@@ -96,7 +96,9 @@ test.describe("author view", () => {
     await expect(page.getByText(firstTitle).first()).toBeVisible();
 
     await page.getByRole("button", { name: authorName }).first().click();
-    await expect(page).toHaveURL(`/authors/${encodeURIComponent(authorName)}`);
+    await expect(page).toHaveURL(
+      `/authors/${encodeURIComponent(authorName)}?from=${encodeURIComponent("/catalog")}`,
+    );
     await expect(page.getByRole("heading", { name: authorName })).toBeVisible();
     await expect(page.getByText(firstTitle)).toBeVisible();
     await expect(page.getByText(secondTitle)).toBeVisible();
@@ -122,7 +124,9 @@ test.describe("author view", () => {
     await expect(authorRow.getByText("2 books")).toBeVisible();
 
     await authorRow.click();
-    await expect(page).toHaveURL(`/authors/${encodeURIComponent(authorName)}`);
+    await expect(page).toHaveURL(
+      `/authors/${encodeURIComponent(authorName)}?from=${encodeURIComponent("/catalog?view=authors")}`,
+    );
     await expect(page.getByText(firstTitle)).toBeVisible();
     await expect(page.getByText(secondTitle)).toBeVisible();
   });

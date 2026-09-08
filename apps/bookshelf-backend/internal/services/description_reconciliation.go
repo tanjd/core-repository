@@ -103,7 +103,7 @@ func (s *DescriptionReconciliationService) fillFromExternalSources(ctx context.C
 		}
 		first = false
 
-		data, attempts := resolveExternalDataWithPool(ctx, s.client, *book, s.googleBooksKeyPool, s.hardcoverAPIKey)
+		data, attempts := resolveExternalDataWithPool(ctx, s.client, *book, s.googleBooksKeyPool, s.hardcoverAPIKey, wantedFields{cover: true, description: true})
 		if data.description == "" {
 			lines = append(lines, fmt.Sprintf("✗ %s — %s", book.Title, attemptsSummary(attempts)))
 			continue

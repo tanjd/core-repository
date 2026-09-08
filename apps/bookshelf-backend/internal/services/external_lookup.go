@@ -19,11 +19,53 @@ import (
 type externalBookData struct {
 	coverURL    string
 	description string
+	author      string
 }
 
 // empty reports whether the lookup found nothing usable.
 func (d externalBookData) empty() bool {
-	return d.coverURL == "" && d.description == ""
+	return d.coverURL == "" && d.description == "" && d.author == ""
+}
+
+// wantedFields tells resolveExternalData which fields a caller actually
+// needs, so it can stop trying further sources as soon as those specific
+// fields are filled rather than always waiting on every field this package
+// knows how to look up (e.g. AuthorBackfillService only wants author, and
+// shouldn't keep querying sources after an early one already supplied it,
+// just because cover/description are still empty).
+type wantedFields struct {
+	cover       bool
+	description bool
+	author      bool
+}
+
+// satisfies reports whether d already has everything want asks for.
+func (want wantedFields) satisfies(d externalBookData) bool {
+	if want.cover && d.coverURL == "" {
+		return false
+	}
+	if want.description && d.description == "" {
+		return false
+	}
+	if want.author && d.author == "" {
+		return false
+	}
+	return true
+}
+
+// joinAuthors collapses multiple credited authors into Book.Author's single
+// string column — this backfill/reconciliation path never introduces a
+// separate Author entity (see apps/bookshelf-backend/CLAUDE.md's product
+// scope), so every source's author list is joined the same way rather than
+// picking just the first and silently dropping co-authors.
+func joinAuthors(names []string) string {
+	var nonEmpty []string
+	for _, n := range names {
+		if n != "" {
+			nonEmpty = append(nonEmpty, n)
+		}
+	}
+	return strings.Join(nonEmpty, "; ")
 }
 
 // lookupAttempt records what one source contributed (or why it didn't) for
@@ -40,13 +82,13 @@ func (a lookupAttempt) String() string {
 	return a.source + ": " + a.status
 }
 
-// lookupOpenLibraryCover looks up a cover by ISBN or OpenLibrary edition key
-// via the Books API (jscmd=data), which — unlike the raw
-// covers.openlibrary.org/b/<key>/<value>-L.jpg image endpoint — only includes
-// a "cover" object when a real cover actually exists, rather than returning
-// HTTP 200 with a tiny placeholder image for "no cover". This endpoint does
-// not carry a description field (that lives on the separate Work record),
-// so Open Library only ever contributes a cover here.
+// lookupOpenLibraryCover looks up a cover and author(s) by ISBN or
+// OpenLibrary edition key via the Books API (jscmd=data), which — unlike the
+// raw covers.openlibrary.org/b/<key>/<value>-L.jpg image endpoint — only
+// includes a "cover" object when a real cover actually exists, rather than
+// returning HTTP 200 with a tiny placeholder image for "no cover". This
+// endpoint does not carry a description field (that lives on the separate
+// Work record), so Open Library never contributes a description here.
 func lookupOpenLibraryCover(ctx context.Context, client *http.Client, bibkey string) (externalBookData, error) {
 	// bibkey is always "ISBN:<digits>" or "OLID:<alphanumeric>" (see callers
 	// in resolveExternalData) — no characters requiring escaping, and Open
@@ -73,6 +115,9 @@ func lookupOpenLibraryCover(ctx context.Context, client *http.Client, bibkey str
 			Medium string `json:"medium"`
 			Small  string `json:"small"`
 		} `json:"cover"`
+		Authors []struct {
+			Name string `json:"name"`
+		} `json:"authors"`
 	}
 	if err := json.NewDecoder(resp.Body).Decode(&parsed); err != nil {
 		return externalBookData{}, err
@@ -83,23 +128,31 @@ func lookupOpenLibraryCover(ctx context.Context, client *http.Client, bibkey str
 		return externalBookData{}, nil
 	}
 
+	data := externalBookData{}
 	switch {
 	case entry.Cover.Large != "":
-		return externalBookData{coverURL: entry.Cover.Large}, nil
+		data.coverURL = entry.Cover.Large
 	case entry.Cover.Medium != "":
-		return externalBookData{coverURL: entry.Cover.Medium}, nil
+		data.coverURL = entry.Cover.Medium
 	case entry.Cover.Small != "":
-		return externalBookData{coverURL: entry.Cover.Small}, nil
-	default:
-		return externalBookData{}, nil
+		data.coverURL = entry.Cover.Small
 	}
+	if len(entry.Authors) > 0 {
+		names := make([]string, len(entry.Authors))
+		for i, a := range entry.Authors {
+			names[i] = a.Name
+		}
+		data.author = joinAuthors(names)
+	}
+	return data, nil
 }
 
 // googleBooksVolumeInfo is the subset of a Google Books "volume" resource
 // (whether returned directly by ID or as a search result item) both
 // lookupGoogleBooksData and lookupGoogleBooksByISBN need.
 type googleBooksVolumeInfo struct {
-	Description string `json:"description"`
+	Description string   `json:"description"`
+	Authors     []string `json:"authors"`
 	ImageLinks  struct {
 		Thumbnail      string `json:"thumbnail"`
 		SmallThumbnail string `json:"smallThumbnail"`
@@ -111,7 +164,7 @@ func (v googleBooksVolumeInfo) toExternalBookData() externalBookData {
 	if cover == "" {
 		cover = v.ImageLinks.SmallThumbnail
 	}
-	return externalBookData{coverURL: cover, description: v.Description}
+	return externalBookData{coverURL: cover, description: v.Description, author: joinAuthors(v.Authors)}
 }
 
 // doGoogleBooksRequest issues a GET against the Google Books API and decodes
@@ -155,7 +208,7 @@ func lookupGoogleBooksData(ctx context.Context, client *http.Client, volumeID, a
 	// see https://developers.google.com/books/docs/v1/performance, "Using
 	// partial response" — instead of the full volume resource (which also
 	// carries authors, categories, saleInfo, etc. we never look at).
-	reqURL := "https://www.googleapis.com/books/v1/volumes/" + url.PathEscape(volumeID) + "?alt=json&fields=" + url.QueryEscape("volumeInfo(description,imageLinks)")
+	reqURL := "https://www.googleapis.com/books/v1/volumes/" + url.PathEscape(volumeID) + "?alt=json&fields=" + url.QueryEscape("volumeInfo(description,authors,imageLinks)")
 	var parsed struct {
 		VolumeInfo googleBooksVolumeInfo `json:"volumeInfo"`
 	}
@@ -176,7 +229,7 @@ func lookupGoogleBooksByISBN(ctx context.Context, client *http.Client, isbn, api
 	// Same partial-response restriction as lookupGoogleBooksData, scoped to
 	// the search response's items array.
 	reqURL := "https://www.googleapis.com/books/v1/volumes?q=isbn:" + url.QueryEscape(isbn) +
-		"&fields=" + url.QueryEscape("items(volumeInfo(description,imageLinks))")
+		"&fields=" + url.QueryEscape("items(volumeInfo(description,authors,imageLinks))")
 	var parsed struct {
 		Items []struct {
 			VolumeInfo googleBooksVolumeInfo `json:"volumeInfo"`
@@ -199,14 +252,15 @@ const hardcoverGraphQLEndpoint = "https://api.hardcover.app/v1/graphql"
 
 // hardcoverLookupByISBNQuery is a minimal version of metadata.go's
 // hardcoverSearchByISBNQuery, scoped to just the fields
-// resolveExternalData/mergeExternalLookup can use (cover + description) —
-// this backfill/reconciliation path never persists the richer fields
-// (publisher, language, contributors) that query also fetches.
+// resolveExternalData/mergeExternalLookup can use (cover + description +
+// author) — this backfill/reconciliation path never persists the richer
+// fields (publisher, language, ratings) that query also fetches.
 const hardcoverLookupByISBNQuery = `
 query BookLookupByIsbn($isbn: String!) {
   books(where: { editions: { isbn_13: { _eq: $isbn } } }) {
     description
     image { url }
+    cached_contributors { author { name } contribution }
   }
 }
 `
@@ -249,13 +303,24 @@ func (l *minIntervalLimiter) wait(ctx context.Context) {
 	}
 }
 
+// hardcoverLookupContributor mirrors internal/handlers/metadata.go's
+// hardcoverContributor — duplicated rather than imported, since handlers
+// already imports services and Go doesn't allow the reverse.
+type hardcoverLookupContributor struct {
+	Author struct {
+		Name string `json:"name"`
+	} `json:"author"`
+	Contribution string `json:"contribution"`
+}
+
 // hardcoverLookupResponse is the "data"/"errors" envelope for
 // hardcoverLookupByISBNQuery.
 type hardcoverLookupResponse struct {
 	Data struct {
 		Books []struct {
-			Description string `json:"description"`
-			Image       struct {
+			Description        string                       `json:"description"`
+			CachedContributors []hardcoverLookupContributor `json:"cached_contributors"`
+			Image              struct {
 				URL string `json:"url"`
 			} `json:"image"`
 		} `json:"books"`
@@ -263,6 +328,22 @@ type hardcoverLookupResponse struct {
 	Errors []struct {
 		Message string `json:"message"`
 	} `json:"errors"`
+}
+
+// hardcoverLookupAuthors returns every contributor credited as an author
+// (contribution unset or "Author", matching Hardcover's own display rule —
+// see hardcoverAuthorFromContributors in internal/handlers/metadata.go, which
+// this mirrors but keeps every match instead of just the first).
+func hardcoverLookupAuthors(contributors []hardcoverLookupContributor) []string {
+	var names []string
+	for _, c := range contributors {
+		if c.Contribution == "" || strings.EqualFold(c.Contribution, "author") {
+			if c.Author.Name != "" {
+				names = append(names, c.Author.Name)
+			}
+		}
+	}
+	return names
 }
 
 // lookupHardcoverByISBN looks up a cover and description by ISBN via
@@ -313,7 +394,11 @@ func lookupHardcoverByISBN(ctx context.Context, client *http.Client, isbn, apiKe
 	}
 
 	book := parsed.Data.Books[0]
-	return externalBookData{coverURL: book.Image.URL, description: book.Description}, "", nil
+	return externalBookData{
+		coverURL:    book.Image.URL,
+		description: book.Description,
+		author:      joinAuthors(hardcoverLookupAuthors(book.CachedContributors)),
+	}, "", nil
 }
 
 // externalLookupStep is one named source resolveExternalData can try, bound
@@ -377,6 +462,9 @@ func mergeExternalLookup(merged *externalBookData, attempts *[]lookupAttempt, so
 		if merged.description == "" {
 			merged.description = data.description
 		}
+		if merged.author == "" {
+			merged.author = data.author
+		}
 	case status != "":
 		*attempts = append(*attempts, lookupAttempt{source, status})
 	default:
@@ -402,9 +490,9 @@ func googleBooksWasRateLimited(attempts []lookupAttempt) bool {
 // that just got rate-limited. hardcoverAPIKey is passed straight through —
 // unlike Google Books, Hardcover has just the one server-wide key (see
 // Config.HardcoverAPIKey), no pool to draw from.
-func resolveExternalDataWithPool(ctx context.Context, client *http.Client, book models.Book, pool *GoogleBooksKeyPool, hardcoverAPIKey string) (externalBookData, []lookupAttempt) {
+func resolveExternalDataWithPool(ctx context.Context, client *http.Client, book models.Book, pool *GoogleBooksKeyPool, hardcoverAPIKey string, want wantedFields) (externalBookData, []lookupAttempt) {
 	key := pool.Key()
-	data, attempts := resolveExternalData(ctx, client, book, key, hardcoverAPIKey)
+	data, attempts := resolveExternalData(ctx, client, book, key, hardcoverAPIKey, want)
 	if googleBooksWasRateLimited(attempts) {
 		pool.MarkRateLimited(key)
 	}
@@ -413,23 +501,23 @@ func resolveExternalDataWithPool(ctx context.Context, client *http.Client, book 
 
 // resolveExternalData tries each of book's applicable external sources in
 // turn (see externalLookupSteps), merging in whichever of coverURL/
-// description each source can supply. A source erroring or coming back
-// empty falls through to the next rather than aborting the lookup, and
-// sources are tried until both fields are filled or every source is
+// description/author each source can supply. A source erroring or coming
+// back empty falls through to the next rather than aborting the lookup, and
+// sources are tried until every field in want is filled or every source is
 // exhausted — an earlier source contributing only a cover (e.g. Open
 // Library, which never carries a description — see lookupOpenLibraryCover)
-// must not short-circuit a later source that could still supply the
-// description; a prior "stop at the first source with any usable data"
-// version of this function meant a book with an Open Library cover would
-// never even be checked against Google Books for a description.
-func resolveExternalData(ctx context.Context, client *http.Client, book models.Book, googleBooksAPIKey, hardcoverAPIKey string) (externalBookData, []lookupAttempt) {
+// must not short-circuit a later source that could still supply a still-
+// wanted description; a prior "stop at the first source with any usable
+// data" version of this function meant a book with an Open Library cover
+// would never even be checked against Google Books for a description.
+func resolveExternalData(ctx context.Context, client *http.Client, book models.Book, googleBooksAPIKey, hardcoverAPIKey string, want wantedFields) (externalBookData, []lookupAttempt) {
 	var attempts []lookupAttempt
 	var merged externalBookData
 
 	for _, step := range externalLookupSteps(ctx, client, book, googleBooksAPIKey, hardcoverAPIKey) {
 		data, status, err := step.run()
 		mergeExternalLookup(&merged, &attempts, step.source, data, status, err)
-		if merged.coverURL != "" && merged.description != "" {
+		if want.satisfies(merged) {
 			break
 		}
 	}

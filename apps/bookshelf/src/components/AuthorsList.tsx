@@ -37,11 +37,16 @@ function AuthorCoverStack({ author, covers = [] }: AuthorSummary) {
 export function AuthorsList({
   authors,
   query,
+  fromHref,
 }: {
   authors: AuthorSummary[];
   // The active author-search filter, if any — used only to word the empty
   // state; filtering itself already happened server-side.
   query?: string;
+  // The current Authors-tab URL (view=authors, plus authorQ/page), baked
+  // into each author link as ?from= so the per-author page's "Catalog"
+  // breadcrumb can restore this exact view instead of the Books tab.
+  fromHref?: string;
 }) {
   if (authors.length === 0) {
     return (
@@ -73,7 +78,11 @@ export function AuthorsList({
           {group.authors.map((author) => (
             <Link
               key={author.author}
-              href={`/authors/${encodeURIComponent(author.author)}`}
+              href={
+                fromHref
+                  ? `/authors/${encodeURIComponent(author.author)}?from=${encodeURIComponent(fromHref)}`
+                  : `/authors/${encodeURIComponent(author.author)}`
+              }
               className="flex items-center justify-between gap-3 px-1 py-3 border-b hover:bg-accent/50"
             >
               <span className="flex items-center gap-3 min-w-0">

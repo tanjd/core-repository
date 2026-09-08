@@ -21,7 +21,9 @@ export function AuthorLink({ author, className }: AuthorLinkProps) {
   function handleClick(e: MouseEvent) {
     e.preventDefault();
     e.stopPropagation();
-    router.push(`/authors/${encodeURIComponent(author)}`);
+    router.push(
+      `/authors/${encodeURIComponent(author)}?from=${encodeURIComponent("/catalog")}`,
+    );
   }
 
   return (

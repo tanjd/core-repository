@@ -2,6 +2,7 @@ package gorm
 
 import (
 	"errors"
+	"strings"
 	"time"
 
 	"gorm.io/gorm"
@@ -64,8 +65,12 @@ func (r *BookRepository) FindByISBN(isbn string) (*models.Book, error) {
 
 func (r *BookRepository) buildListQuery(search, sort string, availableOnly bool) *gorm.DB {
 	tx := r.db.Model(&models.Book{})
-	if search != "" {
-		like := "%" + search + "%"
+	// Each word must appear somewhere across title/author, but words may land
+	// in either field and in any order — so "potter harry" and "j.k. harry"
+	// both match "Harry Potter" by "J.K. Rowling", not just an exact-phrase
+	// substring of the whole query.
+	for _, token := range strings.Fields(search) {
+		like := "%" + token + "%"
 		tx = tx.Where("title LIKE ? OR author LIKE ?", like, like)
 	}
 	// A book with no copies left (e.g. its last copy was just removed by its
@@ -181,8 +186,8 @@ func (r *BookRepository) buildAuthorsQuery(search string) *gorm.DB {
 	tx := r.db.Model(&models.Book{}).
 		Where("EXISTS (SELECT 1 FROM copies WHERE copies.book_id = books.id)").
 		Where("author != ''")
-	if search != "" {
-		tx = tx.Where("author LIKE ?", "%"+search+"%")
+	for _, token := range strings.Fields(search) {
+		tx = tx.Where("author LIKE ?", "%"+token+"%")
 	}
 	return tx
 }

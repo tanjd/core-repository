@@ -71,7 +71,7 @@ func TestResolveExternalData_PrefersOLKeyOverGoogleBooksIDOverISBN(t *testing.T)
 	})
 
 	book := models.Book{OLKey: "OL1M", GoogleBooksID: "GB1", ISBN: "123"}
-	data, _ := resolveExternalData(t.Context(), client, book, "test-key", "")
+	data, _ := resolveExternalData(t.Context(), client, book, "test-key", "", wantedFields{cover: true, description: true})
 
 	if data.coverURL != "https://covers.openlibrary.org/b/id/1-L.jpg" {
 		t.Fatalf("expected OLKey result to win for cover, got %+v", data)
@@ -90,7 +90,7 @@ func TestResolveExternalData_FallsThroughWhenOLKeyEmpty(t *testing.T) {
 	})
 
 	book := models.Book{GoogleBooksID: "GB1"}
-	data, _ := resolveExternalData(t.Context(), client, book, "test-key", "")
+	data, _ := resolveExternalData(t.Context(), client, book, "test-key", "", wantedFields{cover: true, description: true})
 
 	if data.coverURL != "https://books.google.com/gb1.jpg" || data.description != "from google" {
 		t.Fatalf("expected Google Books result, got %+v", data)
@@ -104,7 +104,7 @@ func TestResolveExternalData_FallsThroughOnEmptySource(t *testing.T) {
 	})
 
 	book := models.Book{OLKey: "OL1M", ISBN: "123"}
-	data, _ := resolveExternalData(t.Context(), client, book, "", "")
+	data, _ := resolveExternalData(t.Context(), client, book, "", "", wantedFields{cover: true, description: true})
 
 	if data.coverURL != "https://covers.openlibrary.org/b/id/3-L.jpg" {
 		t.Fatalf("expected fallthrough to ISBN result, got %+v", data)
@@ -141,7 +141,7 @@ func TestResolveExternalData_ISBNFallsThroughToGoogleBooksSearch(t *testing.T) {
 	})
 
 	book := models.Book{ISBN: "9781433578113"}
-	data, _ := resolveExternalData(t.Context(), client, book, "test-key", "")
+	data, _ := resolveExternalData(t.Context(), client, book, "test-key", "", wantedFields{cover: true, description: true})
 
 	if data.coverURL != "https://books.google.com/books/content?id=4qErzgEACAAJ" {
 		t.Fatalf("expected Google Books ISBN-search cover, got %+v", data)
@@ -161,7 +161,7 @@ func TestResolveExternalData_ISBNGoogleBooksSearchSkippedWithoutAPIKey(t *testin
 	})
 
 	book := models.Book{ISBN: "111"}
-	data, _ := resolveExternalData(t.Context(), client, book, "", "")
+	data, _ := resolveExternalData(t.Context(), client, book, "", "", wantedFields{cover: true, description: true})
 
 	if !data.empty() {
 		t.Fatalf("expected empty result without an API key, got %+v", data)
@@ -182,7 +182,7 @@ func TestResolveExternalData_ISBNFallsThroughToHardcover(t *testing.T) {
 	})
 
 	book := models.Book{ISBN: "222"}
-	data, attempts := resolveExternalData(t.Context(), client, book, "test-key", "hardcover-key")
+	data, attempts := resolveExternalData(t.Context(), client, book, "test-key", "hardcover-key", wantedFields{cover: true, description: true})
 
 	if data.coverURL != "https://assets.hardcover.app/cover.jpg" || data.description != "from hardcover" {
 		t.Fatalf("expected Hardcover result, got %+v (attempts: %v)", data, attempts)
@@ -200,7 +200,7 @@ func TestResolveExternalData_HardcoverSkippedWithoutAPIKey(t *testing.T) {
 	})
 
 	book := models.Book{ISBN: "333"}
-	data, _ := resolveExternalData(t.Context(), client, book, "test-key", "")
+	data, _ := resolveExternalData(t.Context(), client, book, "test-key", "", wantedFields{cover: true, description: true})
 
 	if !data.empty() {
 		t.Fatalf("expected empty result, got %+v", data)
@@ -213,12 +213,78 @@ func TestResolveExternalData_HardcoverSkippedWithoutAPIKey(t *testing.T) {
 func TestResolveExternalData_NoKeysReturnsEmpty(t *testing.T) {
 	client, rt := newStubClient(map[string]string{})
 
-	data, _ := resolveExternalData(t.Context(), client, models.Book{}, "test-key", "")
+	data, _ := resolveExternalData(t.Context(), client, models.Book{}, "test-key", "", wantedFields{cover: true, description: true})
 
 	if !data.empty() {
 		t.Fatalf("expected empty result for a book with no external keys, got %+v", data)
 	}
 	if len(rt.calls) != 0 {
 		t.Fatalf("expected no HTTP calls for a book with no external keys, got %v", rt.calls)
+	}
+}
+
+func TestResolveExternalData_OpenLibraryDecodesAuthors(t *testing.T) {
+	client, _ := newStubClient(map[string]string{
+		"bibkeys=ISBN:444": `{"ISBN:444":{"authors":[{"name":"Author One"},{"name":"Author Two"}]}}`,
+	})
+
+	book := models.Book{ISBN: "444"}
+	data, _ := resolveExternalData(t.Context(), client, book, "", "", wantedFields{author: true})
+
+	if data.author != "Author One; Author Two" {
+		t.Fatalf("expected joined Open Library authors, got %q", data.author)
+	}
+}
+
+func TestResolveExternalData_GoogleBooksDecodesAuthors(t *testing.T) {
+	client, _ := newStubClient(map[string]string{
+		"bibkeys=ISBN:555":   `{"ISBN:555":{}}`,
+		"volumes?q=isbn:555": `{"items":[{"volumeInfo":{"authors":["Author One","Author Two"]}}]}`,
+	})
+
+	book := models.Book{ISBN: "555"}
+	data, _ := resolveExternalData(t.Context(), client, book, "test-key", "", wantedFields{author: true})
+
+	if data.author != "Author One; Author Two" {
+		t.Fatalf("expected joined Google Books authors, got %q", data.author)
+	}
+}
+
+func TestResolveExternalData_HardcoverDecodesAuthors(t *testing.T) {
+	client, _ := newStubClient(map[string]string{
+		"bibkeys=ISBN:666":   `{"ISBN:666":{}}`,
+		"volumes?q=isbn:666": `{"items":[]}`,
+		"api.hardcover.app": `{"data":{"books":[{"cached_contributors":[
+			{"author":{"name":"Author One"},"contribution":""},
+			{"author":{"name":"Illustrator Person"},"contribution":"Illustrator"},
+			{"author":{"name":"Author Two"},"contribution":"Author"}
+		]}]}}`,
+	})
+
+	book := models.Book{ISBN: "666"}
+	data, _ := resolveExternalData(t.Context(), client, book, "test-key", "hardcover-key", wantedFields{author: true})
+
+	if data.author != "Author One; Author Two" {
+		t.Fatalf("expected joined Hardcover authors excluding the illustrator, got %q", data.author)
+	}
+}
+
+func TestResolveExternalData_AuthorOnlyWantStopsAsSoonAsAuthorFound(t *testing.T) {
+	// OLKey's Open Library lookup can supply an author but never a
+	// description/cover in this fixture; when only author is wanted, the
+	// loop must stop right there instead of also querying GoogleBooksID.
+	client, rt := newStubClient(map[string]string{
+		"bibkeys=OLID:OL1M": `{"OLID:OL1M":{"authors":[{"name":"Author One"}]}}`,
+		"volumes/GB1":       `{"volumeInfo":{"authors":["Should Not Be Seen"]}}`,
+	})
+
+	book := models.Book{OLKey: "OL1M", GoogleBooksID: "GB1"}
+	data, _ := resolveExternalData(t.Context(), client, book, "test-key", "", wantedFields{author: true})
+
+	if data.author != "Author One" {
+		t.Fatalf("expected Open Library author, got %q", data.author)
+	}
+	if len(rt.calls) != 1 {
+		t.Fatalf("expected to stop after Open Library once author was found, got %v", rt.calls)
 	}
 }

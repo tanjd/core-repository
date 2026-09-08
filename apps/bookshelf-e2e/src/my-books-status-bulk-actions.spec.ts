@@ -20,6 +20,15 @@ async function enterMobileSelectMode(page: Page) {
   });
   if (await selectToggle.isVisible()) {
     await selectToggle.click();
+    // Wait for a checkbox to actually render before returning — the toggle
+    // click and the checkboxes appearing aren't the same paint, and under
+    // load a caller's very next locator-by-name lookup can otherwise miss
+    // the window and hang until its own timeout instead of this one.
+    await page
+      .getByRole("checkbox")
+      .filter({ visible: true })
+      .first()
+      .waitFor();
   }
 }
 
