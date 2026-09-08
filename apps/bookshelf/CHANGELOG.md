@@ -1,3 +1,13 @@
+## 0.43.1 (2026-09-08)
+
+### 🩹 Fixes
+
+- **bookshelf-backend,bookshelf:** normalize punctuation in search matching ([#121](https://github.com/tanjd/core-repository/pull/121))
+
+### ❤️ Thank You
+
+- Jeddy Tan @tanjd
+
 ## 0.43.0 (2026-09-08)
 
 ### 🚀 Features
