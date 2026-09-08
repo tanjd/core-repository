@@ -47,6 +47,46 @@ Authelia, etc.) they'd rather delegate to. Not started; no design work done yet.
 for new library content — would help when importing a large batch (e.g. a household's whole shelf)
 where some matches need correcting before they're live. Not started.
 
+## In scope — from internal UX review (2026-09-08)
+
+Not from the other-apps comparison above — surfaced by reviewing the existing frontend flows
+directly. Recorded here anyway since this is the established "in scope, not started" backlog.
+
+### Authenticated home dashboard
+
+`apps/bookshelf/src/app/page.tsx` routes every logged-in visit through the same
+`LandingPage` a logged-out visitor sees (marketing hero/screenshots/feature grid), just with the
+CTA swapped to "Go to catalog." A member with pending requests to review, a loan due back soon, or
+a waitlisted copy that opened up gets no summary of any of that — they have to separately check
+Loans, My Books, and the notification bell. The building blocks already exist
+(`CurrentlyBorrowedCard`, the pending-request counts computed in `my-books/page.tsx`,
+`useUnreadNotifications`) — this would be assembling them into a real "here's what needs your
+attention" view for authenticated users, not new data plumbing. Not started.
+
+### Proactive due-date reminders
+
+The only due-date signal today is an "Overdue" badge that appears _after_ the return date passes
+(`isOverdue` in `apps/bookshelf/src/lib/loanStatus.ts`) — nothing nudges a borrower beforehand. For
+a peer-lending app where the trust model depends on timely returns, a reminder a day or two before
+the due date (reusing the existing email/Telegram notification channels) would likely reduce
+overdue rates more than an after-the-fact badge does. Needs a small backend piece — a scheduled job
+querying loans by due date, alongside the existing digest/notification dispatch. Not started.
+
+### Bulk accept/decline for loan requests
+
+My Books already has bulk pause/delete for copies (`apps/bookshelf/src/app/my-books/page.tsx`), but
+request management on `my-books/[copyId]/requests` is still one-at-a-time. An owner with several
+books and a pile of pending requests has no way to accept/decline in bulk, which is inconsistent
+with the bulk-action pattern already shipped for copies. Not started.
+
+### Considered and rejected: waitlist position indicator
+
+Showing "you're #2 in line" was considered but rejected — `WaitlistButton.tsx` and the
+`getWaitlistStatus` API only track a total `count` and an `on_waitlist` boolean; there's no queue
+ordering in the data model to derive a position from. Would need waitlist entries to gain an
+ordering (e.g. a join-timestamp-based rank) before a position indicator is meaningful — not a
+frontend-only change like the two above.
+
 ## Already shipped — surfaced by this comparison, worth noting so it isn't proposed again
 
 **Lending/community analytics.** Reading-analytics dashboards in similar apps mapped, for
