@@ -72,6 +72,7 @@ function baseUser(overrides: Partial<User> = {}): User {
     role: "user",
     created_at: "2026-01-01T00:00:00Z",
     google_books_key_configured: false,
+    hardcover_key_configured: false,
     email_notifications_enabled: true,
     monthly_digest_enabled: true,
     telegram_linked: false,

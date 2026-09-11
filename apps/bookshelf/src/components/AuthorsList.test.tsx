@@ -5,8 +5,8 @@ import type { AuthorSummary } from "@/lib/types";
 describe("AuthorsList", () => {
   it("skips a row for an empty author string", () => {
     const authors: AuthorSummary[] = [
-      { author: "", book_count: 1 },
-      { author: "Frank Herbert", book_count: 2 },
+      { author: "", book_count: 1, covers: [] },
+      { author: "Frank Herbert", book_count: 2, covers: [] },
     ];
 
     render(<AuthorsList authors={authors} />);
@@ -21,7 +21,7 @@ describe("AuthorsList", () => {
 
   it("bakes fromHref into each author link as ?from= so 'Catalog' can restore this view", () => {
     const authors: AuthorSummary[] = [
-      { author: "Frank Herbert", book_count: 2 },
+      { author: "Frank Herbert", book_count: 2, covers: [] },
     ];
 
     render(
@@ -39,7 +39,7 @@ describe("AuthorsList", () => {
 
   it("omits ?from= when no fromHref is given", () => {
     const authors: AuthorSummary[] = [
-      { author: "Frank Herbert", book_count: 2 },
+      { author: "Frank Herbert", book_count: 2, covers: [] },
     ];
 
     render(<AuthorsList authors={authors} />);

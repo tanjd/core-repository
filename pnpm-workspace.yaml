@@ -16,15 +16,21 @@ minimumReleaseAgeExclude:
   - eslint-config-next@16.3.3
 
 overrides:
+  # No fixed version published for GHSA-vwc7-r8mq-g2x9 (symlink-following extraction) yet —
+  # bump this pin once one ships.
   adm-zip: 0.6.0
+  # GHSA-rgw5-rvv9-x895 (DoS via unbounded intermediate arrays), pulled in transitively via the
+  # pinned Nx 22.7.8 toolchain (minimatch). Only the v5 line is affected (v2 instance is fine).
+  brace-expansion@5: 5.0.9
   esbuild: 0.25.0
   fast-uri: 3.1.6
   file-type: 21.3.4
-  hono: 4.12.34
-  js-yaml@3: 3.15.1
-  js-yaml@4: 4.3.1
+  hono: 4.13.5
+  js-yaml@3: 3.15.2
+  js-yaml@4: 4.3.2
   koa: 3.1.2
   minimatch: 9.0.9
+  qs: 6.16.0
   # jsdom's own selector-engine dependency. 2.2.26+ has an open upstream
   # regression where matching `:modal` recurses into repeated
   # Element.matches() calls under jsdom (~1.3s each) — Radix UI's
@@ -37,9 +43,11 @@ overrides:
   picomatch: 4.0.5
   postcss: 8.5.25
   serialize-javascript: 7.0.7
-  sharp: 0.35.3
+  sharp: 0.35.4
+  smol-toml: 1.7.1
+  svgo@4: 4.1.0
   undici: 7.29.0
   uuid: 11.1.1
   vite: 6.4.3
-  vitest: 3.2.6
+  vitest: 4.1.11
   ws: 8.21.1
