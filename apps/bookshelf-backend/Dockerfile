@@ -7,7 +7,7 @@
 # build references off64_t/pread64/pwrite64, which musl doesn't expose
 # the way glibc does (same reasoning as apps/food-maps-backend/Dockerfile).
 
-FROM golang:1.25-bookworm AS builder
+FROM golang:1.26-bookworm AS builder
 
 RUN apt-get update && \
     apt-get install -y --no-install-recommends gcc libc6-dev && \
