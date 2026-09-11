@@ -131,11 +131,11 @@ webServers report healthy. It:
 
 **Choosing between `storageState` and `login()`:**
 
-| Scenario | Use |
-| --- | --- |
-| Spec navigates as admin, doesn't test the login form | `test.use({ storageState: ".auth/admin.json" })` + `page.goto(target)` directly |
-| Spec tests the login UI itself (`login.spec.ts`, `password-reset-magic-link.spec.ts`) | `login()` from `auth-helpers.ts` — no `storageState` |
-| Spec registers its own per-test user and logs in as them | `registerTestUser()` + `login()` — no admin storageState |
+| Scenario                                                                              | Use                                                                             |
+| ------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------- |
+| Spec navigates as admin, doesn't test the login form                                  | `test.use({ storageState: ".auth/admin.json" })` + `page.goto(target)` directly |
+| Spec tests the login UI itself (`login.spec.ts`, `password-reset-magic-link.spec.ts`) | `login()` from `auth-helpers.ts` — no `storageState`                            |
+| Spec registers its own per-test user and logs in as them                              | `registerTestUser()` + `login()` — no admin storageState                        |
 
 For specs in the first category, start the test with `page.goto(target)` instead of calling
 `login()` — the storageState puts the admin JWT in localStorage before the page loads.

@@ -10,6 +10,33 @@ const appVersion = (
   ) as { version: string }
 ).version;
 
+// The section a release's notes render under depends on the commit types since the last
+// release (e.g. a fix-only release has no "Features" section) — read the actual latest
+// entry instead of assuming which section is present, mirroring how appVersion is read
+// from source rather than hardcoded above.
+const SECTION_HEADING_LABELS: Record<string, string> = {
+  "🚀 Features": "Features",
+  "🩹 Fixes": "Fixes",
+  "Database migrations": "Database migrations",
+};
+
+function latestReleaseSectionLabel(changelog: string): string {
+  const latestEntry = changelog.split(/\n(?=## )/)[0] ?? "";
+  const label = Object.entries(SECTION_HEADING_LABELS).find(([heading]) =>
+    latestEntry.includes(`### ${heading}`),
+  )?.[1];
+  if (!label) {
+    throw new Error(
+      "Could not find a recognized section heading in the latest CHANGELOG.md entry",
+    );
+  }
+  return label;
+}
+
+const latestSectionLabel = latestReleaseSectionLabel(
+  readFileSync(join(__dirname, "../../bookshelf/CHANGELOG.md"), "utf8"),
+);
+
 test("footer version links to the changelog page", async ({ page }) => {
   await page.goto("/login");
 
@@ -32,7 +59,7 @@ test("changelog page renders release notes from the latest entry", async ({
   await expect(
     page.getByRole("heading", { name: `v${appVersion}` }).first(),
   ).toBeVisible();
-  await expect(page.getByText("Features").first()).toBeVisible();
+  await expect(page.getByText(latestSectionLabel).first()).toBeVisible();
 });
 
 test("upgrade notice appears in the notification panel and can be dismissed", async ({
