@@ -1,3 +1,13 @@
+## 0.43.3 (2026-09-11)
+
+### 🩹 Fixes
+
+- resolve known dependency vulnerabilities across the workspace ([#123](https://github.com/tanjd/core-repository/pull/123))
+
+### ❤️ Thank You
+
+- Jeddy Tan @tanjd
+
 ## 0.43.2 (2026-09-08)
 
 ### 🩹 Fixes
