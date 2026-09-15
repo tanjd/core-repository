@@ -5,7 +5,9 @@
   "name": "otobr-buddy",
   "projectType": "application",
   "sourceRoot": "apps/otobr-buddy/src",
-  "tags": [],
+  "tags": [
+    "lang:python"
+  ],
   "targets": {
     "build": {
       "executor": "nx:run-commands",
@@ -36,6 +38,13 @@
       "executor": "nx:run-commands",
       "options": {
         "command": "uv run pytest",
+        "cwd": "apps/otobr-buddy"
+      }
+    },
+    "update-deps": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "uv lock --upgrade && uv sync",
         "cwd": "apps/otobr-buddy"
       }
     }

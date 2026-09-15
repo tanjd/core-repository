@@ -1,6 +1,6 @@
 MAKEFLAGS += --no-print-directory
 
-.PHONY: help setup setup-ci install-deps install-dev-tools install-goimports install-rtk install-govulncheck verify affected new-bot docker-build golangci-verify nx-reset upgrade-nx prune-devcontainer-cache kill-dev-servers
+.PHONY: help setup setup-ci install-deps install-dev-tools install-goimports install-rtk install-govulncheck verify affected new-bot docker-build golangci-verify nx-reset upgrade-nx upgrade-go upgrade-python upgrade-pnpm upgrade-deps check-required-targets prune-devcontainer-cache kill-dev-servers
 
 .DEFAULT_GOAL := help
 
@@ -67,6 +67,20 @@ golangci-verify: ## Confirm golangci-lint actually loaded .golangci.yaml (not si
 upgrade-nx: ## Upgrade the monorepo's Nx version
 	npx nx migrate latest
 	npx nx migrate --run-migrations
+
+upgrade-go: ## Upgrade Go module dependencies for every project tagged lang:go (go get -u + go mod tidy)
+	pnpm nx run-many -t update-deps --projects=tag:lang:go
+
+upgrade-python: ## Upgrade Python dependencies for every project tagged lang:python (uv lock --upgrade + uv sync)
+	pnpm nx run-many -t update-deps --projects=tag:lang:python
+
+upgrade-pnpm: ## Upgrade pnpm workspace dependencies to their latest versions
+	pnpm update -r --latest
+
+upgrade-deps: upgrade-go upgrade-python upgrade-pnpm ## Upgrade Go, Python, and pnpm deps across the workspace (manual/on-demand — Dependabot already runs this weekly); run `make verify` after and review the diff before committing
+
+check-required-targets: ## Verify every Go/Python project (by go.mod/pyproject.toml) is tagged lang:go/lang:python and defines update-deps
+	@bash tools/check-required-targets.sh
 
 prune-devcontainer-cache: ## Reclaim disk from stale entries in the persistent devcontainer caches (pnpm store, Go build cache, old Playwright browser versions)
 	pnpm store prune

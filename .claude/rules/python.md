@@ -33,6 +33,12 @@ repo so far; further apps are created on demand via `make new-bot` (see the
   test target (`uv run pytest`) are cached `nx:run-commands` targets — same
   non-plugin approach as Go, since there's no official Nx Python plugin
   (`@nxlv/python` was removed; see the `scaffold-telegram-bot` skill).
+- Every uv project also needs an uncached `update-deps` target
+  (`uv lock --upgrade && uv sync`) and a `lang:python` tag — `make upgrade-python` resolves
+  projects by that tag, not a hardcoded list, so a correctly tagged project needs no further
+  Makefile change. See root `CLAUDE.md`'s "Nx conventions" section. The `telegram-bot` generator
+  sets both automatically for new bots; `make check-required-targets`
+  (`tools/check-required-targets.sh`) catches a hand-added project that's missing either.
 - **Shared code** (`libs/telegram-bot-shared`, used by both Telegram bots and the
   `telegram-bot` generator) is consumed via a `uv` local **path dependency**, not a uv
   workspace — each app keeps its own independent `uv.lock` and independent `nx release`

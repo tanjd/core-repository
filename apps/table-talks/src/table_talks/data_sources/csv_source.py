@@ -31,12 +31,17 @@ class CSVDataSource(DataSource):
 
         # Cache for questions by theme (matches existing behavior)
         self._questions_cache: dict[str, list[str]] = {}
+        self._themes_cache: list[Theme] | None = None
+        self._all_questions_cache: list[tuple[str, str]] | None = None
 
     def get_themes(self) -> list[Theme]:
         """Return list of theme dicts: id, label, description.
 
         Validates theme IDs and skips invalid entries.
         """
+        if self._themes_cache is not None:
+            return self._themes_cache
+
         themes: list[Theme] = []
         with open(self.themes_csv, encoding="utf-8", newline="") as f:
             for i, row in enumerate(csv.DictReader(f), start=2):
@@ -64,6 +69,7 @@ class CSVDataSource(DataSource):
                     continue
 
                 themes.append(Theme(id=theme_id, label=theme_label, description=theme_desc))
+        self._themes_cache = themes
         return themes
 
     def get_questions(self, theme_id: str) -> list[str]:
@@ -95,6 +101,9 @@ class CSVDataSource(DataSource):
 
         Used for random mix mode to show which theme each question is from.
         """
+        if self._all_questions_cache is not None:
+            return self._all_questions_cache
+
         all_questions: list[tuple[str, str]] = []
         themes = self.get_themes()
         theme_ids = {t["id"] for t in themes}
@@ -106,4 +115,5 @@ class CSVDataSource(DataSource):
                 if theme_id in theme_ids and question:
                     all_questions.append((theme_id, question))
 
+        self._all_questions_cache = all_questions
         return all_questions
