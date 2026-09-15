@@ -1,6 +1,6 @@
 # Author View — spec
 
-**Status:** Draft, not yet approved for build · **Scope:** `apps/bookshelf` +
+**Status:** Shipped (`AuthorLink.tsx`, `src/app/authors/[author]`) · **Scope:** `apps/bookshelf` +
 `apps/bookshelf-backend` · **Depends on:** `Book`
 
 Let a member tap an author's name from anywhere it appears — or browse an index of every author in
