@@ -196,12 +196,12 @@ cp -r /data/. /backup/`.
 
 ## Known gaps
 
-- **Feature ideas from similar apps.** `docs/roadmap-feature-ideas.md` records which ideas
-  surfaced while comparing bookshelf against other self-hosted community/library-style apps are
-  worth replicating given this app's physical-lending scope — multi-provider metadata (Hardcover
-  shipped, see `docs/metadata-search.md`), OIDC/SSO, and a staging/review import workflow are in
-  scope; multi-format readers/OPDS/Kobo sync are not (would need a content-storage subsystem this
-  app doesn't have and isn't meant to have).
+- **Feature ideas from similar apps.** `apps/bookshelf/TODO.md` records which ideas surfaced while
+  comparing bookshelf against other self-hosted community/library-style apps are worth replicating
+  given this app's physical-lending scope — multi-provider metadata (Hardcover shipped, see
+  `docs/metadata-search.md`), OIDC/SSO, and a staging/review import workflow are in scope;
+  multi-format readers/OPDS/Kobo sync are not (would need a content-storage subsystem this app
+  doesn't have and isn't meant to have).
 - **`Copy` preload gotcha.** `CopyRepository.GetByIDWithAssociations`
   (`internal/repository/gorm/copy_repo.go`) is the only method that preloads both `Book` and
   `Owner` — use it for anything that reads `bookCopy.Book` (e.g. building an email/notification
