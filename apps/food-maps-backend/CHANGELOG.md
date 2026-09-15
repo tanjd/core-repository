@@ -1,3 +1,13 @@
+## 0.5.0 (2026-09-15)
+
+### 🚀 Features
+
+- add per-language dependency upgrade tooling ([#158](https://github.com/tanjd/core-repository/pull/158))
+
+### ❤️ Thank You
+
+- Jeddy Tan @tanjd
+
 ## 0.4.4 (2026-09-04)
 
 This was a version bump only for food-maps-backend to align it with other projects, there were no code changes.
