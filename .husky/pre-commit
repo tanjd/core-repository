@@ -7,3 +7,8 @@ if [ -n "$STAGED_FILES" ]; then
 fi
 
 pnpm nx affected -t lint test e2e
+
+# Whole-workspace invariant, not scoped to affected projects - cheap (just
+# go.mod/pyproject.toml + jq, no Nx graph) so it isn't worth gating on nx
+# affected.
+bash tools/check-required-targets.sh

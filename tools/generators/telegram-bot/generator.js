@@ -22,7 +22,7 @@ module.exports = async function telegramBotGenerator(tree, options) {
     root: projectRoot,
     projectType: "application",
     sourceRoot: `${projectRoot}/src`,
-    tags: [],
+    tags: ["lang:python"],
     implicitDependencies: ["telegram-bot-shared"],
     targets: {
       build: {
@@ -52,6 +52,13 @@ module.exports = async function telegramBotGenerator(tree, options) {
         cache: true,
         options: {
           command: "uv run ruff check . && uv run ruff format --check .",
+          cwd: projectRoot,
+        },
+      },
+      "update-deps": {
+        executor: "nx:run-commands",
+        options: {
+          command: "uv lock --upgrade && uv sync",
           cwd: projectRoot,
         },
       },

@@ -103,6 +103,9 @@ Husky (`core.hooksPath=.husky/_`) is just the trigger Git calls on
 - `pnpm nx affected -t lint test e2e` — the full Nx lint/test/e2e for
   whatever the commit affects, not staged-file-scoped like the two layers
   above.
+- `tools/check-required-targets.sh` (`make check-required-targets`) — whole-workspace, not
+  `nx affected`-scoped, since it's cheap (`go.mod`/`pyproject.toml` + `jq`, no Nx graph). See
+  "Dependency upgrades" under "Nx conventions" below.
 
 The third layer duplicates what CI runs, on purpose: failing locally before a
 push beats failing in CI, even with no remote cache to offset it
@@ -151,6 +154,20 @@ scratch script, not to block work on one existing everywhere.
   to be present wherever `nx lint` runs, including CI.
 - `namedInputs.sharedGlobals` includes `.github/workflows/ci.yml` — editing
   that file busts the cache for every project.
+- **Dependency upgrades**: every Go app and uv Python project must define an `update-deps`
+  `nx:run-commands` target (`go get -u ./... && go mod tidy` for Go; `uv lock --upgrade && uv sync`
+  for Python — see `apps/food-maps-backend/project.json` / `apps/index-watch/project.json`) and
+  carry the matching `lang:go`/`lang:python` tag. `make upgrade-go`/`make upgrade-python`
+  (`##@ Maintenance` section) resolve projects by that tag (`pnpm nx run-many -t update-deps
+--projects=tag:lang:go`, etc.) rather than a hardcoded list, so a newly tagged project is picked
+  up with no Makefile change. These targets are on-demand/manual, complementing the weekly
+  Dependabot PRs (`.github/dependabot.yml`), not replacing them. New bots scaffolded via
+  `make new-bot` get both the tag and the target automatically from the generator
+  (`tools/generators/telegram-bot/generator.js`) — no further steps needed. A hand-added Go app,
+  or a Python app created without the generator, needs both added manually — run
+  `make check-required-targets` (`tools/check-required-targets.sh`) to catch a project that's
+  missing its tag and/or target; it derives the expected set from `go.mod`/`pyproject.toml`
+  presence on disk, not from the tag itself, so an untagged project still gets caught.
 - **Inferred tasks**: `@nx/next`, `@nx/vite`, `@nx/playwright`, `@nx/eslint`,
   `@nx/jest`, and `@nx-go/nx-go` are registered Nx plugins (`nx.json` →
   `plugins`) that auto-register targets from config files already present in
@@ -173,10 +190,12 @@ scratch script, not to block work on one existing everywhere.
   - `pnpm nx graph` shows the resulting dependency graph.
 - **Module boundaries**: `@nx/enforce-module-boundaries` (in
   `eslint.config.mjs`) is wired up but currently wide open — a single
-  `{ sourceTag: "*", onlyDependOnLibsWithTags: ["*"] }` constraint, and every
-  `project.json` has `"tags": []`. Proposed convention for when this needs
-  tightening (not yet applied to any project — adopt once a cross-domain
-  project, e.g. a migrated bot, makes enforcement actually useful):
+  `{ sourceTag: "*", onlyDependOnLibsWithTags: ["*"] }` constraint. Go/Python projects now carry a
+  `lang:go`/`lang:python` tag (see "Dependency upgrades" above), but that's a separate axis for
+  grouping `update-deps` targets, not module-boundary enforcement — every TS app/lib still has
+  `"tags": []`. Proposed convention for when boundary enforcement needs tightening (not yet applied
+  to any project — adopt once a cross-domain project, e.g. a migrated bot, makes enforcement
+  actually useful):
   - `type:app` / `type:lib` / `type:e2e` — what kind of project it is.
   - `scope:food-maps` / `scope:bots` / `scope:shared` — which product/domain
     it belongs to.
@@ -226,7 +245,13 @@ scratch script, not to block work on one existing everywhere.
   upgrade). Before running `make upgrade-nx` (or `nx migrate latest`) again,
   check `npm view @nx-go/nx-go dependencies` for its `@nx/devkit` range
   first, and pin the migration to a specific 22.x version rather than
-  `latest`, which may already be 23+.
+  `latest`, which may already be 23+. As of nx-go 4.1.1 (2026-06-24) this is
+  still blocked, not fixed — that release _tightened_ the range from `>= 20
+< 24` to `>= 20 < 23` (the maintainer's words: an earlier version wrongly
+  allowed Nx 23 and broke in CI). Real Nx 23 support needs devkit 23's
+  breaking export changes, deferred to nx-go's next major version — so don't
+  be misled by a changelog entry that says "Add Nx 23 support," which refers
+  to this range fix, not actual compatibility.
 - Module boundary tags/`depConstraints` are documented as a convention (see
   "Nx conventions") but not applied to any `project.json` yet — adopt when
   the first cross-domain project (e.g. a migrated bot) makes enforcement

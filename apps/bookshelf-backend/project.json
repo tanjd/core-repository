@@ -3,7 +3,9 @@
   "name": "bookshelf-backend",
   "projectType": "application",
   "sourceRoot": "apps/bookshelf-backend",
-  "tags": [],
+  "tags": [
+    "lang:go"
+  ],
   "targets": {
     "build": {
       "executor": "@nx-go/nx-go:build",
@@ -48,6 +50,13 @@
     },
     "tidy": {
       "executor": "@nx-go/nx-go:tidy"
+    },
+    "update-deps": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "go get -u ./... && go mod tidy",
+        "cwd": "{projectRoot}"
+      }
     }
   }
 }
