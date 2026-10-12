@@ -26,11 +26,14 @@ type BookHandler struct {
 	// wishlistWorkflow — a nil value degrades recommendation_count/
 	// your_recommendation to their zero values rather than panicking.
 	recommendations repository.RecommendationRepository
+	// toReads is optional (nil-safe), same reasoning as recommendations — a
+	// nil value degrades your_to_read to its zero value rather than panicking.
+	toReads repository.ToReadRepository
 }
 
 // NewBookHandler creates a new BookHandler.
-func NewBookHandler(books repository.BookRepository, users repository.UserRepository, coversDir string, wishlistWorkflow *services.WishlistWorkflow, recommendations repository.RecommendationRepository) *BookHandler {
-	return &BookHandler{books: books, users: users, coversDir: coversDir, wishlistWorkflow: wishlistWorkflow, recommendations: recommendations}
+func NewBookHandler(books repository.BookRepository, users repository.UserRepository, coversDir string, wishlistWorkflow *services.WishlistWorkflow, recommendations repository.RecommendationRepository, toReads repository.ToReadRepository) *BookHandler {
+	return &BookHandler{books: books, users: users, coversDir: coversDir, wishlistWorkflow: wishlistWorkflow, recommendations: recommendations, toReads: toReads}
 }
 
 // bookResponse wraps a Book and adds the computed availability +
@@ -50,6 +53,10 @@ type bookResponse struct {
 	WaitlistCount       int64 `json:"waitlist_count"`
 	RecommendationCount int64 `json:"recommendation_count"`
 	YourRecommendation  bool  `json:"your_recommendation"`
+	// YourToRead is the caller's personal "save to read later" flag — see
+	// ToReadHandler. Degrades to false for an anonymous caller or when
+	// toReads is nil, same as YourRecommendation.
+	YourToRead bool `json:"your_to_read"`
 }
 
 // --- Input / Output types ---
@@ -476,19 +483,14 @@ func (h *BookHandler) toBooksResponse(books []models.Book, userID uint) ([]bookR
 		return nil, err
 	}
 
-	var recCounts map[uint]int64
-	var yourRecs map[uint]bool
-	if h.recommendations != nil {
-		recCounts, err = h.recommendations.CountByBookBatch(ids)
-		if err != nil {
-			return nil, err
-		}
-		if userID != 0 {
-			yourRecs, err = h.recommendations.HasRecommendedBatch(userID, ids)
-			if err != nil {
-				return nil, err
-			}
-		}
+	recCounts, yourRecs, err := h.batchRecommendations(ids, userID)
+	if err != nil {
+		return nil, err
+	}
+
+	yourToReads, err := h.batchToReads(ids, userID)
+	if err != nil {
+		return nil, err
 	}
 
 	resp := make([]bookResponse, len(books))
@@ -500,7 +502,38 @@ func (h *BookHandler) toBooksResponse(books []models.Book, userID uint) ([]bookR
 			WaitlistCount:       waitlists[b.ID],
 			RecommendationCount: recCounts[b.ID],
 			YourRecommendation:  yourRecs[b.ID],
+			YourToRead:          yourToReads[b.ID],
 		}
 	}
 	return resp, nil
+}
+
+// batchRecommendations fetches recommendation_count for ids, plus
+// your_recommendation for userID (skipped for an anonymous caller), both
+// degrading to nil maps when h.recommendations is nil — see toBooksResponse.
+func (h *BookHandler) batchRecommendations(ids []uint, userID uint) (map[uint]int64, map[uint]bool, error) {
+	if h.recommendations == nil {
+		return nil, nil, nil
+	}
+	recCounts, err := h.recommendations.CountByBookBatch(ids)
+	if err != nil {
+		return nil, nil, err
+	}
+	var yourRecs map[uint]bool
+	if userID != 0 {
+		yourRecs, err = h.recommendations.HasRecommendedBatch(userID, ids)
+		if err != nil {
+			return nil, nil, err
+		}
+	}
+	return recCounts, yourRecs, nil
+}
+
+// batchToReads fetches your_to_read for ids, degrading to a nil map for an
+// anonymous caller or when h.toReads is nil — see toBooksResponse.
+func (h *BookHandler) batchToReads(ids []uint, userID uint) (map[uint]bool, error) {
+	if h.toReads == nil || userID == 0 {
+		return nil, nil
+	}
+	return h.toReads.HasToReadBatch(userID, ids)
 }

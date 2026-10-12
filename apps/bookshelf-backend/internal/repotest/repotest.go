@@ -850,6 +850,122 @@ func (r *WaitlistRepository) DeleteByCopyID(copyID uint) error {
 	return nil
 }
 
+// ToReadRepository is an in-memory fake of repository.ToReadRepository.
+type ToReadRepository struct {
+	mu      sync.Mutex
+	nextID  uint
+	entries map[uint]*models.ToReadEntry
+	books   *BookRepository
+}
+
+// NewToReadRepository creates an empty fake ToReadRepository.
+func NewToReadRepository() *ToReadRepository {
+	return &ToReadRepository{entries: map[uint]*models.ToReadEntry{}}
+}
+
+// SetBooks wires books in so ListByUserPaginated can hydrate full Book
+// records — a test helper, mirroring BookRepository.SetWaitlist.
+func (r *ToReadRepository) SetBooks(books *BookRepository) {
+	r.books = books
+}
+
+// Add saves bookID to userID's to-read list, or returns
+// repository.ErrConflict if already saved.
+func (r *ToReadRepository) Add(bookID, userID uint) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	for _, e := range r.entries {
+		if e.BookID == bookID && e.UserID == userID {
+			return repository.ErrConflict
+		}
+	}
+	r.nextID++
+	r.entries[r.nextID] = &models.ToReadEntry{ID: r.nextID, BookID: bookID, UserID: userID, CreatedAt: time.Now()}
+	return nil
+}
+
+// Remove takes bookID off userID's to-read list, or returns repository.ErrNotFound.
+func (r *ToReadRepository) Remove(bookID, userID uint) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	for id, e := range r.entries {
+		if e.BookID == bookID && e.UserID == userID {
+			delete(r.entries, id)
+			return nil
+		}
+	}
+	return repository.ErrNotFound
+}
+
+// IsToRead reports whether userID has bookID saved to read.
+func (r *ToReadRepository) IsToRead(bookID, userID uint) (bool, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	for _, e := range r.entries {
+		if e.BookID == bookID && e.UserID == userID {
+			return true, nil
+		}
+	}
+	return false, nil
+}
+
+// HasToReadBatch reports which of bookIDs userID has saved.
+func (r *ToReadRepository) HasToReadBatch(userID uint, bookIDs []uint) (map[uint]bool, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	out := map[uint]bool{}
+	if userID == 0 {
+		return out, nil
+	}
+	ids := map[uint]bool{}
+	for _, id := range bookIDs {
+		ids[id] = true
+	}
+	for _, e := range r.entries {
+		if e.UserID == userID && ids[e.BookID] {
+			out[e.BookID] = true
+		}
+	}
+	return out, nil
+}
+
+// ListByUserPaginated returns userID's saved books, newest-saved first.
+func (r *ToReadRepository) ListByUserPaginated(userID uint, page, pageSize int) (*repository.PaginatedResult[models.Book], error) {
+	r.mu.Lock()
+	entries := []*models.ToReadEntry{}
+	for _, e := range r.entries {
+		if e.UserID == userID {
+			entries = append(entries, e)
+		}
+	}
+	r.mu.Unlock()
+	sort.Slice(entries, func(i, j int) bool { return entries[i].CreatedAt.After(entries[j].CreatedAt) })
+
+	total := int64(len(entries))
+	offset := (page - 1) * pageSize
+	end := offset + pageSize
+	if offset > len(entries) {
+		offset = len(entries)
+	}
+	if end > len(entries) {
+		end = len(entries)
+	}
+
+	books := []models.Book{}
+	if r.books != nil {
+		for _, e := range entries[offset:end] {
+			if b, ok := r.books.byID[e.BookID]; ok {
+				books = append(books, *b)
+			}
+		}
+	}
+
+	totalPages := int((total + int64(pageSize) - 1) / int64(pageSize))
+	return &repository.PaginatedResult[models.Book]{
+		Items: books, Total: total, Page: page, PageSize: pageSize, TotalPages: totalPages,
+	}, nil
+}
+
 // LoanRequestRepository is an in-memory fake of repository.LoanRequestRepository.
 // It delegates to a CopyRepository, NotificationRepository, and
 // UserRepository to reproduce the cross-table effects of

@@ -526,6 +526,21 @@ export const api = {
   getRecommendations: (bookId: number) =>
     request<Recommendation[]>(`/books/${bookId}/recommendations`),
 
+  // To Read — a member's personal bookmark on a catalog book they intend
+  // to borrow later, distinct from the Wishlist board below (which is for
+  // books not yet in the catalog at all).
+  addToRead: (bookId: number) =>
+    request<void>(`/books/${bookId}/to-read`, { method: "POST" }),
+  removeToRead: (bookId: number) =>
+    request<void>(`/books/${bookId}/to-read`, { method: "DELETE" }),
+  getMyToRead: (params?: { page?: number; page_size?: number }) => {
+    const p: Record<string, string> = {};
+    if (params?.page) p.page = String(params.page);
+    if (params?.page_size) p.page_size = String(params.page_size);
+    const qs = new URLSearchParams(p).toString();
+    return request<PaginatedResult<Book>>(`/to-read/mine${qs ? "?" + qs : ""}`);
+  },
+
   // Metadata search (proxied through backend)
   searchMetadata: (q: string) =>
     request<BookMetadataResult[]>(

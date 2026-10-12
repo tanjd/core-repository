@@ -13,7 +13,7 @@ import (
 func newBookHandler() (*BookHandler, *repotest.BookRepository) {
 	books := repotest.NewBookRepository()
 	users := repotest.NewUserRepository()
-	return NewBookHandler(books, users, "", nil, nil), books
+	return NewBookHandler(books, users, "", nil, nil, nil), books
 }
 
 // bookHandlerFixture wires up the full set of fake repositories needed by
@@ -29,6 +29,7 @@ type bookHandlerFixture struct {
 	loans           *repotest.LoanRequestRepository
 	waitlist        *repotest.WaitlistRepository
 	recommendations *repotest.RecommendationRepository
+	toReads         *repotest.ToReadRepository
 }
 
 func newBookHandlerWithReadingActivity() *bookHandlerFixture {
@@ -39,16 +40,19 @@ func newBookHandlerWithReadingActivity() *bookHandlerFixture {
 	loans := repotest.NewLoanRequestRepository(copies, notifs, users)
 	waitlist := repotest.NewWaitlistRepository()
 	recommendations := repotest.NewRecommendationRepository(users)
+	toReads := repotest.NewToReadRepository()
 	books.SetCopies(copies)
 	books.SetLoans(loans)
 	books.SetWaitlist(waitlist)
+	toReads.SetBooks(books)
 	return &bookHandlerFixture{
-		handler:         NewBookHandler(books, users, "", nil, recommendations),
+		handler:         NewBookHandler(books, users, "", nil, recommendations, toReads),
 		books:           books,
 		copies:          copies,
 		loans:           loans,
 		waitlist:        waitlist,
 		recommendations: recommendations,
+		toReads:         toReads,
 	}
 }
 

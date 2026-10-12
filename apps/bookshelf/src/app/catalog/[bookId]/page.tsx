@@ -14,6 +14,7 @@ import { BookCover } from "@/components/BookCover";
 import { Breadcrumb } from "@/components/Breadcrumb";
 import { WaitlistButton } from "@/components/WaitlistButton";
 import { RecommendButton } from "@/components/RecommendButton";
+import { ToReadButton } from "@/components/ToReadButton";
 import { RecommendedBy } from "@/components/RecommendedBy";
 import { AuthorLink } from "@/components/AuthorLink";
 import { Button } from "@/components/ui/button";
@@ -447,18 +448,24 @@ export default function BookDetailPage() {
               borrowCount={book.borrow_count}
               waitlistCount={book.waitlist_count}
             />
-            {/* Same recommend affordance and state as BookCard's, wired to
-                the same behavior — tapping either surface toggles the same
-                underlying thumbs-up. See docs/book-recommendations-spec.md's
-                "Detail-page surface". */}
-            <RecommendButton
-              bookId={book.id}
-              bookTitle={book.title}
-              recommended={book.your_recommendation ?? false}
-              count={book.recommendation_count ?? 0}
-              className="self-start"
-              onToggled={() => setRecommendationsRefreshKey((k) => k + 1)}
-            />
+            {/* Same recommend/to-read affordances and state as BookCard's,
+                wired to the same behavior — tapping either surface toggles
+                the same underlying thumbs-up/save. See
+                docs/book-recommendations-spec.md's "Detail-page surface". */}
+            <div className="flex items-center gap-1 self-start">
+              <ToReadButton
+                bookId={book.id}
+                bookTitle={book.title}
+                saved={book.your_to_read ?? false}
+              />
+              <RecommendButton
+                bookId={book.id}
+                bookTitle={book.title}
+                recommended={book.your_recommendation ?? false}
+                count={book.recommendation_count ?? 0}
+                onToggled={() => setRecommendationsRefreshKey((k) => k + 1)}
+              />
+            </div>
           </div>
         </div>
 

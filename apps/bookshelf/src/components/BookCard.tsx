@@ -3,6 +3,7 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { BookCover } from "@/components/BookCover";
 import { RecommendButton } from "@/components/RecommendButton";
+import { ToReadButton } from "@/components/ToReadButton";
 import { AuthorLink } from "@/components/AuthorLink";
 import type { Book } from "@/lib/types";
 
@@ -10,9 +11,19 @@ interface BookCardProps {
   book: Book;
   ownedByMe?: boolean;
   catalogHref?: string;
+  // Fired after a successful to-read add/remove — lets the Catalog page's
+  // "To Read" segment drop the book from its own list immediately on
+  // removal, instead of leaving a now-unsaved card in that filtered view
+  // until the next full refetch.
+  onToReadToggled?: () => void;
 }
 
-export function BookCard({ book, ownedByMe, catalogHref }: BookCardProps) {
+export function BookCard({
+  book,
+  ownedByMe,
+  catalogHref,
+  onToReadToggled,
+}: BookCardProps) {
   const detailHref = catalogHref
     ? `/catalog/${book.id}?from=${encodeURIComponent(catalogHref)}`
     : `/catalog/${book.id}`;
@@ -60,12 +71,20 @@ export function BookCard({ book, ownedByMe, catalogHref }: BookCardProps) {
                 card". Tapping recommends/un-recommends without leaving the
                 catalog; RecommendButton stops the click from also
                 triggering this card's <Link> navigation. */}
-            <RecommendButton
-              bookId={book.id}
-              bookTitle={book.title}
-              recommended={book.your_recommendation ?? false}
-              count={book.recommendation_count ?? 0}
-            />
+            <div className="flex items-center gap-1">
+              <ToReadButton
+                bookId={book.id}
+                bookTitle={book.title}
+                saved={book.your_to_read ?? false}
+                onToggled={onToReadToggled}
+              />
+              <RecommendButton
+                bookId={book.id}
+                bookTitle={book.title}
+                recommended={book.your_recommendation ?? false}
+                count={book.recommendation_count ?? 0}
+              />
+            </div>
           </div>
         </CardContent>
       </Card>

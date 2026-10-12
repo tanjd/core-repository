@@ -292,6 +292,18 @@ type WaitlistRepository interface {
 	DeleteByCopyID(copyID uint) error
 }
 
+// ToReadRepository handles persistence for ToReadEntry records — a member's
+// personal bookmark on a catalog Book they intend to borrow in the future.
+type ToReadRepository interface {
+	Add(bookID, userID uint) error
+	Remove(bookID, userID uint) error
+	IsToRead(bookID, userID uint) (bool, error)
+	// HasToReadBatch mirrors RecommendationRepository.HasRecommendedBatch —
+	// returns true for each of bookIDs that userID has saved.
+	HasToReadBatch(userID uint, bookIDs []uint) (map[uint]bool, error)
+	ListByUserPaginated(userID uint, page, pageSize int) (*PaginatedResult[models.Book], error)
+}
+
 // WishlistRequestRepository handles persistence for WishlistRequest records.
 type WishlistRequestRepository interface {
 	Create(r *models.WishlistRequest) error
