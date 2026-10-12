@@ -191,7 +191,16 @@ test.describe("my books: status badges and bulk actions", () => {
     expect(copies.find((c) => c.id === b.copyId)?.status).toBe("unavailable");
 
     // Bulk delete both copies now that they're no longer loaned/requested.
-    // Selection (and mobileSelectMode) reset after the pause action above.
+    // Selection (and mobileSelectMode) reset after the pause action above,
+    // which also triggers a loadMyCopies() refetch — wait for the list to
+    // settle before looking for the "Select" toggle again, same as the first
+    // enterMobileSelectMode call above. Without this, the toggle's isVisible()
+    // check can race the reload and catch it in a transient hidden state,
+    // silently skipping select mode and leaving the checkbox lookup below to
+    // time out.
+    await expect(
+      page.getByText(titleA).filter({ visible: true }),
+    ).toBeVisible();
     await enterMobileSelectMode(page);
     await page
       .getByRole("checkbox", { name: `Select ${titleA}` })

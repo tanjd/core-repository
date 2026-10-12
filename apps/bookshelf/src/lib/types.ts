@@ -91,6 +91,11 @@ export interface Book {
   // apps/bookshelf/docs/book-recommendations-spec.md.
   recommendation_count?: number;
   your_recommendation?: boolean;
+  // your_to_read: whether the current viewer has saved this book to their
+  // personal "to read" bookmark list (always false for an anonymous
+  // viewer). Populated by the backend on GET /books and GET /books/{id},
+  // same treatment as your_recommendation.
+  your_to_read?: boolean;
 }
 
 // Recommendation is one entry in a book's recommender list — the wire shape
@@ -99,6 +104,18 @@ export interface Book {
 export interface Recommendation {
   recommender_name: string;
   created_at: string;
+}
+
+// ToReadEntry is one row in a member's personal "to read" bookmark list —
+// the wire shape returned by GET /to-read/mine's items only carries the
+// nested Book (see api.getMyToRead), but the raw entry shape mirrors the
+// backend's models.ToReadEntry for completeness.
+export interface ToReadEntry {
+  id: number;
+  book_id: number;
+  user_id: number;
+  created_at: string;
+  book?: Book;
 }
 
 // InviteCode is one row in the admin invite-links table, returned by

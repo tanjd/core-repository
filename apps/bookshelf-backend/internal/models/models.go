@@ -196,6 +196,17 @@ type WaitlistEntry struct {
 	User      User      `json:"user,omitempty"`
 }
 
+// ToReadEntry tracks a member's intent to borrow a catalog Book in the
+// future — a personal bookmark, distinct from WishlistRequest (which is for
+// titles not yet in the catalog at all).
+type ToReadEntry struct {
+	ID        uint      `gorm:"primarykey" json:"id"`
+	BookID    uint      `gorm:"not null;uniqueIndex:idx_to_read_book_user" json:"book_id"`
+	UserID    uint      `gorm:"not null;uniqueIndex:idx_to_read_book_user" json:"user_id"`
+	CreatedAt time.Time `json:"created_at"`
+	Book      Book      `json:"book,omitempty"`
+}
+
 // WishlistRequest tracks a member's post for a book not currently in the
 // catalog — "does anyone have X" for a title nobody's added yet. Book
 // identity comes from the same metadata-search results used by /books

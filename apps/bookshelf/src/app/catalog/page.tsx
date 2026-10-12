@@ -11,6 +11,7 @@ import {
   Loader2,
   BookOpen,
   Users,
+  Bookmark,
 } from "lucide-react";
 import { api } from "@/lib/api";
 import type { AuthorSummary, Book, PaginatedResult } from "@/lib/types";
@@ -61,7 +62,7 @@ export default function CatalogPage() {
   // no search/sort/availability filters of its own (non-goal), so it keeps
   // its own small, independent fetch state rather than threading through
   // the books-view state above.
-  const [view, setView] = useState<"books" | "authors">("books");
+  const [view, setView] = useState<"books" | "authors" | "to-read">("books");
   const [authorsResult, setAuthorsResult] =
     useState<PaginatedResult<AuthorSummary> | null>(null);
   const [authorSearch, setAuthorSearch] = useState("");
@@ -72,6 +73,16 @@ export default function CatalogPage() {
   const authorsRequestIdRef = useRef(0);
   const authorsDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const authorsMountedRef = useRef(false);
+  // "To Read" is a third sub-view of this same page, same reasoning as
+  // Authors above — no search/sort filters of its own, own small fetch
+  // state. Unlike Authors it has no debounced search at all, just
+  // pagination, since there's nothing to type into.
+  const [toReadResult, setToReadResult] =
+    useState<PaginatedResult<Book> | null>(null);
+  const [toReadPage, setToReadPage] = useState(1);
+  const [toReadLoading, setToReadLoading] = useState(false);
+  const [toReadError, setToReadError] = useState("");
+  const toReadRequestIdRef = useRef(0);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   // Tracks whether the user has explicitly picked a sort — once they have,
   // typing/clearing a search no longer auto-switches it for them.
@@ -140,12 +151,43 @@ export default function CatalogPage() {
     }
   }
 
-  function handleViewChange(v: "books" | "authors") {
+  // No loading-vs-fetching split (unlike fetchBooks/fetchAuthors) — this
+  // sub-view has no filters to re-fetch against, so every fetch shows the
+  // same skeleton state.
+  async function fetchToRead(p: number) {
+    const requestId = ++toReadRequestIdRef.current;
+    setToReadLoading(true);
+    setToReadError("");
+    try {
+      const data = await api.getMyToRead({ page: p, page_size: PAGE_SIZE });
+      if (requestId !== toReadRequestIdRef.current) return;
+      setToReadResult(data);
+    } catch (err) {
+      if (requestId !== toReadRequestIdRef.current) return;
+      setToReadError(
+        err instanceof Error ? err.message : "Failed to load your to-read list",
+      );
+    } finally {
+      if (requestId === toReadRequestIdRef.current) setToReadLoading(false);
+    }
+  }
+
+  function handleViewChange(v: "books" | "authors" | "to-read") {
     setView(v);
     updateUrl(search, sort, availableOnly, page, v);
     if (v === "authors" && !authorsResult) {
       fetchAuthors(authorSearch, 1, true);
     }
+    if (v === "to-read" && !toReadResult) {
+      fetchToRead(1);
+    }
+  }
+
+  function handleToReadPageChange(p: number) {
+    setToReadPage(p);
+    fetchToRead(p);
+    updateUrl(search, sort, availableOnly, p, "to-read");
+    window.scrollTo({ top: 0, behavior: "smooth" });
   }
 
   function handleAuthorSearchChange(value: string) {
@@ -168,12 +210,14 @@ export default function CatalogPage() {
     s: string,
     avail: boolean,
     p: number,
-    v: "books" | "authors" = view,
+    v: "books" | "authors" | "to-read" = view,
   ) {
     const params = new URLSearchParams();
     if (v === "authors") {
       params.set("view", "authors");
       if (authorSearch.trim()) params.set("authorQ", authorSearch.trim());
+    } else if (v === "to-read") {
+      params.set("view", "to-read");
     } else {
       if (q.trim()) params.set("q", q.trim());
       if (s !== "title") params.set("sort", s);
@@ -208,7 +252,11 @@ export default function CatalogPage() {
     const parsedPage = Number(params.get("page"));
     const initialPage =
       Number.isFinite(parsedPage) && parsedPage > 0 ? parsedPage : 1;
-    const initialView = params.get("view") === "authors" ? "authors" : "books";
+    const initialViewParam = params.get("view");
+    const initialView: "books" | "authors" | "to-read" =
+      initialViewParam === "authors" || initialViewParam === "to-read"
+        ? initialViewParam
+        : "books";
     const initialAuthorQ = params.get("authorQ") ?? "";
     // If any of these differ from their defaults, the setState calls below
     // change search/sort/availableOnly — which the debounce watcher effect
@@ -229,14 +277,17 @@ export default function CatalogPage() {
     if (initialSort !== "title") setSort(initialSort);
     if (initialAvailable) setAvailableOnly(true);
     if (initialPage !== 1) setPage(initialPage);
-    if (initialView === "authors") setView("authors");
+    if (initialView !== "books") setView(initialView);
     if (initialAuthorQ) setAuthorSearch(initialAuthorQ);
     if (initialView === "authors" && initialPage !== 1)
       setAuthorsPage(initialPage);
+    if (initialView === "to-read" && initialPage !== 1)
+      setToReadPage(initialPage);
     /* eslint-enable react-hooks/set-state-in-effect */
     fetchBooks(initialSearch, initialSort, initialAvailable, initialPage, true);
     if (initialView === "authors")
       fetchAuthors(initialAuthorQ, initialPage, true);
+    if (initialView === "to-read") fetchToRead(initialPage);
   }, []);
 
   // Debounced search/sort/filter — reset to page 1. Skips the mount pass
@@ -380,6 +431,16 @@ export default function CatalogPage() {
     return `/catalog?${qs}`;
   })();
 
+  // Same purpose as currentCatalogHref/currentAuthorsHref, for the To Read
+  // tab.
+  const currentToReadHref = (() => {
+    const params = new URLSearchParams();
+    params.set("view", "to-read");
+    if (toReadPage > 1) params.set("page", String(toReadPage));
+    const qs = params.toString();
+    return `/catalog?${qs}`;
+  })();
+
   return (
     <div
       className="flex flex-col gap-8"
@@ -421,11 +482,65 @@ export default function CatalogPage() {
             label: "Authors",
             icon: <Users className="size-3.5" />,
           },
+          {
+            value: "to-read",
+            label: "To Read",
+            icon: <Bookmark className="size-3.5" />,
+          },
         ]}
         className="self-start"
       />
 
-      {view === "authors" ? (
+      {view === "to-read" ? (
+        <>
+          {toReadError && (
+            <p className="text-sm text-destructive">{toReadError}</p>
+          )}
+          {toReadLoading ? (
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
+              {Array.from({ length: 10 }).map((_, i) => (
+                <div key={i}>
+                  <Skeleton className="aspect-[2/3] rounded-lg" />
+                  <Skeleton className="mt-2 h-4 w-3/4" />
+                  <Skeleton className="mt-1 h-3 w-1/2" />
+                </div>
+              ))}
+            </div>
+          ) : (toReadResult?.items.length ?? 0) === 0 ? (
+            <div className="flex flex-col items-center justify-center py-16 text-center gap-3">
+              <p className="text-muted-foreground">
+                You haven&apos;t saved any books to read yet.
+              </p>
+              <p className="text-sm text-muted-foreground">
+                Tap the bookmark icon on a book to save it here.
+              </p>
+            </div>
+          ) : (
+            <>
+              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
+                {(toReadResult?.items ?? []).map((book) => (
+                  <BookCard
+                    key={book.id}
+                    book={book}
+                    ownedByMe={ownedBookIds.has(book.id)}
+                    catalogHref={currentToReadHref}
+                    // Every book shown here is already saved, so a toggle in
+                    // this view only ever means "just unsaved it" — refetch
+                    // so it drops out of this filtered list immediately
+                    // rather than lingering until the next full reload.
+                    onToReadToggled={() => fetchToRead(toReadPage)}
+                  />
+                ))}
+              </div>
+              <Pagination
+                page={toReadPage}
+                totalPages={toReadResult?.total_pages ?? 1}
+                onPageChange={handleToReadPageChange}
+              />
+            </>
+          )}
+        </>
+      ) : view === "authors" ? (
         <>
           <div className="relative max-w-xl">
             {authorsFetching ? (

@@ -90,6 +90,7 @@ func main() {
 	announcementRepo := gormrepo.NewAnnouncementRepository(database)
 	wishlistRepo := gormrepo.NewWishlistRequestRepository(database)
 	recommendationRepo := gormrepo.NewRecommendationRepository(database)
+	toReadRepo := gormrepo.NewToReadRepository(database)
 	inviteCodeRepo := gormrepo.NewInviteCodeRepository(database)
 
 	// Services
@@ -143,7 +144,7 @@ func main() {
 	// Handlers
 	authH := handlers.NewAuthHandler(userRepo, adminRepo, copyRepo, regVerificationRepo, cfg.JWTSecret, cfg.EncryptionSecret, emailSvc, smsSvc, registrationWorkflow, cfg.Env, cfg.RegisterRateLimitBurst, cfg.RegisterSendRateLimitBurst, cfg.LoginRateLimitAttempts, inviteCodeRepo)
 	metadataH := handlers.NewMetadataHandler(ctx, googleBooksKeyPool, cfg.HardcoverAPIKey, cfg.EncryptionSecret, userRepo)
-	bookH := handlers.NewBookHandler(bookRepo, userRepo, coversDir, wishlistWorkflow, recommendationRepo)
+	bookH := handlers.NewBookHandler(bookRepo, userRepo, coversDir, wishlistWorkflow, recommendationRepo, toReadRepo)
 	copyH := handlers.NewCopyHandler(copyRepo, userRepo, notifRepo, waitlistRepo, adminRepo, bookRepo, wishlistRepo, coversDir, wishlistWorkflow, recommendationRepo)
 	loanH := handlers.NewLoanRequestHandler(copyRepo, loanRepo, adminRepo, userRepo, workflow)
 	notifH := handlers.NewNotificationHandler(notifRepo)
@@ -152,6 +153,7 @@ func main() {
 	jobsH := handlers.NewJobsHandler(scheduler, digestSvc, userRepo, botHealthChecker)
 	backupH := handlers.NewBackupHandler(backupSvc)
 	waitlistH := handlers.NewWaitlistHandler(copyRepo, waitlistRepo)
+	toReadH := handlers.NewToReadHandler(bookRepo, toReadRepo, bookH)
 	announcementH := handlers.NewAnnouncementHandler(announcementRepo)
 	wishlistH := handlers.NewWishlistHandler(wishlistRepo, bookRepo, wishlistWorkflow)
 	recommendationH := handlers.NewRecommendationHandler(recommendationRepo)
@@ -211,6 +213,7 @@ func main() {
 	jobsH.RegisterRoutes(api)
 	backupH.RegisterRoutes(api)
 	waitlistH.RegisterRoutes(api)
+	toReadH.RegisterRoutes(api)
 	announcementH.RegisterRoutes(api)
 	wishlistH.RegisterRoutes(api)
 	recommendationH.RegisterRoutes(api)
