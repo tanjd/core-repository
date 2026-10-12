@@ -5,6 +5,7 @@ from __future__ import annotations
 from datetime import UTC, date, datetime
 from typing import ClassVar
 
+from pydantic import NaiveDatetime
 from sqlalchemy import UniqueConstraint
 from sqlmodel import Field, SQLModel
 
@@ -45,7 +46,9 @@ class Statement(SQLModel, table=True):
     commissions: float = 0.0
     other_fees: float = 0.0
     sales_tax: float = 0.0
-    ingested_at: datetime = Field(default_factory=lambda: datetime.now(UTC).replace(tzinfo=None))
+    ingested_at: NaiveDatetime = Field(
+        default_factory=lambda: datetime.now(UTC).replace(tzinfo=None)
+    )
 
 
 class Position(SQLModel, table=True):
@@ -80,7 +83,7 @@ class Trade(SQLModel, table=True):
     asset_category: str  # "Stocks" | "Forex"
     currency: str
     symbol: str
-    trade_date: datetime
+    trade_date: NaiveDatetime
     quantity: float = 0.0
     trade_price: float = 0.0
     close_price: float = 0.0
@@ -237,7 +240,9 @@ class UploadLog(SQLModel, table=True):
     __tablename__: ClassVar[str] = "upload_log"  # type: ignore
 
     id: int | None = Field(default=None, primary_key=True)
-    uploaded_at: datetime = Field(default_factory=lambda: datetime.now(UTC).replace(tzinfo=None))
+    uploaded_at: NaiveDatetime = Field(
+        default_factory=lambda: datetime.now(UTC).replace(tzinfo=None)
+    )
     filename: str
     broker: str = "unknown"
     account_id: str = ""
