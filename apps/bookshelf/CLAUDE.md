@@ -69,7 +69,7 @@ of the desktop view. Concretely:
   truth for both this and the desktop `NavBar` — add/rename/remove a destination there once.
   - The tab bar is a **fixed 5-slot grid** (`grid-cols-5`), Instagram-style: four `Link` tabs
     (Catalog, My Books, Loans, Wishlist — the `primaryNavItems` entries with `mobileTab:
-true`, the default) plus a centered, raised **"Share"** button between the first two and last
+    true`, the default) plus a centered, raised **"Share"** button between the first two and last
     two. "Share" is a `Popover` (not a `Link`) offering "Scan ISBN" (`/share/scan`) and "Search"
     (`/share`) — both are ways to add a book, so they share one entry point rather than each
     claiming a tab slot. It's inserted via `tabs.slice(0, Math.ceil(tabs.length / 2))` /
@@ -126,7 +126,7 @@ true`, the default) plus a centered, raised **"Share"** button between the first
     the same way at both breakpoints) and uses width a left-aligned text column would otherwise
     leave empty.
   - **A single primary CTA becomes a full-bleed footer** (`w-full rounded-none border-x-0
-border-b-0`, placed as a sibling after `CardContent`, not inside its flex row) — it reads as
+    border-b-0`, placed as a sibling after `CardContent`, not inside its flex row) — it reads as
     the card's action rather than the text column's, and the `overflow-hidden` on `Card` clips it
     to the card's own corner radius. This only applies when there's exactly one primary action;
     `BorrowingTab.tsx`/`LendingTab.tsx`/the requests page use a different, equally valid pattern
@@ -134,7 +134,7 @@ border-b-0`, placed as a sibling after `CardContent`, not inside its flex row) �
     this) with 0–1 lightweight `outline` buttons inside the padding, since none of those cards has
     a single dominant action to promote.
   - **A button's color must mean the same thing on both breakpoints.** `variant={pendingCount ?
-"default" : "outline"}` (solid only when there's something to act on, outline when idle) is
+    "default" : "outline"}` (solid only when there's something to act on, outline when idle) is
     applied identically to the desktop table's button and the mobile card's — don't let one
     breakpoint default to always-solid while the other conditionally dims; that turns color into
     noise instead of a signal.

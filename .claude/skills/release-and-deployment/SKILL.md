@@ -153,13 +153,13 @@ scaffolded/migrated.
   nx.json's own blast radius; it's accepted as unavoidable rather than
   worked around. `pnpm-lock.yaml` used to have the same blanket effect but
   is now scoped via `pluginsConfig["@nx/js"].projectsAffectedByDependencyUpdates:
-"auto"` in `nx.json` — only projects whose actual dependencies changed
+  "auto"` in `nx.json` — only projects whose actual dependencies changed
   are marked affected by a lockfile diff now (verified: an unrelated JS
   dependency bump no longer force-patches every `release.projects` entry).
 - **PR title format is load-bearing, not cosmetic**: this repo only allows
   squash merging, and GitHub uses the PR title as the squash commit message
   whenever the PR has more than one commit (`squash_merge_commit_title:
-COMMIT_OR_PR_TITLE`). `nx release`'s `conventionalCommits` engine reads
+  COMMIT_OR_PR_TITLE`). `nx release`'s `conventionalCommits` engine reads
   that squash commit on `main` to decide whether a project gets a version
   bump — a title that isn't `type(scope): summary` produces a commit it
   can't parse, so the touched project(s) get **no bump, no changelog entry,

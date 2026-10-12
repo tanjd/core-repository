@@ -194,7 +194,7 @@ than a hard error, since open registration may still be on.
   `require_registration_approval = true`; valid code enables registration with
   `allow_registration = false`; revoked code at `send-email-otp` → 400; code revoked
   between send and verify → 400 at `verify-email-otp`; no code + `allow_registration
-= false` → 403, as today. Resulting user has `invited_by_id` set.
+  = false` → 403, as today. Resulting user has `invited_by_id` set.
 - Admin endpoints: list returns one row per member; admin can revoke any code; revoked
   member's next `GET /invite-code` creates a fresh code.
 - `deleteUser`: removes the member's invite code; `suspendUser`: same.

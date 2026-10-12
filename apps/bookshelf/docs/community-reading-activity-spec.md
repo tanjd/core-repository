@@ -87,12 +87,12 @@ over relevance (matching the "sort by X" mental model — the user picked popula
    verbatim on `CountAvailableCopiesBatch` (`internal/repository/gorm/book_repo.go` ~line 180).
    Extend `buildListQuery`'s `switch sort` with a `case "popular"` that `LEFT JOIN`s a subquery
    `(SELECT copies.book_id, COUNT(*) AS borrow_count FROM loan_requests JOIN copies ON
-copies.id = loan_requests.copy_id WHERE loan_requests.status IN ('accepted','returned') GROUP BY
-copies.book_id)` and orders by `COALESCE(borrow_count, 0) DESC, title ASC`. Repo tests alongside
+   copies.id = loan_requests.copy_id WHERE loan_requests.status IN ('accepted','returned') GROUP BY
+   copies.book_id)` and orders by `COALESCE(borrow_count, 0) DESC, title ASC`. Repo tests alongside
    the existing `book_repo_test.go` cover: empty catalog, zero-borrow book, tied counts (title
    tiebreaker), interaction with `available_only`.
 2. **Handler layer** — extend `bookResponse` (`internal/handlers/books.go`) with `BorrowCount
-int64` and `WaitlistCount int64`. Update `toBookResponse` and `toBooksResponse` to populate both
+   int64` and `WaitlistCount int64`. Update `toBookResponse` and `toBooksResponse` to populate both
    (batch in the list path, single-shot in the detail path via new `CountBorrows(bookID)` /
    `CountWaitlist(bookID)` singletons — same shape as `CountAvailableCopies` /
    `CountAvailableCopiesBatch` already pair). Handler tests in `books_test.go` cover the new

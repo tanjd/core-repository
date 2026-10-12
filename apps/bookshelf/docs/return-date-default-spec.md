@@ -166,7 +166,7 @@ Frontend `Notification.type` union: add `expected_return_date_changed`.
 Single Goose (or backend's equivalent) migration, run in one transaction:
 
 1. **Backfill any null `expected_return_date`s on non-terminal loans** (`status IN ('pending',
-'accepted')`):
+   'accepted')`):
    - For `status = 'pending'`: set to `requested_at + 30 days`. Borrower can amend on the next
      request only after cancelling; we notify these borrowers separately (see "Rollout"). This is
      tolerable because pending loans are rare and short-lived.
@@ -360,7 +360,7 @@ spec and the person who'd run any comms are the same person. Reviewed and cut:
 - E2E: `pnpm nx e2e bookshelf-e2e`.
 - Full gate: `pnpm nx affected -t lint test e2e` before merging.
 - Post-deploy: verify migration ran cleanly by querying `COUNT(*) FROM loan_requests WHERE
-expected_return_date IS NULL` — should be 0.
+  expected_return_date IS NULL` — should be 0.
 
 ## How we'll know it's working
 

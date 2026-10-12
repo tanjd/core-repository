@@ -142,7 +142,7 @@ edition results _for display only_; it never combines two editions' data into on
 
 - **New field**: `WorkKey string` (`json:"work_key,omitempty"`) added to `BookMetadataResult`
   (`internal/handlers/metadata.go`), computed via the same `normalizeTitleAuthor(r.Title,
-r.Author)` key `enrichAcrossEditions` already buckets by — stamp it onto each merged result
+  r.Author)` key `enrichAcrossEditions` already buckets by — stamp it onto each merged result
   right where buckets are already computed, rather than discarding the key after use. Entries with
   empty `Title` or `Author` get an empty `WorkKey` (same exclusion rule as backfill bucketing) —
   the frontend must never bucket by an empty key.
@@ -242,7 +242,7 @@ feature it describes doesn't exist yet.
   from `apps/bookshelf-backend`) — unit tests cover the logic directly, no live network calls
   needed since `consolidateResults` takes a `[]BookMetadataResult` slice.
 - Manual check: run the backend (`pnpm nx serve bookshelf-backend`, or `DB_PATH=... go run
-./cmd/server`) and hit `GET /books/metadata/search?q=<a title known to have multiple editions>`
+  ./cmd/server`) and hit `GET /books/metadata/search?q=<a title known to have multiple editions>`
   with a valid bearer token; confirm a previously-bare result now carries a `description` and that
   `enriched_fields`/`work_key` are populated correctly.
 - Manual frontend check: `pnpm nx dev bookshelf` against a local backend, search a title known to

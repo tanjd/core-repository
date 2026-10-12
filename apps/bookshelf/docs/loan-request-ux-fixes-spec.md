@@ -22,7 +22,7 @@ straight from `available` to `requested` (a DB-transaction guard against double-
 `available` (→ show "Request to Borrow") or `loaned` (→ show "Join Waitlist"):
 
 - `WaitlistHandler.join` (`internal/handlers/waitlist.go`) 400s unless `bookCopy.Status ==
-"loaned"`.
+  "loaned"`.
 - `catalog/[bookId]/page.tsx`'s `canRequest`/`canWaitlist` mirror that same two-state check.
 
 So while an owner sits on a pending request — which could be minutes or weeks — every other
@@ -33,7 +33,7 @@ watching finds out (see the notification gap below).
 **Change.**
 
 - Backend: relax `WaitlistHandler.join`'s guard from `Status == "loaned"` to `Status == "loaned"
-|| Status == "requested"`. `WaitlistEntry` already just holds `(copy_id, user_id)` — no schema
+  || Status == "requested"`. `WaitlistEntry` already just holds `(copy_id, user_id)` — no schema
   change needed.
 - Frontend (`catalog/[bookId]/page.tsx`): change `canWaitlist`'s `isLoaned` check to
   `copy.status === "loaned" || copy.status === "requested"`.
@@ -75,7 +75,7 @@ available.
   field reflects the post-`finalizeLoanRequest` value — `"accepted"` for auto-approve, `"pending"`
   otherwise, per `createLoanRequest`'s handler in `internal/handlers/loan_requests.go`). Branch
   the toast on `response.status === "accepted"` → `"Request approved — check My Requests for the
-owner's contact info"` vs. the current `"Borrow request sent!"` for the pending case. No backend
+  owner's contact info"` vs. the current `"Borrow request sent!"` for the pending case. No backend
   change needed — the data is already there, just unused.
 
 ## Fix 3 — No visibility into overdue loans ✅ Implemented (#71)
