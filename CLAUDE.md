@@ -159,7 +159,7 @@ scratch script, not to block work on one existing everywhere.
   for Python — see `apps/food-maps-backend/project.json` / `apps/index-watch/project.json`) and
   carry the matching `lang:go`/`lang:python` tag. `make upgrade-go`/`make upgrade-python`
   (`##@ Maintenance` section) resolve projects by that tag (`pnpm nx run-many -t update-deps
---projects=tag:lang:go`, etc.) rather than a hardcoded list, so a newly tagged project is picked
+  --projects=tag:lang:go`, etc.) rather than a hardcoded list, so a newly tagged project is picked
   up with no Makefile change. These targets are on-demand/manual, complementing the weekly
   Dependabot PRs (`.github/dependabot.yml`), not replacing them. New bots scaffolded via
   `make new-bot` get both the tag and the target automatically from the generator
@@ -247,7 +247,7 @@ scratch script, not to block work on one existing everywhere.
   first, and pin the migration to a specific 22.x version rather than
   `latest`, which may already be 23+. As of nx-go 4.1.1 (2026-06-24) this is
   still blocked, not fixed — that release _tightened_ the range from `>= 20
-< 24` to `>= 20 < 23` (the maintainer's words: an earlier version wrongly
+  < 24` to `>= 20 < 23` (the maintainer's words: an earlier version wrongly
   allowed Nx 23 and broke in CI). Real Nx 23 support needs devkit 23's
   breaking export changes, deferred to nx-go's next major version — so don't
   be misled by a changelog entry that says "Add Nx 23 support," which refers

@@ -16,7 +16,7 @@ tokens." Concretely:
 - New purpose constant `unsubscribe_digest` in `internal/handlers/otp_link_token.go`, alongside
   the existing `register_email_otp` / `reset_password` / `email_change` / `otp_verify`.
 - The existing `issueOTPLinkToken` / `verifyOTPLinkToken` helpers hardcode `otpLinkTokenTTL =
-15 * time.Minute` and always resolve an OTP code. Neither fits: the digest link has no code,
+  15 * time.Minute` and always resolve an OTP code. Neither fits: the digest link has no code,
   and needs a ~1y TTL. Two options:
   1. Add a TTL parameter and a nil-code path to the existing helpers.
   2. Add a parallel pair (`issueUnsubscribeToken` / `verifyUnsubscribeToken`) that share the same
@@ -61,7 +61,7 @@ or the ownership metadata `ListPaginated` computes. Cleaner as two dedicated met
   / author without an N+1.
 - `RecommendationRepository.ListTopBooks(limit int) ([]TopRecommendedBook, error)` where
   `TopRecommendedBook{Book, Count}`. One `SELECT ... FROM books LEFT JOIN (SELECT book_id,
-COUNT(*) FROM recommendations GROUP BY book_id) r ...` ordered `count DESC, title ASC` (matches
+  COUNT(*) FROM recommendations GROUP BY book_id) r ...` ordered `count DESC, title ASC` (matches
   the spec's tie-break rule and the existing "Most Recommended" sort in `ListPaginated`).
   Books with zero recommendations are excluded (spec's "top recommended", not "top including
   zeros").
@@ -73,7 +73,7 @@ COUNT(*) FROM recommendations GROUP BY book_id) r ...` ordered `count DESC, titl
 
 - `UserRepository.ListDigestRecipients(ctx) ([]User, error)` — one query filtering
   `is_verified = 1 AND is_suspended = 0 AND is_pending_approval = 0 AND
-monthly_digest_enabled = 1`. Selects only the columns the digest email needs (id, email, name)
+  monthly_digest_enabled = 1`. Selects only the columns the digest email needs (id, email, name)
   to keep the row size small.
 - Lives on `UserRepository` (`user_repo.go`) rather than `AdminRepository` because it's not an
   admin surface — the digest service is the only caller.
@@ -235,7 +235,7 @@ reality until a follow-up PR ships).
 _New repo methods:_
 
 - `internal/repository/gorm/book_repo.go` — new `ListCreatedBetween(from, to time.Time, limit
-int)`, preloads `Copies`.
+  int)`, preloads `Copies`.
 - `internal/repository/gorm/recommendation_repo.go` — new `ListTopBooks(limit int)` returning
   `[]TopRecommendedBook{Book, Count}`, ordered `count DESC, title ASC`, excludes zero-count.
 - `internal/repository/gorm/user_repo.go` — new `ListDigestRecipients(ctx)` filtering on
@@ -246,7 +246,7 @@ int)`, preloads `Copies`.
 _Digest service and wiring:_
 
 - `internal/services/digest.go` (new) — `DigestService{books, recommendations, users, admin,
-email, cfg, clock}`. Methods:
+  email, cfg, clock}`. Methods:
   - `Run(ctx) string` — the `RegisterJob` callback. Returns the human-readable status string
     the admin Jobs page displays.
   - `assembleContent(from, to) (DigestContent, error)` — pulls the two sections, returns
@@ -268,7 +268,7 @@ email, cfg, clock}`. Methods:
   - `monthly_digest_top_recommended_limit = "5"`
   - (`monthly_digest_last_handled_month` is not seeded — created by first successful run.)
 - `cmd/server/main.go` — construct `DigestService`, `scheduler.RegisterJob("monthly-digest",
-"monthly_digest_interval", 24*time.Hour, digest.Run)`.
+  "monthly_digest_interval", 24*time.Hour, digest.Run)`.
 - `internal/handlers/jobs.go` — new `POST /admin/jobs/monthly-digest/test-email` alongside
   the existing `POST /admin/jobs/{job}/run`. Auth-required (admin only). Calls
   `digest.SendTestEmail(ctx, adminUser)` which: assembles content for the previous full
@@ -321,7 +321,7 @@ _Service-level (`internal/services/digest_test.go`):_
   has the right items per section, respects per-section limits, applies the count-desc/
   title-asc tie-break.
 - **Manual run bypasses send-day (but not once-per-month):** invoked with `today.Day() <
-sendDay` on a fresh month, still runs and marks the month handled; a second manual run in
+  sendDay` on a fresh month, still runs and marks the month handled; a second manual run in
   the same month is a no-op.
 - **Send loop tolerates per-recipient failure:** with a fake `EmailService` that errors on
   the 2nd of 5 recipients, the other 4 still receive the digest, result string reports

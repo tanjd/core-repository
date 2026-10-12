@@ -47,7 +47,7 @@ the same source repo's `frontend/`).
   convention (module path mirrors its location in the monorepo); all internal imports were
   updated accordingly.
 - Dockerfile rewritten for the repo-root build context (`docker build -f
-apps/bookshelf-backend/Dockerfile .`) and switched from the source repo's `golang:1.25-alpine`
+  apps/bookshelf-backend/Dockerfile .`) and switched from the source repo's `golang:1.25-alpine`
   to `golang:1.25-bookworm` + `debian:bookworm-slim` — same fix `food-maps-backend` already
   needed for the same dependency: `mattn/go-sqlite3`'s cgo build references `off64_t`/`pread64`/
   `pwrite64`, which musl (Alpine) doesn't expose the way glibc does. `wget` is installed in the
@@ -167,7 +167,7 @@ needed to add it.
   pages same as `cover_refresh_interval`. `BackupService.CreateSnapshot` prunes down to the
   retention count after every run (keeps the newest N, deletes the rest).
 - `internal/handlers/backup.go` exposes `GET /admin/backups` (list), `DELETE
-/admin/backups/{filename}` (delete), and `GET /admin/backups/{filename}/download` (streams the
+  /admin/backups/{filename}` (delete), and `GET /admin/backups/{filename}/download` (streams the
   archive via `huma.StreamResponse` — the one place this app returns a raw binary body through
   huma rather than JSON). Creating a snapshot on demand and configuring the schedule intentionally
   reuse the existing `POST /admin/jobs/backup/run` and `PATCH /admin/settings` endpoints rather
@@ -187,7 +187,7 @@ needed to add it.
   2. Extract the chosen archive on the host: `tar -xzf bookshelf-backup-<ts>.tar.gz -C /tmp/restore`.
   3. Copy the volume's current contents aside as a safety net — it's a named volume, not a bind
      mount: `docker run --rm -v bookshelf-data:/data -v $(pwd)/pre-restore-backup:/backup alpine
-cp -r /data/. /backup/`.
+     cp -r /data/. /backup/`.
   4. Replace `bookshelf.db` and `covers/` inside the volume with the extracted ones, same
      `docker run -v bookshelf-data:/data ...` pattern as step 3.
   5. `docker compose start bookshelf-backend`.

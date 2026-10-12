@@ -15,7 +15,7 @@ messages directly via `internal/services/telegram.go` rather than routing throug
 This bot's only job is completing the "Connect Telegram" deep link:
 
 - `/start <token>` (`src/bookshelf_bot/bot.py`'s `cmd_start`) calls `POST
-/internal/telegram/confirm-link` on `bookshelf-backend`, authenticated via a shared
+  /internal/telegram/confirm-link` on `bookshelf-backend`, authenticated via a shared
   `BOOKSHELF_INTERNAL_TOKEN` (must match the backend's `TELEGRAM_INTERNAL_SECRET`) rather than a
   user session — the bot has no user auth of its own. A bare `/start` (no token arg) and `/help`
   both reply with the same static help text pointing back to the bookshelf profile page.

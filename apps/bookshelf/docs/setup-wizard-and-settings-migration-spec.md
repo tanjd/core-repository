@@ -168,7 +168,7 @@ existing `/auth/setup`/`/auth/setup-status` (403 "setup already complete" once `
 true, so neither leaks config nor accepts writes after go-live):
 
 - `GET /auth/setup/environment` — returns `{ smtp_configured, smtp_reachable, smtp_host,
-google_books_configured, google_books_reachable }`. `smtp_reachable` via a new
+  google_books_configured, google_books_reachable }`. `smtp_reachable` via a new
   `EmailService.CheckConnection(ctx context.Context) error` — short-timeout
   `net.DialTimeout("tcp", host:port, 3*time.Second)`, no auth/EHLO negotiation, a reachability
   probe only, read-locked against concurrent `Reconfigure`. `google_books_reachable` via the
@@ -185,7 +185,7 @@ google_books_configured, google_books_reachable }`. `smtp_reachable` via a new
   `saveSetupEnvironment(input): Promise<SetupEnvironment>` (POST), plus the `SetupEnvironment`
   type — same shape/placement as the existing `setupStatus`/`setup` functions.
 - `src/app/setup/page.tsx` — rework into a 3-step wizard (`type Step = "welcome" | "environment" |
-"account"`), following the `register/page.tsx` in-file-step convention:
+  "account"`), following the `register/page.tsx` in-file-step convention:
   - **Welcome**: short intro, reuse existing `BookOpen`/Card header, "Continue" → `environment`.
   - **Environment**: on mount, `api.setupEnvironment()`; renders SMTP + Google Books status
     (badges per the vocabulary above), each with an editable form section (host/port/username/

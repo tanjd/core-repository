@@ -53,7 +53,7 @@ were on the table:
 - **Filter at read.** Every count/list query joins to `users` and filters. Adds cost to every
   hot path. Also requires deciding what "still exists" means when this app hard-deletes users
   (no soft-delete flag), which means the filter is effectively `EXISTS (SELECT 1 FROM users
-WHERE id = recommender_id)` on every read.
+  WHERE id = recommender_id)` on every read.
 
 **Going with cascade.** Cheaper at read (which is 99%+ of traffic), matches the existing
 `wishlists.ClearFulfilledBookID`-in-`maybeDeleteOrphanedBook` idiom, and doesn't touch every
@@ -200,7 +200,7 @@ confirm count decrements and the facepile drops the entry.
    2. `RecommendButton`, `RecommendedBy` components + component tests.
    3. `Book` type in `src/lib/types.ts` gains the two optional fields; `src/lib/api.ts` gains
       `recommendBook`, `unrecommendBook`, `getRecommendations`; add `recommended: "Most
-Recommended"` to `SORT_LABELS`.
+      Recommended"` to `SORT_LABELS`.
    4. `BookCard` integration — button + count, no facepile.
    5. `catalog/page.tsx` — new sort option.
    6. `catalog/[bookId]/page.tsx` — button + facepile below Copies, respecting the
