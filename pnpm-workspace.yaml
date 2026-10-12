@@ -14,11 +14,8 @@ updateConfig:
     - "@nx-go/*"
     # typescript 7.x breaks Nx 22.7.8's project graph (readConfigFile no longer exists the
     # way nx/@typescript-eslint expect) - cap at the last working 6.x release until Nx catches
-    # up. @vitejs/plugin-react 6.x imports a "vite/internal" runtime subpath that vite 7.x/8.x
-    # no longer exports, breaking apps/jeddy-tan's project graph - cap at the last working 5.x
-    # release until that's fixed upstream. Found via `make verify` after a `make upgrade-pnpm` run.
+    # up.
     - "typescript"
-    - "@vitejs/plugin-react"
 
 allowBuilds:
   "@parcel/watcher": false
