@@ -1,3 +1,13 @@
+## 1.10.1 (2026-10-12)
+
+### 🩹 Fixes
+
+- **ledger-lens-backend:** annotate naive datetimes as NaiveDatetime ([#197](https://github.com/tanjd/core-repository/pull/197))
+
+### ❤️ Thank You
+
+- Jeddy Tan @tanjd
+
 ## 1.10.0 (2026-09-15)
 
 ### 🚀 Features

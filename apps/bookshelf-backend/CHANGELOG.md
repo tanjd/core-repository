@@ -1,3 +1,21 @@
+## 0.34.0 (2026-10-12)
+
+### 🚀 Features
+
+- **bookshelf,bookshelf-backend,bookshelf-e2e:** add "To Read" bookmark feature ([#198](https://github.com/tanjd/core-repository/pull/198))
+
+### 🩹 Fixes
+
+- **ledger-lens-backend:** annotate naive datetimes as NaiveDatetime ([#197](https://github.com/tanjd/core-repository/pull/197))
+
+### Database migrations
+
+Includes migration **000023** — automatic on startup; no manual SQL required.
+
+### ❤️ Thank You
+
+- Jeddy Tan @tanjd
+
 ## 0.33.0 (2026-09-15)
 
 ### 🚀 Features
