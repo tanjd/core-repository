@@ -196,6 +196,23 @@ needed to add it.
 
 ## Known gaps
 
+- **`RequireAdmin` is checked per-handler, not as route middleware.** Every admin-only handler in
+  `admin.go`/`announcements.go`/`backup.go`/`jobs.go`/`invite_codes.go` (20+ call sites) opens with
+  `if err := middleware.RequireAdmin(ctx); err != nil { return nil, adminError(err) }`, copy-pasted
+  rather than wired once as huma operation middleware the way `middleware.RateLimit` is (see
+  `auth.go` on `/auth/register`'s `Middlewares`). Moving it to middleware was attempted and
+  reverted: this package's tests (`admin_test.go` etc.) call handler methods directly
+  (`h.getDashboardStats(fakeAuthedCtx(...), ...)`), bypassing `huma.Register`'s middleware chain
+  entirely, so route-level enforcement is invisible to them — 9 subtests across 5 files failed
+  because the 403/401 they expected no longer fired at that layer. Fixing it properly means
+  adopting `huma/v2`'s `humatest` package (register routes on a real test API, issue HTTP requests
+  with a JWT header, assert on the response) in place of direct handler calls — a legitimate option
+  (already available transitively via the existing `huma/v2` dependency) but a test-architecture
+  change across 5 files, not a small cleanup. Left as a deliberate tradeoff: the duplication is a
+  maintainability smell, not a live gap (every current admin handler does have the check,
+  verified by inspection), so the risk is only a _future_ route shipping without it. Revisit if
+  that actually happens, or if `RateLimit`'s wiring ever needs the same kind of route-level test
+  coverage this would also unlock.
 - **Feature ideas from similar apps.** `apps/bookshelf/TODO.md` records which ideas surfaced while
   comparing bookshelf against other self-hosted community/library-style apps are worth replicating
   given this app's physical-lending scope — multi-provider metadata (Hardcover shipped, see

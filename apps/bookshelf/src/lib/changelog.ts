@@ -26,6 +26,16 @@ const PR_LINK_PATTERN = /\s*\(\[#\d+\]\([^)]+\)\)/g;
 
 const MIGRATION_NUMBER_PATTERN = /migration\s+\*\*(\d+)\*\*/i;
 
+/**
+ * The app's build-time version, baked in via NEXT_PUBLIC_VERSION. Falls back to
+ * "0.0.0" so every caller (footer, changelog page, upgrade-notice comparison)
+ * degrades the same way when it's unset, rather than each picking its own
+ * fallback ("unknown", undefined, etc).
+ */
+export function getAppVersion(): string {
+  return process.env.NEXT_PUBLIC_VERSION ?? "0.0.0";
+}
+
 /** Returns true when `a` is a higher semver than `b` (major.minor.patch only). */
 export function semverGt(a: string, b: string): boolean {
   const parse = (value: string) => value.split(".").map((part) => Number(part));

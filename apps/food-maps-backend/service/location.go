@@ -67,22 +67,6 @@ func (s *LocationService) GetLocation(ctx context.Context, id string) (*model.Lo
 		return nil, nil
 	}
 
-	// Get city
-	city, err := s.db.GetCity(ctx, location.CityID)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get city: %w", err)
-	}
-	location.City = city
-
-	// Get country
-	if city != nil {
-		country, err := s.db.GetCountry(ctx, city.CountryID)
-		if err != nil {
-			return nil, fmt.Errorf("failed to get country: %w", err)
-		}
-		city.Country = country
-	}
-
 	// Get tags
 	tags, err := s.db.GetLocationTags(ctx, id)
 	if err != nil {
@@ -157,34 +141,25 @@ func (s *LocationService) ListLocations(ctx context.Context, limit, offset int) 
 		return nil, 0, fmt.Errorf("failed to list locations: %w", err)
 	}
 
-	// Load relationships for each location
-	for _, location := range locations {
-		// Get city
-		city, err := s.db.GetCity(ctx, location.CityID)
-		if err != nil {
-			return nil, 0, fmt.Errorf("failed to get city: %w", err)
-		}
-		location.City = city
-
-		// Get country
-		if city != nil {
-			country, err := s.db.GetCountry(ctx, city.CountryID)
-			if err != nil {
-				return nil, 0, fmt.Errorf("failed to get country: %w", err)
-			}
-			city.Country = country
-		}
-
-		// Get tags
-		tags, err := s.db.GetLocationTags(ctx, location.ID.String())
-		if err != nil {
-			return nil, 0, fmt.Errorf("failed to get location tags: %w", err)
-		}
-		location.Tags = convertToTagSlice(tags)
+	locationIDs := make([]string, len(locations))
+	for i, location := range locations {
+		locationIDs[i] = location.ID.String()
 	}
 
-	// TODO: Implement proper count query in repository
-	return locations, len(locations), nil
+	tagsByLocation, err := s.db.GetLocationTagsForIDs(ctx, locationIDs)
+	if err != nil {
+		return nil, 0, fmt.Errorf("failed to get location tags: %w", err)
+	}
+	for _, location := range locations {
+		location.Tags = convertToTagSlice(tagsByLocation[location.ID.String()])
+	}
+
+	total, err := s.db.CountLocations(ctx)
+	if err != nil {
+		return nil, 0, fmt.Errorf("failed to count locations: %w", err)
+	}
+
+	return locations, total, nil
 }
 
 func convertToTagSlice(tags []*model.Tag) []model.Tag {

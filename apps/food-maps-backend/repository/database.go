@@ -14,6 +14,7 @@ type Database interface {
 	UpdateLocation(ctx context.Context, loc *model.Location) error
 	DeleteLocation(ctx context.Context, id string) error
 	ListLocations(ctx context.Context, limit, offset int) ([]*model.Location, error)
+	CountLocations(ctx context.Context) (int, error)
 
 	// City operations
 	CreateCity(ctx context.Context, city *model.City) error
@@ -37,6 +38,7 @@ type Database interface {
 	AddLocationTag(ctx context.Context, locationID string, tagID int64) error
 	RemoveLocationTag(ctx context.Context, locationID string, tagID int64) error
 	GetLocationTags(ctx context.Context, locationID string) ([]*model.Tag, error)
+	GetLocationTagsForIDs(ctx context.Context, locationIDs []string) (map[string][]*model.Tag, error)
 
 	// Transaction support
 	BeginTx(ctx context.Context) (Transaction, error)

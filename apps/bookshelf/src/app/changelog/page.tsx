@@ -1,4 +1,5 @@
 import { ChangelogPageClient } from "@/app/changelog/ChangelogPageClient";
+import { getAppVersion } from "@/lib/changelog";
 import { CHANGELOG_ENTRIES } from "@/lib/changelog.generated";
 
 export const metadata = {
@@ -7,7 +8,7 @@ export const metadata = {
 };
 
 export default function ChangelogPage() {
-  const appVersion = process.env.NEXT_PUBLIC_VERSION ?? "unknown";
+  const appVersion = getAppVersion();
 
   return (
     <ChangelogPageClient entries={CHANGELOG_ENTRIES} appVersion={appVersion} />

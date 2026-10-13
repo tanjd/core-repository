@@ -4,7 +4,12 @@ import os
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from telegram_bot_shared.env import parse_admin_chat_ids, require_bot_token, select_bot_token
+from telegram_bot_shared.env import (
+    parse_admin_chat_ids,
+    parse_csv_list,
+    require_bot_token,
+    select_bot_token,
+)
 
 DEFAULT_INDEX_SYMBOLS = {
     "^GSPC": "S&P 500",
@@ -61,8 +66,7 @@ class Config:
         """Load config from environment variables."""
         token = select_bot_token()
 
-        raw_chat_ids = os.getenv("TELEGRAM_CHAT_IDS", "").strip()
-        chat_ids = [c.strip() for c in raw_chat_ids.split(",") if c.strip()]
+        chat_ids = parse_csv_list("TELEGRAM_CHAT_IDS")
 
         admin_chat_ids = parse_admin_chat_ids()
 

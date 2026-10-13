@@ -3,6 +3,7 @@
 from telegram_bot_shared.env import (
     is_admin,
     parse_admin_chat_ids,
+    parse_csv_list,
     require_bot_token,
     select_bot_token,
 )
@@ -13,6 +14,7 @@ __all__ = [
     "configure_logging",
     "is_admin",
     "parse_admin_chat_ids",
+    "parse_csv_list",
     "require_bot_token",
     "select_bot_token",
     "start_health_server",

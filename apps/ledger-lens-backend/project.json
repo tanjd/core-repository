@@ -35,7 +35,7 @@
       "cache": true,
       "executor": "nx:run-commands",
       "options": {
-        "command": "uv run pytest; e=$?; [ $e -eq 5 ] && exit 0 || exit $e",
+        "command": "uv run pytest",
         "cwd": "apps/ledger-lens-backend"
       }
     },
