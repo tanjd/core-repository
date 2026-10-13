@@ -24,7 +24,7 @@ import type {
   ImportSummary,
   ImportDecision,
 } from "@/lib/api";
-import type { Copy } from "@/lib/types";
+import type { Copy, LoanRequest } from "@/lib/types";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
@@ -295,6 +295,11 @@ export default function MyBooksPage() {
   >(null);
   const [page, setPage] = useState(1);
 
+  // Shared submit-in-progress flag for whichever dialog is currently open
+  // (edit/transfer/delete/bulk/export) — they're mutually exclusive, each
+  // gated on its own copy/open state below, so one flag covers all of them.
+  const [submitting, setSubmitting] = useState(false);
+
   // Edit dialog
   const [editCopy, setEditCopy] = useState<MyCopy | null>(null);
   const [editCondition, setEditCondition] = useState<Condition>("good");
@@ -302,30 +307,25 @@ export default function MyBooksPage() {
   const [editStatus, setEditStatus] = useState<string>("available");
   const [editAutoApprove, setEditAutoApprove] = useState(false);
   const [editHideOwner, setEditHideOwner] = useState(false);
-  const [editSubmitting, setEditSubmitting] = useState(false);
 
   // Transfer dialog
   const [transferCopy, setTransferCopy] = useState<MyCopy | null>(null);
   const [transferEmail, setTransferEmail] = useState("");
-  const [transferSubmitting, setTransferSubmitting] = useState(false);
 
   // Delete confirm dialog
   const [deleteCopy, setDeleteCopy] = useState<MyCopy | null>(null);
-  const [deleteSubmitting, setDeleteSubmitting] = useState(false);
 
   // Bulk selection + actions
   const [selectedCopyIds, setSelectedCopyIds] = useState<Set<number>>(
     new Set(),
   );
   const [bulkAction, setBulkAction] = useState<"pause" | "delete" | null>(null);
-  const [bulkSubmitting, setBulkSubmitting] = useState(false);
 
   // Export dialog
   const [moreMenuOpen, setMoreMenuOpen] = useState(false);
   const [exportOpen, setExportOpen] = useState(false);
   const [exportFormat, setExportFormat] =
     useState<MyCopiesExportFormat>("json");
-  const [exportSubmitting, setExportSubmitting] = useState(false);
 
   // Import dialog
   const [importOpen, setImportOpen] = useState(false);
@@ -347,24 +347,24 @@ export default function MyBooksPage() {
   // GET /copies/mine, and this shouldn't block the page's primary loading
   // state.
   const loadRequestInfo = useCallback(async (copies: Copy[]) => {
-    const results = await Promise.all(
-      copies.map((copy) =>
-        api
-          .getLoanRequestsByCopy(copy.id)
-          .then((reqs) => [copy.id, reqs] as const)
-          .catch(() => [copy.id, []] as const),
-      ),
-    );
+    if (copies.length === 0) {
+      setPendingCounts({});
+      setActiveLoans({});
+      return;
+    }
+    const reqs: LoanRequest[] = await api
+      .getMyLendingHistory({ view: "current", page_size: copies.length * 10 })
+      .then((r) => r.items)
+      .catch(() => []);
     const pending: Record<number, number> = {};
     const active: Record<number, ActiveLoan> = {};
-    for (const [copyId, reqs] of results) {
-      pending[copyId] = reqs.filter((r) => r.status === "pending").length;
-      const accepted = reqs.find((r) => r.status === "accepted");
-      if (accepted) {
-        active[copyId] = {
-          borrowerName:
-            accepted.borrower?.name ?? `User #${accepted.borrower_id}`,
-          dueDate: accepted.expected_return_date,
+    for (const r of reqs) {
+      if (r.status === "pending") {
+        pending[r.copy_id] = (pending[r.copy_id] ?? 0) + 1;
+      } else if (r.status === "accepted") {
+        active[r.copy_id] = {
+          borrowerName: r.borrower?.name ?? `User #${r.borrower_id}`,
+          dueDate: r.expected_return_date,
         };
       }
     }
@@ -442,7 +442,7 @@ export default function MyBooksPage() {
 
   async function handleEditSave() {
     if (!editCopy) return;
-    setEditSubmitting(true);
+    setSubmitting(true);
     try {
       await api.updateCopy(editCopy.id, {
         condition: editCondition,
@@ -457,13 +457,13 @@ export default function MyBooksPage() {
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Update failed");
     } finally {
-      setEditSubmitting(false);
+      setSubmitting(false);
     }
   }
 
   async function handleDelete() {
     if (!deleteCopy) return;
-    setDeleteSubmitting(true);
+    setSubmitting(true);
     try {
       await api.deleteCopy(deleteCopy.id);
       toast.success("Copy removed");
@@ -472,7 +472,7 @@ export default function MyBooksPage() {
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Delete failed");
     } finally {
-      setDeleteSubmitting(false);
+      setSubmitting(false);
     }
   }
 
@@ -490,7 +490,7 @@ export default function MyBooksPage() {
 
   async function handleBulkAction() {
     if (!bulkAction) return;
-    setBulkSubmitting(true);
+    setSubmitting(true);
     const ids = [...selectedCopyIds];
     const results = await Promise.allSettled(
       ids.map((id) =>
@@ -518,19 +518,19 @@ export default function MyBooksPage() {
     setBulkAction(null);
     setSelectedCopyIds(new Set());
     setMobileSelectMode(false);
-    setBulkSubmitting(false);
+    setSubmitting(false);
     loadMyCopies();
   }
 
   async function handleExport() {
-    setExportSubmitting(true);
+    setSubmitting(true);
     try {
       await downloadMyCopiesExport(exportFormat);
       setExportOpen(false);
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Export failed");
     } finally {
-      setExportSubmitting(false);
+      setSubmitting(false);
     }
   }
 
@@ -606,7 +606,7 @@ export default function MyBooksPage() {
 
   async function handleTransfer() {
     if (!transferCopy || !transferEmail.trim()) return;
-    setTransferSubmitting(true);
+    setSubmitting(true);
     try {
       await api.transferCopy(transferCopy.id, transferEmail.trim());
       toast.success(`Copy transferred to ${transferEmail}`);
@@ -616,7 +616,7 @@ export default function MyBooksPage() {
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Transfer failed");
     } finally {
-      setTransferSubmitting(false);
+      setSubmitting(false);
     }
   }
 
@@ -1601,8 +1601,8 @@ export default function MyBooksPage() {
             </div>
           </div>
           <DialogFooter showCloseButton>
-            <Button onClick={handleEditSave} disabled={editSubmitting}>
-              {editSubmitting ? "Saving…" : "Save changes"}
+            <Button onClick={handleEditSave} disabled={submitting}>
+              {submitting ? "Saving…" : "Save changes"}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -1642,9 +1642,9 @@ export default function MyBooksPage() {
           <DialogFooter showCloseButton>
             <Button
               onClick={handleTransfer}
-              disabled={transferSubmitting || !transferEmail.trim()}
+              disabled={submitting || !transferEmail.trim()}
             >
-              {transferSubmitting ? "Transferring…" : "Transfer Copy"}
+              {submitting ? "Transferring…" : "Transfer Copy"}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -1681,9 +1681,9 @@ export default function MyBooksPage() {
             </RadioGroup>
           </div>
           <DialogFooter showCloseButton>
-            <Button onClick={handleExport} disabled={exportSubmitting}>
+            <Button onClick={handleExport} disabled={submitting}>
               <Download className="size-4" />
-              {exportSubmitting ? "Exporting…" : "Export"}
+              {submitting ? "Exporting…" : "Export"}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -1875,9 +1875,9 @@ export default function MyBooksPage() {
             <Button
               variant="destructive"
               onClick={handleDelete}
-              disabled={deleteSubmitting}
+              disabled={submitting}
             >
-              {deleteSubmitting ? "Removing…" : "Remove copy"}
+              {submitting ? "Removing…" : "Remove copy"}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -1905,9 +1905,9 @@ export default function MyBooksPage() {
             <Button
               variant={bulkAction === "delete" ? "destructive" : "default"}
               onClick={handleBulkAction}
-              disabled={bulkSubmitting}
+              disabled={submitting}
             >
-              {bulkSubmitting
+              {submitting
                 ? "Working…"
                 : bulkAction === "pause"
                   ? `Pause ${selectedCopyIds.size} ${selectedCopyIds.size === 1 ? "copy" : "copies"}`

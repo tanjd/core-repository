@@ -12,13 +12,6 @@ async function getLocations(country: string, city: string) {
   try {
     const apiClient = new ApiClient();
 
-    // Check if backend is available
-    const isHealthy = await apiClient.healthCheck();
-    if (!isHealthy) {
-      console.warn("Backend is not available, returning empty data");
-      return [];
-    }
-
     return await apiClient.getLocationsByCity(
       decodeURIComponent(country),
       decodeURIComponent(city),

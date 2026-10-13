@@ -5,13 +5,6 @@ async function getLocations() {
   try {
     const apiClient = new ApiClient();
 
-    // Check if backend is available
-    const isHealthy = await apiClient.healthCheck();
-    if (!isHealthy) {
-      console.warn("Backend is not available, returning empty data");
-      return [];
-    }
-
     const groups = await apiClient.getLocationsByCountry();
     console.log("Loaded groups:", groups);
 

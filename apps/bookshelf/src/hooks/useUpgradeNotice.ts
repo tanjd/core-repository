@@ -2,7 +2,7 @@
 
 import { useCallback, useState } from "react";
 
-import { semverGt } from "@/lib/changelog";
+import { getAppVersion, semverGt } from "@/lib/changelog";
 
 const APP_KEY = "bookshelf_last_seen_app_version";
 
@@ -23,7 +23,7 @@ function readUpgradeVisible(currentVersion: string): boolean {
 }
 
 export function useUpgradeNotice() {
-  const currentVersion = process.env.NEXT_PUBLIC_VERSION ?? "0.0.0";
+  const currentVersion = getAppVersion();
   const [visible, setVisible] = useState(() => {
     if (typeof window === "undefined") {
       return false;

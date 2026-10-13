@@ -20,11 +20,16 @@ def require_bot_token(token: str) -> str:
     return token
 
 
+def parse_csv_list(var_name: str, env: Mapping[str, str] | None = None) -> list[str]:
+    """Parse a comma-separated env var into a list of trimmed, non-empty values."""
+    source = env if env is not None else os.environ
+    raw = (source.get(var_name) or "").strip()
+    return [c.strip() for c in raw.split(",") if c.strip()]
+
+
 def parse_admin_chat_ids(env: Mapping[str, str] | None = None) -> list[str]:
     """Parse ADMIN_CHAT_IDS (comma-separated) into a list of trimmed, non-empty IDs."""
-    source = env if env is not None else os.environ
-    raw = (source.get("ADMIN_CHAT_IDS") or "").strip()
-    return [c.strip() for c in raw.split(",") if c.strip()]
+    return parse_csv_list("ADMIN_CHAT_IDS", env)
 
 
 def is_admin(chat_id: str, admin_chat_ids: Sequence[str]) -> bool:

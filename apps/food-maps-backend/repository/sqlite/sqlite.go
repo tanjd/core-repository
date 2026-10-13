@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"strings"
 
 	"github.com/google/uuid"
 	_ "github.com/mattn/go-sqlite3" // registers the "sqlite3" driver with database/sql
@@ -70,12 +71,6 @@ func (s *DB) executor(ctx context.Context) interface {
 	if tx, ok := ctx.Value(TxKey).(*sql.Tx); ok && tx != nil {
 		log.Debug().Msg("Using transaction from context")
 		return tx
-	}
-
-	// Check if database is still open
-	if err := s.db.PingContext(ctx); err != nil {
-		log.Error().Err(err).Msg("Database connection is not alive")
-		return nil
 	}
 
 	log.Debug().Msg("Using database connection")
@@ -186,14 +181,23 @@ func (s *DB) ListTags(ctx context.Context) ([]*model.Tag, error) {
 	return tags, nil
 }
 
-// ListLocations retrieves locations from the database with pagination
+// ListLocations retrieves locations from the database with pagination, along with
+// each location's city and country in the same query to avoid per-row lookups.
 func (s *DB) ListLocations(ctx context.Context, limit, offset int) ([]*model.Location, error) {
 	exec := s.executor(ctx)
 	if exec == nil {
 		return nil, fmt.Errorf("database connection is nil")
 	}
 
-	query := `SELECT id, name, description, google_maps_url, city_id FROM locations LIMIT ? OFFSET ?`
+	query := `
+		SELECT l.id, l.name, l.description, l.google_maps_url, l.city_id,
+		       c.id, c.name, c.country_id,
+		       co.id, co.name
+		FROM locations l
+		LEFT JOIN cities c ON c.id = l.city_id
+		LEFT JOIN countries co ON co.id = c.country_id
+		LIMIT ? OFFSET ?
+	`
 	rows, err := exec.QueryContext(ctx, query, limit, offset)
 	if err != nil {
 		return nil, fmt.Errorf("error querying locations: %w", err)
@@ -206,26 +210,66 @@ func (s *DB) ListLocations(ctx context.Context, limit, offset int) ([]*model.Loc
 
 	var locations []*model.Location
 	for rows.Next() {
-		var location model.Location
-		var idStr string
-		if err := rows.Scan(&idStr, &location.Name, &location.Description, &location.GoogleMapsURL, &location.CityID); err != nil {
-			return nil, fmt.Errorf("error scanning location: %w", err)
-		}
-
-		// Parse UUID
-		locationID, err := uuid.Parse(idStr)
+		location, err := scanLocationWithCity(rows)
 		if err != nil {
-			return nil, fmt.Errorf("error parsing location ID: %w", err)
+			return nil, err
 		}
-		location.ID = locationID
-
-		locations = append(locations, &location)
+		locations = append(locations, location)
 	}
 	if err := rows.Err(); err != nil {
 		return nil, fmt.Errorf("error iterating rows: %w", err)
 	}
 
 	return locations, nil
+}
+
+// CountLocations returns the total number of locations, for pagination totals.
+func (s *DB) CountLocations(ctx context.Context) (int, error) {
+	exec := s.executor(ctx)
+	if exec == nil {
+		return 0, fmt.Errorf("database connection is nil")
+	}
+
+	var count int
+	row := exec.QueryRowContext(ctx, `SELECT COUNT(*) FROM locations`)
+	if err := row.Scan(&count); err != nil {
+		return 0, fmt.Errorf("error counting locations: %w", err)
+	}
+
+	return count, nil
+}
+
+// scanLocationWithCity scans a row produced by a locations query joined against
+// cities and countries (id, name, description, google_maps_url, city_id, city.id,
+// city.name, city.country_id, country.id, country.name).
+func scanLocationWithCity(rows *sql.Rows) (*model.Location, error) {
+	var location model.Location
+	var idStr string
+	var cityID, cityCountryID, countryID sql.NullInt64
+	var cityName, countryName sql.NullString
+
+	if err := rows.Scan(
+		&idStr, &location.Name, &location.Description, &location.GoogleMapsURL, &location.CityID,
+		&cityID, &cityName, &cityCountryID,
+		&countryID, &countryName,
+	); err != nil {
+		return nil, fmt.Errorf("error scanning location: %w", err)
+	}
+
+	locationID, err := uuid.Parse(idStr)
+	if err != nil {
+		return nil, fmt.Errorf("error parsing location ID: %w", err)
+	}
+	location.ID = locationID
+
+	if cityID.Valid {
+		location.City = &model.City{ID: cityID.Int64, Name: cityName.String, CountryID: cityCountryID.Int64}
+		if countryID.Valid {
+			location.City.Country = &model.Country{ID: countryID.Int64, Name: countryName.String}
+		}
+	}
+
+	return &location, nil
 }
 
 // ListCountries retrieves all countries from the database
@@ -376,34 +420,93 @@ func (s *DB) GetLocationTags(ctx context.Context, locationID string) ([]*model.T
 	return tags, nil
 }
 
-// GetLocation retrieves a location from the database by ID
+// GetLocationTagsForIDs retrieves tags for multiple locations in a single query,
+// keyed by location ID, to avoid one query per location.
+func (s *DB) GetLocationTagsForIDs(ctx context.Context, locationIDs []string) (map[string][]*model.Tag, error) {
+	result := make(map[string][]*model.Tag)
+	if len(locationIDs) == 0 {
+		return result, nil
+	}
+
+	exec := s.executor(ctx)
+	if exec == nil {
+		return nil, fmt.Errorf("database connection is nil")
+	}
+
+	placeholders := make([]string, len(locationIDs))
+	args := make([]interface{}, len(locationIDs))
+	for i, id := range locationIDs {
+		placeholders[i] = "?"
+		args[i] = id
+	}
+
+	query := fmt.Sprintf(`
+		SELECT lt.location_id, t.id, t.name
+		FROM tags t
+		JOIN location_tags lt ON lt.tag_id = t.id
+		WHERE lt.location_id IN (%s)
+	`, strings.Join(placeholders, ","))
+
+	rows, err := exec.QueryContext(ctx, query, args...)
+	if err != nil {
+		return nil, fmt.Errorf("error querying location tags: %w", err)
+	}
+	defer func() {
+		if err := rows.Close(); err != nil {
+			log.Error().Err(err).Msg("Error closing rows")
+		}
+	}()
+
+	for rows.Next() {
+		var locationID string
+		var tag model.Tag
+		if err := rows.Scan(&locationID, &tag.ID, &tag.Name); err != nil {
+			return nil, fmt.Errorf("error scanning location tag: %w", err)
+		}
+		result[locationID] = append(result[locationID], &tag)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("error iterating rows: %w", err)
+	}
+
+	return result, nil
+}
+
+// GetLocation retrieves a location from the database by ID, along with its city
+// and country in the same query to avoid separate lookups.
 func (s *DB) GetLocation(ctx context.Context, id string) (*model.Location, error) {
 	exec := s.executor(ctx)
 	if exec == nil {
 		return nil, fmt.Errorf("database connection is nil")
 	}
 
-	query := `SELECT id, name, description, google_maps_url, city_id FROM locations WHERE id = ?`
-	row := exec.QueryRowContext(ctx, query, id)
+	query := `
+		SELECT l.id, l.name, l.description, l.google_maps_url, l.city_id,
+		       c.id, c.name, c.country_id,
+		       co.id, co.name
+		FROM locations l
+		LEFT JOIN cities c ON c.id = l.city_id
+		LEFT JOIN countries co ON co.id = c.country_id
+		WHERE l.id = ?
+	`
+	rows, err := exec.QueryContext(ctx, query, id)
+	if err != nil {
+		return nil, fmt.Errorf("error querying location: %w", err)
+	}
+	defer func() {
+		if err := rows.Close(); err != nil {
+			log.Error().Err(err).Msg("Error closing rows")
+		}
+	}()
 
-	var location model.Location
-	var idStr string
-	err := row.Scan(&idStr, &location.Name, &location.Description, &location.GoogleMapsURL, &location.CityID)
-	if err == sql.ErrNoRows {
+	if !rows.Next() {
+		if err := rows.Err(); err != nil {
+			return nil, fmt.Errorf("error iterating rows: %w", err)
+		}
 		return nil, nil
 	}
-	if err != nil {
-		return nil, fmt.Errorf("error scanning location: %w", err)
-	}
 
-	// Parse UUID
-	locationID, err := uuid.Parse(idStr)
-	if err != nil {
-		return nil, fmt.Errorf("error parsing location ID: %w", err)
-	}
-	location.ID = locationID
-
-	return &location, nil
+	return scanLocationWithCity(rows)
 }
 
 // GetCountryByName retrieves a country from the database by name
