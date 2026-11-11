@@ -6,7 +6,7 @@ require (
 	github.com/danielgtaylor/huma/v2 v2.39.1
 	github.com/go-chi/chi/v5 v5.4.0
 	github.com/google/uuid v1.6.0
-	github.com/mattn/go-sqlite3 v1.14.52
+	github.com/mattn/go-sqlite3 v1.14.53
 	github.com/rs/zerolog v1.35.1
 	github.com/stretchr/testify v1.12.1
 )
